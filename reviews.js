@@ -101,21 +101,31 @@ const Reviews = (() => {
 
     root.innerHTML = '';
     root.append(statBar(), aspectOverview(), heatmap(), brandVolume(), clouds());
+    // 条形图得先挂进文档才有「起点」可过渡——挂之前就把宽度定死，浏览器不会补一段动画，直接秒到终值
+    growBars(root);
   }
 
   function statBar() {
-    const t = data.totals;
-    const valid = t.reviews - t.template;
+    const brand = activeBrand && data.brands.find((b) => b.id === activeBrand);
     const box = document.createElement('div');
     box.className = 'rv-stats';
-    [
-      [t.reviews.toLocaleString(), '评论总数'],
-      [valid.toLocaleString(), '有效评论'],
-      [pct(t.template, t.reviews) + '%', '模板/空评'],
-      [t.brands, '品牌']
-    ].forEach(([v, k]) => {
+
+    const tiles = brand
+      ? [
+          [brand.total.toLocaleString(), '该品牌评论数'],
+          [(brand.total - brand.template).toLocaleString(), '有效评论'],
+          [brand.negClauses.toLocaleString(), '差评分句', 'neg'],
+          [brand.posClauses.toLocaleString(), '好评分句']
+        ]
+      : [
+          [data.totals.reviews.toLocaleString(), '评论总数'],
+          [(data.totals.reviews - data.totals.template).toLocaleString(), '有效评论'],
+          [pct(data.totals.template, data.totals.reviews) + '%', '模板/空评'],
+          [data.totals.brands, '品牌']
+        ];
+    tiles.forEach(([v, k, mark]) => {
       const c = document.createElement('div');
-      c.className = 'rv-stat';
+      c.className = 'rv-stat' + (mark === 'neg' ? ' neg' : '');
       c.innerHTML = `<b></b><span></span>`;
       c.querySelector('b').textContent = v;
       c.querySelector('span').textContent = k;
@@ -124,35 +134,50 @@ const Reviews = (() => {
 
     const note = document.createElement('p');
     note.className = 'rv-note';
-    note.textContent = '「模板/空评」是淘宝默认好评和未填写内容，已从所有统计中排除。';
+    note.textContent = brand
+      ? `正在只看【${brand.name}】——点左边品牌名或再点一次可以退回全部品牌的总览。`
+      : '「模板/空评」是淘宝默认好评和未填写内容，已从所有统计中排除。';
     const wrap = document.createElement('div');
     wrap.append(box, note);
     return wrap;
   }
 
-  /** 维度总览：按提及量排序的横向条形图，每条内部按 好评/差评 分段 */
+  /** 维度总览：横向条形图，每条内部按 好评/差评 分段。选中品牌后改按差评量排序——先看它哪里被吐槽最多 */
   function aspectOverview() {
+    const brand = activeBrand && data.brands.find((b) => b.id === activeBrand);
     const sec = document.createElement('section');
     sec.className = 'rv-sec';
-    sec.innerHTML = `<h2>维度总览</h2><p class="rv-sub">条越长，这个维度被提到的次数越多；绿段是好评句、橙段是差评句。</p>`;
+    sec.innerHTML = brand
+      ? `<h2>维度总览 · ${brand.name}</h2><p class="rv-sub">按差评句数从多到少排——橙段是差评句、绿段是好评句。</p>`
+      : `<h2>维度总览</h2><p class="rv-sub">条越长，这个维度被提到的次数越多；绿段是好评句、橙段是差评句。</p>`;
 
+    const source = brand ? brand.aspects : data.aspects;
     const rows = ASPECT_ORDER
-      .map((a) => ({ aspect: a, ...(data.aspects[a] || { pos: 0, neg: 0 }) }))
+      .map((a) => ({ aspect: a, ...(source[a] || { pos: 0, neg: 0 }) }))
       .map((r) => ({ ...r, total: r.pos + r.neg }))
       .filter((r) => r.total > 0)
-      .sort((a, b) => b.total - a.total);
+      .sort(brand ? (a, b) => b.neg - a.neg || b.total - a.total : (a, b) => b.total - a.total);
+
+    if (!rows.length) {
+      const p = document.createElement('p');
+      p.className = 'kw-empty';
+      p.textContent = '这个品牌还没有能识别出维度的评论。';
+      sec.appendChild(p);
+      return sec;
+    }
 
     const max = Math.max(...rows.map((r) => r.total), 1);
     const box = document.createElement('div');
     box.className = 'rv-bars';
-    rows.forEach((r) => {
+    rows.forEach((r, i) => {
       const row = document.createElement('div');
       row.className = 'rv-bar-row';
+      row.style.animationDelay = (i * 35) + 'ms';
       const posPct = (r.pos / r.total) * 100, negPct = (r.neg / r.total) * 100;
       row.innerHTML = `
         <span class="rv-bar-label"></span>
         <div class="rv-bar-track">
-          <div class="rv-bar-fill" style="width:${((r.total / max) * 100).toFixed(2)}%">
+          <div class="rv-bar-fill" data-w="${((r.total / max) * 100).toFixed(2)}">
             <div class="rv-bar-seg pos" style="width:${posPct}%"></div>
             <div class="rv-bar-seg neg" style="width:${negPct}%"></div>
           </div>
@@ -168,6 +193,15 @@ const Reviews = (() => {
     return sec;
   }
 
+  /** 条形图从 0 长到目标宽度——先画 0，下一帧再给真实宽度，让已有的 CSS transition 接手 */
+  function growBars(box) {
+    const fills = [...box.querySelectorAll('.rv-bar-fill[data-w]')];
+    fills.forEach((f) => (f.style.width = '0%'));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      fills.forEach((f) => (f.style.width = f.dataset.w + '%'));
+    }));
+  }
+
   /** 品牌声量：按评论总数排序，条形颜色沿用品牌自己的识别色 */
   function brandVolume() {
     const sec = document.createElement('section');
@@ -177,21 +211,23 @@ const Reviews = (() => {
     const max = Math.max(...data.brands.map((b) => b.total), 1);
     const box = document.createElement('div');
     box.className = 'rv-bars';
-    data.brands.forEach((b) => {
+    data.brands.forEach((b, i) => {
       const valid = b.total - b.template;
       const row = document.createElement('div');
-      row.className = 'rv-bar-row';
+      row.className = 'rv-bar-row rv-bar-clickable' + (activeBrand === b.id ? ' on' : '');
+      row.style.animationDelay = (i * 35) + 'ms';
       row.innerHTML = `
         <span class="rv-bar-label"></span>
         <div class="rv-bar-track">
-          <div class="rv-bar-fill" style="width:${((b.total / max) * 100).toFixed(2)}%">
+          <div class="rv-bar-fill" data-w="${((b.total / max) * 100).toFixed(2)}">
             <div class="rv-bar-seg brand" style="width:100%;background:${b.color}"></div>
           </div>
         </div>
         <span class="rv-bar-total"></span>`;
       row.querySelector('.rv-bar-label').textContent = b.name;
       row.querySelector('.rv-bar-total').textContent = b.total.toLocaleString();
-      row.title = `${b.name}\n评论总数 ${b.total} · 有效 ${valid} · 模板/空评 ${pct(b.template, b.total)}%`;
+      row.title = `${b.name}\n评论总数 ${b.total} · 有效 ${valid} · 模板/空评 ${pct(b.template, b.total)}%\n点击只看这个品牌`;
+      row.onclick = () => { activeBrand = activeBrand === b.id ? '' : b.id; render(); renderRail(); };
       box.appendChild(row);
     });
 
@@ -213,9 +249,10 @@ const Reviews = (() => {
     grid.appendChild(cell('', 'rv-h-corner'));
     aspects.forEach((a) => grid.appendChild(cell(a, 'rv-h-head')));
 
-    data.brands.forEach((b) => {
+    data.brands.forEach((b, rowIdx) => {
       const name = cell(b.name, 'rv-h-brand');
-      name.onclick = () => { activeBrand = activeBrand === b.id ? '' : b.id; render(); };
+      name.title = '点击只看这个品牌';
+      name.onclick = () => { activeBrand = activeBrand === b.id ? '' : b.id; render(); renderRail(); };
       if (activeBrand === b.id) name.classList.add('on');
       grid.appendChild(name);
 
@@ -224,6 +261,7 @@ const Reviews = (() => {
         const total = v.pos + v.neg;
         const c = document.createElement('div');
         c.className = 'rv-h-cell';
+        c.style.animationDelay = (rowIdx * 30) + 'ms';
         if (!total) { c.classList.add('void'); c.textContent = '—'; grid.appendChild(c); return; }
         const rate = v.neg / total;
         // 样本量小 → 整体透明度降低，避免 1/2 看起来比 5/81 更吓人
@@ -247,40 +285,42 @@ const Reviews = (() => {
     return d;
   };
 
-  /** 关键词云：字号按出现次数，悬浮看原文 */
+  /** 关键词云：字号按出现次数，悬浮看原文。差评在前、更大，好评在后、次要——这是这个功能存在的目的 */
   function clouds() {
     const sec = document.createElement('section');
     sec.className = 'rv-sec';
-    const bname = activeBrand ? data.brands.find((b) => b.id === activeBrand)?.name : null;
-    sec.innerHTML = `<h2>关键词</h2><p class="rv-sub">字号代表出现次数。鼠标停上去看它在原文里怎么说的${bname ? `　·　当前只看【${bname}】，点品牌名可取消` : ''}。</p>`;
+    const brand = activeBrand && data.brands.find((b) => b.id === activeBrand);
+    sec.innerHTML = `<h2>关键词</h2><p class="rv-sub">字号代表出现次数。鼠标停上去看它在原文里怎么说的${brand ? `　·　当前只看【${brand.name}】，点品牌名可取消` : ''}。</p>`;
 
     const wrap = document.createElement('div');
     wrap.className = 'rv-clouds';
 
-    [['pos', '好评关键词'], ['neg', '差评关键词']].forEach(([pol, title]) => {
+    // 品牌自己的高频词，不是从全站 top40 里筛出来的——不然小品牌的词基本挤不进全站排行
+    const source = brand ? data.keywordsByBrand[activeBrand] : data.keywords;
+
+    [['neg', '差评关键词'], ['pos', '好评关键词']].forEach(([pol, title]) => {
       const col = document.createElement('div');
       col.className = 'rv-cloud ' + pol;
       const h = document.createElement('h3');
       h.textContent = title;
       col.appendChild(h);
 
-      let list = data.keywords[pol];
-      if (activeBrand) list = list.filter((k) => k.brands[activeBrand]).map((k) => ({ ...k, count: k.brands[activeBrand] }));
-      list = list.sort((a, b) => b.count - a.count).slice(0, 28);
+      const list = (source[pol] || []).slice(0, pol === 'neg' ? 36 : 24);
 
       if (!list.length) {
         const p = document.createElement('p');
         p.className = 'kw-empty';
-        p.textContent = pol === 'neg' ? '这个品牌没有识别出负向关键词。' : '暂无。';
+        p.textContent = pol === 'neg' ? '这个品牌没有识别出差评关键词。' : '暂无。';
         col.appendChild(p);
       }
 
       const max = Math.max(...list.map((k) => k.count), 1);
       const box = document.createElement('div');
       box.className = 'kw-box';
-      list.forEach((k) => {
+      list.forEach((k, i) => {
         const t = document.createElement('button');
         t.className = 'kw';
+        t.style.animationDelay = (i * 18) + 'ms';
         const scale = 0.82 + (Math.log(1 + k.count) / Math.log(1 + max)) * 0.9;
         t.style.fontSize = scale.toFixed(2) + 'rem';
         t.innerHTML = `<span></span><i>${k.count}</i>`;

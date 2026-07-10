@@ -133,6 +133,21 @@ class ReviewStore {
 
     const top = (m, n) => [...m.values()].sort((a, b) => b.count - a.count).slice(0, n);
 
+    // 全局 top(40) 只留下了全站最高频的词——小品牌自己的高频差评词很可能挤不进这 40 个，
+    // 选中品牌后关键词云看起来对不上总数、甚至没怎么变化。这里按品牌单独排一次 top，
+    // 数据在聚合时已经按 brandId 存在每个词的 e.brands 里，不用重新扫一遍评论。
+    const topForBrand = (m, brandId, n) =>
+      [...m.values()]
+        .filter((e) => e.brands[brandId])
+        .map((e) => ({ term: e.term, count: e.brands[brandId], aspects: e.aspects }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, n);
+
+    const keywordsByBrand = {};
+    Object.keys(brands).forEach((brandId) => {
+      keywordsByBrand[brandId] = { pos: topForBrand(kw.pos, brandId, 40), neg: topForBrand(kw.neg, brandId, 40) };
+    });
+
     this.summary = {
       totals: {
         reviews: this.records.size,
@@ -142,6 +157,7 @@ class ReviewStore {
       brands: Object.values(brands).sort((a, b) => b.total - a.total),
       aspects: aspectTotals,
       keywords: { pos: top(kw.pos, 40), neg: top(kw.neg, 40) },
+      keywordsByBrand,
       updatedAt: new Date().toISOString(),
       buildMs: Date.now() - t0
     };
