@@ -501,10 +501,11 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/reviews/keyword') {
       const term = url.searchParams.get('term') || '';
+      const aspect = url.searchParams.get('aspect') || '';
       const polarity = url.searchParams.get('polarity') === 'neg' ? 'neg' : 'pos';
       const brandId = url.searchParams.get('brand') || '';
-      if (!term) return json(res, 400, { error: '缺少 term' });
-      return json(res, 200, reviews.contexts(term, polarity, brandId, 30));
+      // 不给 term 就是查一整类（维度和/或品牌下的所有差评句），条数天然更多，limit 放宽一些
+      return json(res, 200, reviews.contexts({ term, aspect, polarity, brandId, limit: term ? 30 : 80 }));
     }
 
     if (p === '/api/reviews/import' && req.method === 'POST') {

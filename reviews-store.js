@@ -163,13 +163,18 @@ class ReviewStore {
     };
   }
 
-  /** 关键词溯源：返回包含这个词的原始评论上下文 */
-  contexts(term, polarity, brandId, limit = 30) {
+  /**
+   * 原文溯源：term 给了就按关键词找（关键词云用），不给就按 维度/极性/品牌 找
+   * （统计卡片、维度总览的差评段悬浮用——想看"这个品牌所有差评句"，不是某一个词）。
+   */
+  contexts({ polarity, brandId = '', term = '', aspect = '', limit = 30 }) {
     const out = [];
     for (const r of this.records.values()) {
       if (brandId && r.brandId !== brandId) continue;
       for (const a of r.aspects || []) {
-        if (a.polarity !== polarity || !a.terms.includes(term)) continue;
+        if (a.polarity !== polarity) continue;
+        if (term && !a.terms.includes(term)) continue;
+        if (aspect && a.aspect !== aspect) continue;
         out.push({
           id: r.id, brand: r.brandName, sku: r.sku, date: r.date,
           useful: r.useful, aspect: a.aspect,

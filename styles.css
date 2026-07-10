@@ -928,6 +928,8 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rv-stat b { display: block; font-family: var(--f-mono); font-size: 30px; color: var(--mint); letter-spacing: -1px; }
 .rv-stat span { font-size: 12px; color: var(--dim); letter-spacing: 0.6px; }
 .rv-stat.neg b { color: #ff9a90; }
+.rv-stat.hoverable { cursor: help; transition: border-color var(--fast), background var(--fast); }
+.rv-stat.hoverable:hover { border-color: #ef6b5e; background: linear-gradient(180deg, #ef6b5e14, #ffffff03); }
 .rv-note { font-size: 12px; color: var(--dim); margin: 10px 2px 0; }
 
 .rv-sec { margin-top: 34px; animation: rise 0.55s var(--ease) both; }
@@ -949,16 +951,21 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rv-h-brand.on { background: var(--mint-dim); color: var(--mint); }
 .rv-h-cell {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 9px 4px; border-radius: 8px; opacity: var(--conf, 1);
-  background: color-mix(in srgb, #cf372c calc(var(--heat) * 85%), #17b79c);
+  gap: 2px; padding: 9px 4px; border-radius: 8px;
+  /* 单一色相的顺序色阶：0% 是中性深色，100% 是差评红，不再跟"低负向率"的绿混在一起降低区分度 */
+  background: color-mix(in srgb, #ef6b5e calc(var(--heat) * 90%), #131a29);
   transition: transform var(--fast);
 }
 .rv-h-cell:hover { transform: scale(1.06); z-index: 2; }
-.rv-h-cell b { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px #00000060; }
-.rv-h-cell span { font-size: 11px; color: #ffffff; opacity: 0.85; text-shadow: 0 1px 2px #00000060; }
-.rv-h-cell.void { background: #ffffff08; color: var(--dim); opacity: 1; }
+.rv-h-cell b { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px #00000080; }
+.rv-h-cell span { font-size: 11px; color: #ffffffa0; text-shadow: 0 1px 2px #00000080; }
+.rv-h-cell.void { background: #ffffff08; color: var(--dim); }
 .rv-h-cell, .rv-h-corner, .rv-h-head { animation: cellIn 0.4s var(--ease) backwards; }
 @keyframes cellIn { from { opacity: 0; transform: scale(0.9); } }
+
+/* 好评/差评数字用不同颜色区分，而不是白底白字一个 "3/12" 糊在一起 */
+.n-pos { font-style: normal; color: #b8f5d6; }
+.n-neg { font-style: normal; color: #ffd2cc; font-weight: 700; }
 
 /* 条形图：维度总览 / 品牌声量 */
 .rv-bars { display: flex; flex-direction: column; gap: 11px; }
@@ -975,6 +982,8 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rv-bar-seg { height: 100%; border-radius: 4px; }
 .rv-bar-seg.pos { background: #35d07a; }
 .rv-bar-seg.neg { background: #ef6b5e; }
+.rv-bar-seg.neg.hoverable { cursor: help; transition: filter var(--fast); }
+.rv-bar-seg.neg.hoverable:hover { filter: brightness(1.35); }
 .rv-bar-total {
   font-family: var(--f-mono); font-size: 12px; color: var(--dim); text-align: right;
   font-variant-numeric: tabular-nums;

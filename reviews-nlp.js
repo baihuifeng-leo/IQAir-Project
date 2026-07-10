@@ -129,8 +129,14 @@ function negatorPositions(clause) {
   return out;
 }
 
-/** 词命中处之前 4 字内若有否定词结束 → 极性翻转 */
-const negatedAt = (negPos, index) => negPos.some((e) => e <= index && index - e <= 4);
+// 「不占地还好看」：不 只否定「占地」，「还」后面是另一句独立的夸奖，不该被牵连——
+// 「还/也/又」这类并列连词一般标志着新起一个分句（同一个 clause 里没有标点分开时尤其容易踩这个坑）。
+// 真实数据里出过这个例子："摆在客厅不占地还好看" 被判成了差评。
+const NEGATION_BREAK = /还|也|又/;
+
+/** 词命中处之前 4 字内若有否定词结束、且中间没有「还/也/又」打断 → 极性翻转 */
+const negatedAt = (negPos, index, clause) =>
+  negPos.some((e) => e <= index && index - e <= 4 && !NEGATION_BREAK.test(clause.slice(e, index)));
 
 function clausePolarity(clause) {
   let score = 0;
@@ -141,7 +147,7 @@ function clausePolarity(clause) {
     for (const re of rules) {
       const m = re.exec(clause);
       if (!m) continue;
-      const flipped = negatedAt(negPos, m.index);
+      const flipped = negatedAt(negPos, m.index, clause);
       const s = flipped ? -sign : sign;
       score += s;
       // 「不推荐」要显示成「不推荐」，不能只记「推荐」，否则词云里会出现好词当差评。

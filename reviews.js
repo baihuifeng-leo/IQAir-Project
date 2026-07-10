@@ -32,14 +32,19 @@ const Reviews = (() => {
     setTimeout(() => { if (tipBox && !tipBox.classList.contains('in')) { tipBox.remove(); tipBox = null; } }, 200);
   }
 
-  function showTip(anchor, term, polarity) {
+  /**
+   * 原文溯源浮层。term 给了就是关键词云那种"这个词在哪些原文里"；
+   * 不给 term、只给 aspect（或都不给）就是"这个维度/这个品牌的所有差评句"——
+   * 统计卡片和维度总览的差评段悬浮用这种。
+   */
+  function showTip(anchor, { term = '', aspect = '', polarity, label }) {
     clearTimeout(tipTimer);
     tipTimer = setTimeout(async () => {
       hideTip();
       tipBox = document.createElement('div');
       tipBox.className = 'kw-tip ' + polarity;
       tipBox.innerHTML = `<div class="kw-tip-head"><b></b><span>加载原文…</span></div><div class="kw-tip-body"></div>`;
-      tipBox.querySelector('b').textContent = term;
+      tipBox.querySelector('b').textContent = label || term;
       document.body.appendChild(tipBox);
 
       // 鼠标移进浮层里也要留着，否则滚不动
@@ -50,12 +55,13 @@ const Reviews = (() => {
       requestAnimationFrame(() => tipBox.classList.add('in'));
 
       try {
-        const q = new URLSearchParams({ term, polarity, brand: activeBrand });
+        const q = new URLSearchParams({ term, aspect, polarity, brand: activeBrand });
         const rows = await call('/api/reviews/keyword?' + q);
         if (!tipBox) return;
         tipBox.querySelector('.kw-tip-head span').textContent = `${rows.length} 条原文 · 按「有用」排序`;
         const body = tipBox.querySelector('.kw-tip-body');
         body.innerHTML = '';
+        const needle = term.replace(/^不/, '');
         rows.forEach((r) => {
           const el = document.createElement('div');
           el.className = 'kw-ctx';
@@ -63,14 +69,14 @@ const Reviews = (() => {
           el.querySelector('em').textContent = r.brand;
           el.querySelector('span').textContent = r.date;
           el.querySelector('i').textContent = r.useful ? `有用 ${r.useful}` : '';
-          // 高亮关键词，其余按纯文本插入，不用 innerHTML 拼原文
+          // 高亮关键词，其余按纯文本插入，不用 innerHTML 拼原文；没有具体词就不高亮
           const p = el.querySelector('p');
-          const idx = r.context.indexOf(term.replace(/^不/, ''));
+          const idx = needle ? r.context.indexOf(needle) : -1;
           if (idx >= 0) {
             p.append(r.context.slice(0, idx));
             const mark = document.createElement('mark');
-            mark.textContent = r.context.slice(idx, idx + term.replace(/^不/, '').length);
-            p.append(mark, r.context.slice(idx + term.replace(/^不/, '').length));
+            mark.textContent = r.context.slice(idx, idx + needle.length);
+            p.append(mark, r.context.slice(idx + needle.length));
           } else p.textContent = r.context;
           body.appendChild(el);
         });
@@ -125,10 +131,16 @@ const Reviews = (() => {
         ];
     tiles.forEach(([v, k, mark]) => {
       const c = document.createElement('div');
-      c.className = 'rv-stat' + (mark === 'neg' ? ' neg' : '');
+      c.className = 'rv-stat' + (mark === 'neg' ? ' neg hoverable' : '');
       c.innerHTML = `<b></b><span></span>`;
       c.querySelector('b').textContent = v;
       c.querySelector('span').textContent = k;
+      if (mark === 'neg') {
+        const tip = () => showTip(c, { polarity: 'neg', label: brand ? `${brand.name} · 差评句` : '差评句' });
+        c.addEventListener('mouseenter', tip);
+        c.addEventListener('mouseleave', hideTip);
+        c.addEventListener('click', tip);
+      }
       box.appendChild(c);
     });
 
@@ -186,6 +198,14 @@ const Reviews = (() => {
       row.querySelector('.rv-bar-label').textContent = r.aspect;
       row.querySelector('.rv-bar-total').textContent = r.total.toLocaleString();
       row.title = `${r.aspect}\n好评句 ${r.pos} · 差评句 ${r.neg}\n差评占比 ${Math.round(negPct)}%`;
+      if (r.neg > 0) {
+        const negSeg = row.querySelector('.rv-bar-seg.neg');
+        negSeg.classList.add('hoverable');
+        const tip = () => showTip(negSeg, { polarity: 'neg', aspect: r.aspect, label: `${r.aspect} · 差评句` });
+        negSeg.addEventListener('mouseenter', tip);
+        negSeg.addEventListener('mouseleave', hideTip);
+        negSeg.addEventListener('click', tip);
+      }
       box.appendChild(row);
     });
 
@@ -239,7 +259,7 @@ const Reviews = (() => {
   function heatmap() {
     const sec = document.createElement('section');
     sec.className = 'rv-sec';
-    sec.innerHTML = `<h2>品牌 × 维度</h2><p class="rv-sub">颜色越红，这个维度被吐槽得越多。样本量太小的格子会变淡 —— 3 条提及里 1 条负面，说明不了什么。</p>`;
+    sec.innerHTML = `<h2>品牌 × 维度</h2><p class="rv-sub">颜色越红，这个维度被吐槽得越多；格子里 <i class="n-pos">绿字</i> 是好评句数、<i class="n-neg">红字</i> 是差评句数。</p>`;
 
     const aspects = ASPECT_ORDER.filter((a) => data.aspects[a]);
     const grid = document.createElement('div');
@@ -264,12 +284,11 @@ const Reviews = (() => {
         c.style.animationDelay = (rowIdx * 30) + 'ms';
         if (!total) { c.classList.add('void'); c.textContent = '—'; grid.appendChild(c); return; }
         const rate = v.neg / total;
-        // 样本量小 → 整体透明度降低，避免 1/2 看起来比 5/81 更吓人
-        const conf = Math.min(1, total / 20);
-        c.style.setProperty('--heat', rate.toFixed(3));
-        c.style.setProperty('--conf', (0.25 + conf * 0.75).toFixed(2));
-        c.innerHTML = `<b>${Math.round(rate * 100)}%</b><span>${v.neg}/${total}</span>`;
-        c.title = `${b.name} · ${a}\n正向 ${v.pos} 句，负向 ${v.neg} 句${total < 10 ? '\n样本量偏小，仅供参考' : ''}`;
+        // 大部分格子的负向率其实都不高（个位数到二十几%），线性映射颜色区分不出来；
+        // 开个 0.55 次方把低段拉开，1.0 和 0 两端不受影响
+        c.style.setProperty('--heat', Math.pow(rate, 0.55).toFixed(3));
+        c.innerHTML = `<b>${Math.round(rate * 100)}%</b><span><i class="n-pos">${v.pos}</i>·<i class="n-neg">${v.neg}</i></span>`;
+        c.title = `${b.name} · ${a}\n正向 ${v.pos} 句，负向 ${v.neg} 句`;
         grid.appendChild(c);
       });
     });
@@ -290,7 +309,7 @@ const Reviews = (() => {
     const sec = document.createElement('section');
     sec.className = 'rv-sec';
     const brand = activeBrand && data.brands.find((b) => b.id === activeBrand);
-    sec.innerHTML = `<h2>关键词</h2><p class="rv-sub">字号代表出现次数。鼠标停上去看它在原文里怎么说的${brand ? `　·　当前只看【${brand.name}】，点品牌名可取消` : ''}。</p>`;
+    sec.innerHTML = `<h2>关键词</h2><p class="rv-sub">字号代表出现次数；鼠标停上去看它在原文里怎么说的。数的是「差评句/好评句里提到这个词多少次」，不是评论篇数——一条评论可能一个词都没提到，也可能同时提到好几个词，加起来对不上评论总数是正常的${brand ? `　·　当前只看【${brand.name}】，点品牌名可取消` : ''}。</p>`;
 
     const wrap = document.createElement('div');
     wrap.className = 'rv-clouds';
@@ -305,7 +324,8 @@ const Reviews = (() => {
       h.textContent = title;
       col.appendChild(h);
 
-      const list = (source[pol] || []).slice(0, pol === 'neg' ? 36 : 24);
+      // 后端已经按 top(40) 截过了，这里不再二次砍——之前砍到 24/36 是数字对不上的一个原因
+      const list = source[pol] || [];
 
       if (!list.length) {
         const p = document.createElement('p');
@@ -325,9 +345,9 @@ const Reviews = (() => {
         t.style.fontSize = scale.toFixed(2) + 'rem';
         t.innerHTML = `<span></span><i>${k.count}</i>`;
         t.querySelector('span').textContent = k.term;
-        t.addEventListener('mouseenter', () => showTip(t, k.term, pol));
+        t.addEventListener('mouseenter', () => showTip(t, { term: k.term, polarity: pol }));
         t.addEventListener('mouseleave', hideTip);
-        t.addEventListener('click', () => showTip(t, k.term, pol));
+        t.addEventListener('click', () => showTip(t, { term: k.term, polarity: pol }));
         box.appendChild(t);
       });
       col.appendChild(box);
