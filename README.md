@@ -1,1 +1,1 @@
-# IQAir Project
+# IQAir-EC Project
