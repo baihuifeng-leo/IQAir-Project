@@ -926,19 +926,19 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
   animation: rise 0.5s var(--ease) both;
 }
 .rv-stat b { display: block; font-family: var(--f-mono); font-size: 30px; color: var(--mint); letter-spacing: -1px; }
-.rv-stat span { font-size: 11.5px; color: var(--dimmer); letter-spacing: 1px; }
-.rv-note { font-size: 11.5px; color: var(--dimmer); margin: 10px 2px 0; }
+.rv-stat span { font-size: 12px; color: var(--dim); letter-spacing: 0.6px; }
+.rv-note { font-size: 12px; color: var(--dim); margin: 10px 2px 0; }
 
 .rv-sec { margin-top: 34px; animation: rise 0.55s var(--ease) both; }
 .rv-sec h2 { margin: 0; font-family: var(--f-display); font-size: 16px; letter-spacing: 1.6px; }
-.rv-sub { margin: 6px 0 16px; font-size: 12px; color: var(--dimmer); line-height: 1.7; }
+.rv-sub { margin: 6px 0 16px; font-size: 12.5px; color: var(--dim); line-height: 1.7; }
 
 /* 热力图 */
 .rv-heat { display: grid; gap: 3px; min-width: max-content; }
 .rv-h-corner { }
 .rv-h-head {
-  font-size: 11px; color: var(--dim); text-align: center; padding: 6px 2px;
-  writing-mode: horizontal-tb; letter-spacing: 0.5px;
+  font-size: 13px; font-weight: 700; color: var(--text); text-align: center; padding: 6px 2px 10px;
+  writing-mode: horizontal-tb; letter-spacing: 0.3px;
 }
 .rv-h-brand {
   display: flex; align-items: center; padding: 8px 10px; font-size: 13px; font-weight: 600;
@@ -953,9 +953,29 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
   transition: transform var(--fast);
 }
 .rv-h-cell:hover { transform: scale(1.06); z-index: 2; }
-.rv-h-cell b { font-family: var(--f-mono); font-size: 14px; color: #fff; }
-.rv-h-cell span { font-size: 10px; color: #ffffffb0; }
-.rv-h-cell.void { background: #ffffff08; color: var(--dimmer); opacity: 1; }
+.rv-h-cell b { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px #00000060; }
+.rv-h-cell span { font-size: 11px; color: #ffffff; opacity: 0.85; text-shadow: 0 1px 2px #00000060; }
+.rv-h-cell.void { background: #ffffff08; color: var(--dim); opacity: 1; }
+
+/* 条形图：维度总览 / 品牌声量 */
+.rv-bars { display: flex; flex-direction: column; gap: 11px; }
+.rv-bar-row {
+  display: grid; grid-template-columns: 96px 1fr 46px; align-items: center; gap: 12px;
+  animation: rise 0.4s var(--ease) both;
+}
+.rv-bar-label {
+  font-size: 12.5px; font-weight: 600; color: var(--text); text-align: right;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-bar-track { flex: 1; height: 14px; background: #ffffff09; border-radius: 7px; overflow: hidden; }
+.rv-bar-fill { display: flex; height: 100%; gap: 2px; transition: width var(--slow); }
+.rv-bar-seg { height: 100%; border-radius: 4px; }
+.rv-bar-seg.pos { background: #35d07a; }
+.rv-bar-seg.neg { background: #ef6b5e; }
+.rv-bar-total {
+  font-family: var(--f-mono); font-size: 12px; color: var(--dim); text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
 /* 词云 */
 .rv-clouds { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
@@ -965,7 +985,7 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 }
 .rv-cloud.pos { border-top: 2px solid #35d07a; }
 .rv-cloud.neg { border-top: 2px solid #ef6b5e; }
-.rv-cloud h3 { margin: 0 0 14px; font-size: 13px; letter-spacing: 1px; color: var(--dim); }
+.rv-cloud h3 { margin: 0 0 14px; font-size: 13.5px; font-weight: 700; letter-spacing: 0.6px; color: var(--text); }
 .kw-box { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; }
 .kw {
   display: inline-flex; align-items: baseline; gap: 5px; cursor: help;
@@ -1000,7 +1020,7 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .kw-tip-body { overflow-y: auto; padding: 4px 6px 8px; }
 .kw-ctx { padding: 9px 10px; border-radius: 9px; }
 .kw-ctx:hover { background: #ffffff08; }
-.kw-ctx-meta { display: flex; gap: 8px; align-items: baseline; font-size: 10.5px; color: var(--dimmer); }
+.kw-ctx-meta { display: flex; gap: 8px; align-items: baseline; font-size: 11px; color: var(--dim); }
 .kw-ctx-meta em { font-style: normal; color: var(--dim); font-weight: 700; }
 .kw-ctx-meta i { margin-left: auto; font-style: normal; color: var(--mint); }
 .kw-ctx p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.7; color: var(--text); }

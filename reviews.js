@@ -23,24 +23,6 @@ const Reviews = (() => {
 
   const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
 
-  /* ── 进场动画 ───────────────────────────────────────── */
-  function playIntro() {
-    const board = A.$('#rv-board');
-    if (!board || typeof ParticleIntro === 'undefined') return;
-    board.style.opacity = '0';
-    const intro = ParticleIntro.create({
-      onReveal: () => {
-        board.style.transition = 'opacity 620ms cubic-bezier(0.22,1,0.36,1)';
-        board.style.opacity = '1';
-      },
-      onDone: () => { board.style.transition = ''; }
-    });
-    // 动画中途切走标签页 → 立刻收尾，别在后台烧 CPU
-    const bail = () => intro.destroy();
-    A.$$('.tab').forEach((t) => t.addEventListener('click', bail, { once: true }));
-    intro.start();
-  }
-
   /* ── 关键词溯源浮层 ─────────────────────────────────── */
   let tipTimer = null, tipBox = null;
 
@@ -118,7 +100,7 @@ const Reviews = (() => {
     if (!data.totals.reviews) { root.innerHTML = '<p class="rv-empty">评论库是空的。左边导入一份 xlsx 试试。</p>'; return; }
 
     root.innerHTML = '';
-    root.append(statBar(), heatmap(), clouds());
+    root.append(statBar(), aspectOverview(), heatmap(), brandVolume(), clouds());
   }
 
   function statBar() {
@@ -146,6 +128,75 @@ const Reviews = (() => {
     const wrap = document.createElement('div');
     wrap.append(box, note);
     return wrap;
+  }
+
+  /** 维度总览：按提及量排序的横向条形图，每条内部按 好评/差评 分段 */
+  function aspectOverview() {
+    const sec = document.createElement('section');
+    sec.className = 'rv-sec';
+    sec.innerHTML = `<h2>维度总览</h2><p class="rv-sub">条越长，这个维度被提到的次数越多；绿段是好评句、橙段是差评句。</p>`;
+
+    const rows = ASPECT_ORDER
+      .map((a) => ({ aspect: a, ...(data.aspects[a] || { pos: 0, neg: 0 }) }))
+      .map((r) => ({ ...r, total: r.pos + r.neg }))
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total);
+
+    const max = Math.max(...rows.map((r) => r.total), 1);
+    const box = document.createElement('div');
+    box.className = 'rv-bars';
+    rows.forEach((r) => {
+      const row = document.createElement('div');
+      row.className = 'rv-bar-row';
+      const posPct = (r.pos / r.total) * 100, negPct = (r.neg / r.total) * 100;
+      row.innerHTML = `
+        <span class="rv-bar-label"></span>
+        <div class="rv-bar-track">
+          <div class="rv-bar-fill" style="width:${((r.total / max) * 100).toFixed(2)}%">
+            <div class="rv-bar-seg pos" style="width:${posPct}%"></div>
+            <div class="rv-bar-seg neg" style="width:${negPct}%"></div>
+          </div>
+        </div>
+        <span class="rv-bar-total"></span>`;
+      row.querySelector('.rv-bar-label').textContent = r.aspect;
+      row.querySelector('.rv-bar-total').textContent = r.total.toLocaleString();
+      row.title = `${r.aspect}\n好评句 ${r.pos} · 差评句 ${r.neg}\n差评占比 ${Math.round(negPct)}%`;
+      box.appendChild(row);
+    });
+
+    sec.appendChild(box);
+    return sec;
+  }
+
+  /** 品牌声量：按评论总数排序，条形颜色沿用品牌自己的识别色 */
+  function brandVolume() {
+    const sec = document.createElement('section');
+    sec.className = 'rv-sec';
+    sec.innerHTML = `<h2>品牌声量</h2><p class="rv-sub">条越长，这个品牌的评论样本越多——负向占比要结合样本量一起看。</p>`;
+
+    const max = Math.max(...data.brands.map((b) => b.total), 1);
+    const box = document.createElement('div');
+    box.className = 'rv-bars';
+    data.brands.forEach((b) => {
+      const valid = b.total - b.template;
+      const row = document.createElement('div');
+      row.className = 'rv-bar-row';
+      row.innerHTML = `
+        <span class="rv-bar-label"></span>
+        <div class="rv-bar-track">
+          <div class="rv-bar-fill" style="width:${((b.total / max) * 100).toFixed(2)}%">
+            <div class="rv-bar-seg brand" style="width:100%;background:${b.color}"></div>
+          </div>
+        </div>
+        <span class="rv-bar-total"></span>`;
+      row.querySelector('.rv-bar-label').textContent = b.name;
+      row.querySelector('.rv-bar-total').textContent = b.total.toLocaleString();
+      row.title = `${b.name}\n评论总数 ${b.total} · 有效 ${valid} · 模板/空评 ${pct(b.template, b.total)}%`;
+      box.appendChild(row);
+    });
+
+    sec.appendChild(box);
+    return sec;
   }
 
   /** 品牌 × 维度 热力图。格子颜色 = 负向占比，格子里是 负/总 */
@@ -330,11 +381,9 @@ const Reviews = (() => {
       if (f) doImport(f, nameInput.value);
     });
 
-    A.$('#rv-replay').onclick = playIntro;
-
     window.addEventListener('scroll', hideTip, true);
     refresh();
   }
 
-  return { init, refresh, render, playIntro };
+  return { init, refresh, render };
 })();

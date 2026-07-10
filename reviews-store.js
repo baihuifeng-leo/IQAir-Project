@@ -99,10 +99,11 @@ class ReviewStore {
     const brands = {};
     const kw = { pos: new Map(), neg: new Map() };
     const aspectTotals = {};
+    const colorOf = (id) => this.brands.find((x) => x.id === id)?.color || PALETTE[0];
 
     for (const r of this.records.values()) {
       const b = brands[r.brandId] || (brands[r.brandId] = {
-        id: r.brandId, name: r.brandName, total: 0, template: 0,
+        id: r.brandId, name: r.brandName, color: colorOf(r.brandId), total: 0, template: 0,
         posClauses: 0, negClauses: 0, useful: 0, aspects: {}, skus: {}, firstDate: '9999', lastDate: '0'
       });
       b.total++;

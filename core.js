@@ -339,21 +339,12 @@ const App = (() => {
     ink.style.left = a.offsetLeft + 12 + 'px';
     ink.style.width = a.offsetWidth - 24 + 'px';
   }
-  let introPlayed = false;
   function go(next) {
-    const from = view;
     view = next;
     $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.view === next));
     $$('.view').forEach((v) => (v.hidden = v.dataset.view !== next));
     moveInk();
     location.hash = next;
-
-    // 粒子进场只给评论风向标，且一次会话只放一次 ——
-    // 第一次是惊艳，第五次是障碍，而你每天要开很多次。
-    if (next === 'reviews' && from !== 'reviews' && !introPlayed && typeof ParticleIntro !== 'undefined') {
-      introPlayed = true;
-      Reviews.playIntro();
-    }
   }
 
   function bindTitles() {
