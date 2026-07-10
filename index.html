@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>竞品作战台 · Competitive Workbench</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a0e17'/><path d='M6 20h7M6 14h13M6 26h4' stroke='%234ee0c1' stroke-width='2.6' stroke-linecap='round'/><circle cx='24' cy='11' r='3' fill='%235b8cff'/></svg>">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brandmark">
+    <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="brandtext">
+      <strong>竞品作战台</strong>
+      <em>Competitive Workbench</em>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab is-active" role="tab" data-view="matrix">价格带沙盘</button>
+    <button class="tab" role="tab" data-view="compare">竞品对位</button>
+    <button class="tab tab-rv" role="tab" data-view="reviews">评论风向标</button>
+    <i class="tab-ink" aria-hidden="true"></i>
+  </nav>
+
+  <div class="topbar-right">
+    <button class="editbtn" id="btn-edit" title="默认只读，防止浏览时误改">开启编辑</button>
+    <div class="presence" id="presence" title="在线成员"></div>
+    <div class="saveflag" id="saveflag" data-state="idle">
+      <i></i><span>已同步</span>
+    </div>
+    <button class="ghost" id="btn-undo" title="撤销 (Ctrl+Z)">撤销</button>
+    <button class="ghost" id="btn-redo" title="重做 (Ctrl+Shift+Z)">重做</button>
+    <div class="menu-wrap">
+      <button class="ghost" id="btn-more" aria-haspopup="true">⋯</button>
+      <div class="menu" id="more-menu" hidden>
+        <button data-act="export">导出 JSON 备份</button>
+        <button data-act="import">从 JSON 恢复</button>
+        <button data-act="print">打印 / 导出 PDF</button>
+        <div class="menu-sep"></div>
+        <button data-act="logs">变更日志</button>
+        <button data-act="backups">备份与恢复</button>
+        <button data-act="users">用户管理</button>
+        <div class="menu-sep"></div>
+        <button data-act="reset" class="danger">恢复出厂数据</button>
+        <button data-act="logout" id="btn-logout">退出登录 · <span id="whoami"></span></button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="workspace">
+
+  <!-- ══════════════ 视图一：价格带沙盘 ══════════════ -->
+  <section class="view" id="view-matrix" data-view="matrix">
+    <aside class="rail">
+      <div class="rail-head">
+        <span>图例与分类</span>
+        <button class="rail-toggle" title="收起工作台，腾出阅读空间" aria-label="收起工作台"></button>
+      </div>
+      <div class="rail-body">
+        <p class="rail-hint">这些颜色同时控制沙盘里的产品标签。改一处，全盘生效。</p>
+        <div id="tag-editor"></div>
+        <button class="solid" id="btn-add-tag">新增一个分类</button>
+
+        <div class="rail-sec">默认产品色</div>
+        <div class="tag-row">
+          <input type="color" id="default-color">
+          <input type="text" id="default-color-hex" spellcheck="false">
+        </div>
+
+        <div class="rail-sec">结构</div>
+        <button class="ghost wide" id="btn-add-brand">新增品牌列</button>
+        <button class="ghost wide" id="btn-add-band">新增价格带</button>
+
+        <div class="rail-sec">批量调整</div>
+        <p class="rail-hint">在空白处按住鼠标拖出选框，可以一次选中多个产品；<kbd>Ctrl</kbd> 点击加选或取消。选中后整批拖到别的格子，或用底部工具条改分类、删除。</p>
+
+        <div class="rail-sec">统计</div>
+        <div class="stats" id="matrix-stats"></div>
+      </div>
+    </aside>
+
+    <div class="canvas paper" id="matrix-canvas">
+      <div class="paper-head">
+        <h1 contenteditable="plaintext-only" data-bind="matrix.title"></h1>
+        <p contenteditable="plaintext-only" data-bind="matrix.subtitle"></p>
+      </div>
+      <div class="matrix-scroll">
+        <div class="matrix" id="matrix"></div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <!-- ══════════════ 视图二：竞品对位 ══════════════ -->
+  <section class="view" id="view-compare" data-view="compare" hidden>
+    <aside class="rail">
+      <div class="rail-head">
+        <span>对位设置</span>
+        <button class="rail-toggle" title="收起工作台，腾出阅读空间" aria-label="收起工作台"></button>
+      </div>
+      <div class="rail-body">
+        <div class="rail-sec">语言</div>
+        <div class="lang-switch" id="lang-switch">
+          <button data-lang="zh" class="on">中文</button>
+          <button data-lang="en">English</button>
+          <i></i>
+        </div>
+        <div class="en-status" id="en-status"></div>
+        <p class="rail-hint">中文和英文各存一份。改了中文，对应的英文会被标成待更新；英文空着的地方会高亮提示。</p>
+
+        <div class="rail-sec">我方品牌</div>
+        <p class="rail-hint">选中后，该列会被高亮描边，方便一眼锁定自己。</p>
+        <select id="own-brand"></select>
+
+        <div class="rail-sec">高亮含义</div>
+        <div class="mark-legend">
+          <span class="chip-mark good">蓝色 · 我方优势</span>
+          <span class="chip-mark bad">红色 · 我方劣势</span>
+          <span class="chip-mark">灰色 · 中性</span>
+        </div>
+        <p class="rail-hint">点单元格里的圆点循环切换：中性 → 优势 → 劣势。</p>
+
+        <div class="rail-sec">结构</div>
+        <button class="ghost wide" id="btn-add-cbrand">新增品牌列</button>
+        <button class="ghost wide" id="btn-add-group">新增参数分组</button>
+
+        <div class="rail-sec">素材</div>
+        <p class="rail-hint">产品图会自动裁成 1:1 正方形，鼠标滑过放大，移开还原。</p>
+        <label class="switch">
+          <input type="checkbox" id="zoom-toggle" checked>
+          <span>滑过放大</span>
+        </label>
+      </div>
+    </aside>
+
+    <div class="canvas paper" id="compare-canvas">
+      <div class="paper-head compare-head">
+        <h1 contenteditable="plaintext-only"></h1>
+        <p contenteditable="plaintext-only"></p>
+      </div>
+      <div class="compare-scroll">
+        <div class="compare" id="compare"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ 视图三：评论风向标 ══════════════ -->
+  <section class="view view-rv" id="view-reviews" data-view="reviews" hidden>
+    <aside class="rail">
+      <div class="rail-head">
+        <span>数据源</span>
+        <button class="rail-toggle" title="收起工作台" aria-label="收起工作台"></button>
+      </div>
+      <div class="rail-body">
+        <div class="rail-sec">导入评论</div>
+        <p class="rail-hint">填品牌名，选一份淘宝评论导出的 .xlsx。重复评论会自动跳过，只追加新的。</p>
+        <input type="text" id="rv-brand-name" placeholder="品牌 + 型号，如 352 Z90" spellcheck="false">
+        <div class="rv-drop" id="rv-drop">
+          <button class="solid" id="rv-import-btn">导入 Excel</button>
+          <span>或把文件拖到这里</span>
+        </div>
+
+        <div class="rail-sec">品牌</div>
+        <p class="rail-hint">点品牌名可以只看它的关键词。</p>
+        <div id="rv-brands"></div>
+
+        <div class="rail-sec">动画</div>
+        <button class="ghost wide" id="rv-replay">重放进场动画</button>
+      </div>
+    </aside>
+
+    <div class="canvas rv-canvas">
+      <div class="rv-head">
+        <h1>评论风向标</h1>
+        <p>Voice of Customer · 竞品口碑拆解</p>
+      </div>
+      <div class="rv-scroll">
+        <div id="rv-board"><p class="rv-empty">读取中…</p></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="marquee" id="marquee" hidden></div>
+
+<div class="batchbar" id="batchbar" hidden>
+  <span class="bb-count"><b id="batch-count">0</b> 个已选中</span>
+  <button id="batch-tag">改分类</button>
+  <button id="batch-italic"><i>I</i></button>
+  <button id="batch-underline"><u>U</u></button>
+  <button id="batch-delete" class="danger">删除</button>
+  <button id="batch-clear" class="quiet">取消选择</button>
+</div>
+
+<div class="toaster" id="toaster"></div>
+<input type="file" id="filepick" accept="image/png,image/jpeg,image/webp" hidden>
+<input type="file" id="jsonpick" accept="application/json,.json" hidden>
+<input type="file" id="rv-file" accept=".xlsx" hidden>
+
+<script src="/core.js"></script>
+<script src="/users.js"></script>
+<script src="/admin.js"></script>
+<script src="/matrix.js"></script>
+<script src="/compare.js"></script>
+<script src="/particles.js"></script>
+<script src="/reviews.js"></script>
+<script>App.boot();</script>
+</body>
+</html>
