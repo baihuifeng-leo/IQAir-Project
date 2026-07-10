@@ -419,7 +419,7 @@ const Matrix = (() => {
     lg.innerHTML = '';
     Object.entries(m.tags).forEach(([, t]) => {
       const s = document.createElement('span');
-      s.innerHTML = `<i style="background:${t.color}"></i>`;
+      s.innerHTML = `<i class="swatch" style="background:${t.color}"></i>`;
       const label = document.createElement('span');
       label.innerHTML = t.label || '';   // 已经过 sanitize 白名单，只可能是 b/i/u
       s.appendChild(label);
