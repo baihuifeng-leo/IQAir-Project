@@ -1132,6 +1132,8 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-trend-chart { width: 100%; height: 100%; }
 .rpt-trend-wrap .rv-empty { padding-top: 140px; }
 
+.rpt-subhead { margin: 18px 0 0; font-size: 12px; font-weight: 700; color: var(--dim); letter-spacing: 0.3px; }
+
 .rpt-scope-badge {
   display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px;
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.3px; vertical-align: middle;

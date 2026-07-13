@@ -185,6 +185,63 @@ const Report = (() => {
     ensureChart().setOption(buildTrendOption(), true);
   }
 
+  /** 一张对比卡：label 指标名，cur/last 两个周期的值，curLabel/lastLabel 是两个周期各自的叫法 */
+  function buildCompareCard(label, cur, last, unit, curLabel, lastLabel) {
+    const max = Math.max(cur, last, 1);
+    const delta = last > 0 ? ((cur - last) / last) * 100 : (cur > 0 ? Infinity : null);
+
+    const card = document.createElement('div');
+    card.className = 'rpt-cmp-card';
+    const deltaCls = delta === null ? '' : delta === Infinity ? 'up' : delta > 0.5 ? 'up' : delta < -0.5 ? 'down' : 'flat';
+    const deltaTxt = delta === null ? '—' : delta === Infinity ? '新增' : (delta > 0 ? '+' : '') + delta.toFixed(1) + '%';
+
+    card.innerHTML = `
+      <div class="rpt-cmp-top">
+        <span class="rpt-cmp-label"></span>
+        <span class="rpt-cmp-delta ${deltaCls}"></span>
+      </div>
+      <div class="rpt-cmp-track">
+        <div class="rpt-cmp-fill" style="width:${max ? (cur / max) * 100 : 0}%"></div>
+        <div class="rpt-cmp-mark" style="left:${max ? (last / max) * 100 : 0}%"></div>
+      </div>
+      <div class="rpt-cmp-foot">
+        <span><b></b> ${curLabel}</span>
+        <span class="dim">${lastLabel} <b></b></span>
+      </div>`;
+    card.querySelector('.rpt-cmp-label').textContent = label;
+    card.querySelector('.rpt-cmp-delta').textContent = deltaTxt;
+    card.querySelectorAll('.rpt-cmp-foot b')[0].textContent = fmt(cur, unit);
+    card.querySelectorAll('.rpt-cmp-foot b')[1].textContent = fmt(last, unit);
+    card.title = `${label}\n${curLabel} ${fmt(cur, unit)} · ${lastLabel} ${fmt(last, unit)}`;
+    return card;
+  }
+
+  /** 店铺整体：上周 vs 上上周——两个都是过完的整周，不会被"本周还没过完"拉低 */
+  function renderShopWeekCompare() {
+    const box = A.$('#rpt-shop-compare');
+    box.innerHTML = '';
+    const daily = data?.daily || [];
+    if (!daily.length) return;
+
+    const [lastStart, lastEnd] = isoWeekRange(-1);
+    const [prevStart, prevEnd] = isoWeekRange(-2);
+    const inWeek = (r, s, e) => r.date >= s && r.date <= e;
+    const lastRows = daily.filter((r) => inWeek(r, lastStart, lastEnd));
+    const prevRows = daily.filter((r) => inWeek(r, prevStart, prevEnd));
+
+    if (!lastRows.length && !prevRows.length) {
+      box.innerHTML = '<p class="kw-empty">上周和上上周都还没有数据。</p>';
+      return;
+    }
+
+    const sum = (rows, field) => rows.reduce((s, r) => s + (r[field] || 0), 0);
+    const grid = document.createElement('div');
+    grid.className = 'rpt-cmp-grid';
+    grid.appendChild(buildCompareCard('浏览量', sum(lastRows, 'shopPageviews'), sum(prevRows, 'shopPageviews'), 'count', '上周', '上上周'));
+    grid.appendChild(buildCompareCard('访客数', sum(lastRows, 'shopVisitors'), sum(prevRows, 'shopVisitors'), 'count', '上周', '上上周'));
+    box.appendChild(grid);
+  }
+
   /* ── 生意参谋指标（首页）：上周 vs 本周 ───────────────── */
   function renderCompare() {
     const box = A.$('#rpt-compare');
@@ -212,40 +269,13 @@ const Report = (() => {
 
     METRIC_FIELDS.forEach(([field, label, mode, unit]) => {
       const cur = rollup(thisWeek, field, mode), last = rollup(lastWeek, field, mode);
-      const max = Math.max(cur, last, 1);
-      let delta = null;
-      if (lastWeek.length) delta = last > 0 ? ((cur - last) / last) * 100 : (cur > 0 ? Infinity : 0);
-
-      const card = document.createElement('div');
-      card.className = 'rpt-cmp-card';
-      const deltaCls = delta === null ? '' : delta === Infinity ? 'up' : delta > 0.5 ? 'up' : delta < -0.5 ? 'down' : 'flat';
-      const deltaTxt = delta === null ? '—' : delta === Infinity ? '新增' : (delta > 0 ? '+' : '') + delta.toFixed(1) + '%';
-
-      card.innerHTML = `
-        <div class="rpt-cmp-top">
-          <span class="rpt-cmp-label"></span>
-          <span class="rpt-cmp-delta ${deltaCls}"></span>
-        </div>
-        <div class="rpt-cmp-track">
-          <div class="rpt-cmp-fill" style="width:${max ? (cur / max) * 100 : 0}%"></div>
-          <div class="rpt-cmp-mark" style="left:${max ? (last / max) * 100 : 0}%"></div>
-        </div>
-        <div class="rpt-cmp-foot">
-          <span><b></b> 本周</span>
-          <span class="dim">上周 <b></b></span>
-        </div>`;
-      card.querySelector('.rpt-cmp-label').textContent = label;
-      card.querySelector('.rpt-cmp-delta').textContent = deltaTxt;
-      card.querySelectorAll('.rpt-cmp-foot b')[0].textContent = fmt(cur, unit);
-      card.querySelectorAll('.rpt-cmp-foot b')[1].textContent = fmt(last, unit);
-      card.title = `${label}\n本周 ${fmt(cur, unit)} · 上周 ${fmt(last, unit)}`;
-      grid.appendChild(card);
+      grid.appendChild(buildCompareCard(label, cur, last, unit, '本周', '上周'));
     });
 
     box.appendChild(grid);
   }
 
-  function render() { renderTrend(); renderCompare(); }
+  function render() { renderTrend(); renderShopWeekCompare(); renderCompare(); }
 
   /* ── 子页签：个人 / 公共 ──────────────────────────────── */
   function switchSub(s) {
