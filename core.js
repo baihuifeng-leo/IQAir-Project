@@ -352,6 +352,7 @@ const App = (() => {
     moveInk();
     location.hash = next;
     if (next === 'preview3d') Preview3D.onShow();
+    if (next === 'reports') Report.onShow();
   }
 
   function bindTitles() {
@@ -535,6 +536,7 @@ const App = (() => {
     Compare.init(api);
     Reviews.init(api);
     Preview3D.init(api);
+    Report.init(api);
     Users.init(api);
     Admin.init(api);
     bindTitles();
@@ -545,7 +547,7 @@ const App = (() => {
     $('#btn-edit').onclick = () => setEditing(!editing);
     setEditing(localStorage.getItem('wb.editing') === '1');
     const hash = location.hash.slice(1);
-    go(['compare', 'reviews', 'preview3d'].includes(hash) ? hash : 'matrix');
+    go(['compare', 'reviews', 'preview3d', 'reports'].includes(hash) ? hash : 'matrix');
     window.addEventListener('resize', moveInk);
 
     $('#btn-undo').onclick = undo;

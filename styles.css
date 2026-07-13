@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   竞品作战台 · 设计令牌
+   电商工作台 · 设计令牌
    暗色控制台 (决策) + 浅色纸面 (呈现)。纸面可直接截图进 PPT。
    ═══════════════════════════════════════════════════════════ */
 :root {
@@ -1108,6 +1108,53 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .p3d-tip-link { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line-soft); color: var(--mint); font-size: 11px; }
 
 /* ═══════════════════════════════════════════════════════════
+   报告管理 · 个人报告
+   ═══════════════════════════════════════════════════════════ */
+.rpt-sec-first { margin-top: 6px; }
+.rpt-sec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+.rpt-seg { display: flex; gap: 4px; background: #ffffff08; border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+.rpt-seg button {
+  padding: 5px 13px; border-radius: 6px; font-size: 12.5px; color: var(--dim);
+  background: none; border: 0; cursor: pointer; transition: background var(--fast), color var(--fast);
+}
+.rpt-seg button.on { background: var(--mint-dim); color: var(--mint); font-weight: 600; }
+.rpt-seg button:not(.on):hover { color: var(--text); }
+
+.rpt-trend-wrap { position: relative; height: 400px; margin-top: 14px; }
+.rpt-trend-chart { width: 100%; height: 100%; }
+.rpt-trend-wrap .rv-empty { padding-top: 140px; }
+
+.rpt-cmp-group { margin-top: 26px; }
+.rpt-cmp-group:first-of-type { margin-top: 18px; }
+.rpt-cmp-group h3 { margin: 0 0 10px; font-size: 13px; color: var(--dim); letter-spacing: 0.4px; }
+.rpt-cmp-row {
+  background: linear-gradient(180deg, #ffffff08, #ffffff02);
+  border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px 16px; margin-bottom: 10px;
+}
+.rpt-cmp-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.rpt-cmp-label { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.rpt-cmp-delta { font-family: var(--f-mono); font-size: 12.5px; font-weight: 700; color: var(--dim); }
+.rpt-cmp-delta.up { color: var(--mint); }
+.rpt-cmp-delta.down { color: #ff9a90; }
+.rpt-cmp-delta.flat { color: var(--dim); }
+
+.rpt-cmp-bar-line { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+.rpt-cmp-tag { flex: 0 0 32px; font-size: 11px; color: var(--dimmer); }
+.rpt-cmp-track { flex: 1; height: 8px; border-radius: 5px; background: #ffffff0a; overflow: hidden; }
+.rpt-cmp-fill { height: 100%; border-radius: 5px; transition: width 0.5s var(--ease); }
+.rpt-cmp-fill.last { background: var(--dimmer); }
+.rpt-cmp-fill.cur { background: linear-gradient(90deg, var(--mint), var(--blue)); }
+.rpt-cmp-num { flex: 0 0 90px; text-align: right; font-family: var(--f-mono); font-size: 12.5px; color: var(--dim); }
+
+.rpt-devnote {
+  margin: 80px auto; max-width: 360px; text-align: center; padding: 40px 30px;
+  border: 1px dashed var(--line); border-radius: 16px; background: #ffffff05;
+}
+.rpt-devnote b { display: block; font-size: 18px; margin-bottom: 8px; }
+.rpt-devnote span { font-size: 13px; color: var(--dimmer); }
+
+/* ═══════════════════════════════════════════════════════════
    移动端
    对位表是 5 列 × 11 行的二维表，手机上不可能不横滚。
    与其折成一维卡片流丢掉横向对比，不如保留横滚 + scroll-snap，
@@ -1172,5 +1219,8 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
   .kw-tip { width: calc(100vw - 20px); }
   .p3d-stats { grid-template-columns: 1fr 1fr; padding: 12px 14px 0; }
   .p3d-chart-wrap { padding: 10px 8px 14px; }
+  .rpt-sec-head { flex-direction: column; }
+  .rpt-trend-wrap { height: 300px; }
+  .rpt-cmp-num { flex-basis: 74px; }
   .lb-bar { flex-wrap: wrap; justify-content: center; left: 10px; right: 10px; transform: none; }
 }

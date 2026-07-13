@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>竞品作战台 · Competitive Workbench</title>
+<title>电商工作台 · E-commerce Workbench</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a0e17'/><path d='M6 20h7M6 14h13M6 26h4' stroke='%234ee0c1' stroke-width='2.6' stroke-linecap='round'/><circle cx='24' cy='11' r='3' fill='%235b8cff'/></svg>">
 <link rel="stylesheet" href="/styles.css">
 </head>
@@ -13,8 +13,8 @@
   <div class="brandmark">
     <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
     <div class="brandtext">
-      <strong>竞品作战台</strong>
-      <em>Competitive Workbench</em>
+      <strong>电商工作台</strong>
+      <em>E-commerce Workbench</em>
     </div>
   </div>
 
@@ -23,6 +23,7 @@
     <button class="tab" role="tab" data-view="compare">竞品对位</button>
     <button class="tab tab-rv" role="tab" data-view="reviews">评论风向标</button>
     <button class="tab" role="tab" data-view="preview3d">竞品3D预览</button>
+    <button class="tab" role="tab" data-view="reports">报告管理</button>
     <i class="tab-ink" aria-hidden="true"></i>
   </nav>
 
@@ -222,6 +223,86 @@
     </div>
   </section>
 
+  <!-- ══════════════ 视图五：报告管理 ══════════════ -->
+  <section class="view" id="view-reports" data-view="reports" hidden>
+    <aside class="rail">
+      <div class="rail-head">
+        <span>报告管理</span>
+        <button class="rail-toggle" title="收起工作台" aria-label="收起工作台"></button>
+      </div>
+      <div class="rail-body">
+        <div class="lang-switch" id="rpt-switch">
+          <button data-sub="personal" class="on">个人报告</button>
+          <button data-sub="public">公共报告</button>
+          <i></i>
+        </div>
+
+        <div id="rpt-personal-rail">
+          <div class="rail-sec">访客 / 浏览趋势</div>
+          <p class="rail-hint">表头需含：统计日期、店铺名称、访客数、浏览量。支持多店铺；同一天同一店铺重复导入会用新数据覆盖旧数据，其余日期不受影响。</p>
+          <div class="rv-drop" id="rpt-traffic-drop">
+            <button class="solid" id="rpt-traffic-btn">导入 / 更新 Excel</button>
+            <span>或把文件拖到这里</span>
+          </div>
+
+          <div class="rail-sec">生意参谋指标</div>
+          <p class="rail-hint">表头需含：统计时段、浏览量、访客数、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数。目前只支持 .xlsx——如果导出的是老版 .xls，先用 Excel/WPS 另存为 .xlsx 再传。</p>
+          <div class="rv-drop" id="rpt-metrics-drop">
+            <button class="solid" id="rpt-metrics-btn">导入 / 更新 Excel</button>
+            <span>或把文件拖到这里</span>
+          </div>
+
+          <div class="rail-sec">店铺</div>
+          <p class="rail-hint">点店铺名可以单独隐藏它，方便只看其中几家。</p>
+          <div id="rpt-stores"></div>
+        </div>
+
+        <div id="rpt-public-rail" hidden>
+          <p class="rail-hint">公共报告还在开发中，敬请期待。</p>
+        </div>
+      </div>
+    </aside>
+
+    <div class="canvas rv-canvas" id="rpt-canvas">
+      <div class="rv-head">
+        <h1>报告管理</h1>
+        <p id="rpt-head-sub">周报数据看板 · 个人报告</p>
+      </div>
+      <div class="rv-scroll" id="rpt-personal-view">
+        <section class="rv-sec rpt-sec-first">
+          <div class="rpt-sec-head">
+            <div>
+              <h2>访客 / 浏览趋势</h2>
+              <p class="rv-sub">按日、周、月切换聚合口径；线是浏览量，虚线是访客数。</p>
+            </div>
+            <div class="rpt-seg" id="rpt-granularity">
+              <button data-g="day" class="on">日</button>
+              <button data-g="week">周</button>
+              <button data-g="month">月</button>
+            </div>
+          </div>
+          <div class="p3d-chart-wrap rpt-trend-wrap">
+            <p class="rv-empty" id="rpt-trend-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份访客/浏览趋势表进来。</p>
+            <div class="p3d-chart rpt-trend-chart" id="rpt-trend-chart" hidden></div>
+          </div>
+        </section>
+
+        <section class="rv-sec">
+          <h2>更多指标 · 上周 vs 本周</h2>
+          <p class="rv-sub">取最近有数据的 14 天，按日期从新到旧切成两组各 7 天；计数类指标取两组各自的总和，比率类指标取两组各自的平均值。</p>
+          <div id="rpt-compare"></div>
+        </section>
+      </div>
+
+      <div class="rv-scroll" id="rpt-public-view" hidden>
+        <div class="rpt-devnote">
+          <b>公共报告</b>
+          <span>团队共享的报告看板还在开发中，敬请期待。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <div class="marquee" id="marquee" hidden></div>
@@ -240,6 +321,8 @@
 <input type="file" id="jsonpick" accept="application/json,.json" hidden>
 <input type="file" id="rv-file" accept=".xlsx" hidden>
 <input type="file" id="p3d-file" accept=".xlsx" hidden>
+<input type="file" id="rpt-traffic-file" accept=".xlsx" hidden>
+<input type="file" id="rpt-metrics-file" accept=".xlsx" hidden>
 
 <script src="/echarts.min.js"></script>
 <script src="/echarts-gl.min.js"></script>
@@ -250,6 +333,7 @@
 <script src="/compare.js"></script>
 <script src="/reviews.js"></script>
 <script src="/preview3d.js"></script>
+<script src="/report.js"></script>
 <script>App.boot();</script>
 </body>
 </html>

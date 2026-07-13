@@ -1,5 +1,5 @@
 /**
- * 竞品作战台 · Competitive Workbench
+ * 电商工作台 · E-commerce Workbench
  * 零依赖 Node 服务：静态托管 + 协同编辑 + 用户管理 + 图片上传
  */
 const http = require('http');
@@ -11,6 +11,7 @@ const { merge3, deepEqual } = require('./merge.js');
 const { diffSummary } = require('./audit.js');
 const { ReviewStore } = require('./reviews-store.js');
 const { Preview3DStore } = require('./preview3d-store.js');
+const { ReportStore } = require('./report-store.js');
 const { pipeline } = require('stream/promises');
 
 const PORT = Number(process.env.PORT || 8080);
@@ -23,6 +24,7 @@ const SECRET_FILE = path.join(DATA_DIR, '.session-secret');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.log');
 const REVIEWS_DIR = path.join(DATA_DIR, 'reviews');
 const PRODUCTS3D_DIR = path.join(DATA_DIR, 'products3d');
+const REPORTS_DIR = path.join(DATA_DIR, 'reports');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SEED_FILE = path.join(PUBLIC_DIR, 'seed.json');
 
@@ -550,6 +552,27 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, report);
     }
 
+    /* ── 报告管理 · 个人报告 ─────────────────────────────── */
+    if (p === '/api/reports/personal/summary') return json(res, 200, await reports.summary(me.id));
+
+    if (p === '/api/reports/personal/traffic/import' && req.method === 'POST') {
+      const buf = await readBinary(req, MAX_XLSX);
+      let report;
+      try { report = await reports.importTraffic(me.id, buf); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'reports.traffic.import', { detail: [`访客/浏览趋势：新增 ${report.added} 天，更新 ${report.updated} 天`] });
+      return json(res, 200, report);
+    }
+
+    if (p === '/api/reports/personal/metrics/import' && req.method === 'POST') {
+      const buf = await readBinary(req, MAX_XLSX);
+      let report;
+      try { report = await reports.importMetrics(me.id, buf); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'reports.metrics.import', { detail: [`生意参谋指标：新增 ${report.added} 天，更新 ${report.updated} 天`] });
+      return json(res, 200, report);
+    }
+
     if (p.startsWith('/uploads/')) return serveStatic(res, UPLOAD_DIR, p.slice('/uploads/'.length), true);
 
     if (req.method === 'GET' || req.method === 'HEAD')
@@ -564,9 +587,10 @@ const server = http.createServer(async (req, res) => {
 
 const reviews = new ReviewStore(REVIEWS_DIR);
 const preview3d = new Preview3DStore(PRODUCTS3D_DIR);
+const reports = new ReportStore(REPORTS_DIR);
 
 (async () => {
-  for (const d of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, REVIEWS_DIR, PRODUCTS3D_DIR]) await fsp.mkdir(d, { recursive: true });
+  for (const d of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, REVIEWS_DIR, PRODUCTS3D_DIR, REPORTS_DIR]) await fsp.mkdir(d, { recursive: true });
   try { SECRET = await fsp.readFile(SECRET_FILE); }
   catch { SECRET = crypto.randomBytes(32); await fsp.writeFile(SECRET_FILE, SECRET, { mode: 0o600 }); }
   await loadUsers();
@@ -574,5 +598,5 @@ const preview3d = new Preview3DStore(PRODUCTS3D_DIR);
   await reviews.load();
   await preview3d.load();
   scheduleNightly();
-  server.listen(PORT, '0.0.0.0', () => console.log(`竞品作战台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
+  server.listen(PORT, '0.0.0.0', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
 })();
