@@ -12,7 +12,7 @@
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
-const { readRecords } = require('./xlsx-lite.js');
+const { readSheet } = require('./xlsx-lite.js');
 
 const TRAFFIC_COL = { date: '统计日期', store: '店铺名称', visitors: '访客数', pageviews: '浏览量' };
 
@@ -42,6 +42,25 @@ const normDate = (v) => {
   return s;
 };
 
+/**
+ * 生意参谋这类导出常在真正的表头前面加两行说明文字 + 一行空行
+ * （"数据说明：以下数据为..." / "收藏网址：..." / 空行 / 表头 / 数据…）——
+ * 不能假定第一行就是表头，要在前几行里找「包含所有必需列名」的那一行。
+ */
+function recordsFrom(buf, requiredCols) {
+  const { headers, rows } = readSheet(buf);
+  const grid = [headers, ...rows];
+  let headerRow = null, headerIdx = -1;
+  for (let i = 0; i < Math.min(10, grid.length); i++) {
+    const set = new Set(grid[i].map((c) => String(c ?? '').trim()));
+    if (requiredCols.every((c) => set.has(c))) { headerRow = grid[i]; headerIdx = i; break; }
+  }
+  if (headerIdx < 0) return [];
+  return grid.slice(headerIdx + 1)
+    .filter((r) => r.some((c) => String(c ?? '').trim() !== ''))
+    .map((r) => Object.fromEntries(headerRow.map((h, i) => [String(h ?? '').trim(), r[i] ?? ''])));
+}
+
 class ReportStore {
   constructor(dir) { this.dir = dir; }
 
@@ -62,10 +81,9 @@ class ReportStore {
   async summary(userId) { return this._load(userId); }
 
   async importTraffic(userId, buf) {
-    const rows = readRecords(buf);
-    if (!rows.length) throw new Error('这个表格是空的');
-    const missing = Object.values(TRAFFIC_COL).filter((c) => !(c in rows[0]));
-    if (missing.length) throw new Error(`缺少列：${missing.join('、')}（表头必须是：${Object.values(TRAFFIC_COL).join('、')}）`);
+    const required = Object.values(TRAFFIC_COL);
+    const rows = recordsFrom(buf, required);
+    if (!rows.length) throw new Error(`表格里没找到包含这些列的表头行：${required.join('、')}`);
 
     const data = await this._load(userId);
     const map = new Map(data.traffic.map((r) => [r.date + '|' + r.store, r]));
@@ -84,10 +102,9 @@ class ReportStore {
   }
 
   async importMetrics(userId, buf) {
-    const rows = readRecords(buf);
-    if (!rows.length) throw new Error('这个表格是空的');
-    const missing = Object.values(METRIC_COL).filter((c) => !(c in rows[0]));
-    if (missing.length) throw new Error(`缺少列：${missing.join('、')}（表头必须是：${Object.values(METRIC_COL).join('、')}）`);
+    const required = Object.values(METRIC_COL);
+    const rows = recordsFrom(buf, required);
+    if (!rows.length) throw new Error(`表格里没找到包含这些列的表头行：${required.join('、')}`);
 
     const data = await this._load(userId);
     const map = new Map(data.metrics.map((r) => [r.date, r]));
