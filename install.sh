@@ -53,7 +53,7 @@ fi
 info "部署代码到 $APP_DIR"
 mkdir -p "$APP_DIR"
 rm -rf "$APP_DIR/public"
-for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js; do
+for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js preview3d-store.js; do
   [[ -f "$SRC_DIR/$f" ]] || die "源码目录里缺少 $f"
   install -m 0644 "$SRC_DIR/$f" "$APP_DIR/"
 done
@@ -64,7 +64,7 @@ chmod -R a+rX "$APP_DIR"
 
 # ── 4. 数据目录（服务唯一可写的地方）─────────────────────
 info "准备数据目录 $DATA_DIR"
-mkdir -p "$DATA_DIR" "$DATA_DIR/reviews"
+mkdir -p "$DATA_DIR" "$DATA_DIR/reviews" "$DATA_DIR/products3d"
 chown -R "$SVC_USER:$SVC_USER" "$DATA_DIR"
 chmod 750 "$DATA_DIR"
 

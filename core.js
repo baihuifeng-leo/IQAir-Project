@@ -122,6 +122,12 @@ const App = (() => {
       Reviews.refresh();
     });
 
+    es.addEventListener('products3d', (e) => {
+      const { by } = JSON.parse(e.data);
+      if (by.id !== me.id) toast(`${by.name} 更新了3D预览数据`, 'live');
+      Preview3D.refresh();
+    });
+
     es.onerror = () => flag('error', '连接断开');
     es.onopen = () => { if (!anyDirty()) flag('idle', '已同步'); };
   }
@@ -345,6 +351,7 @@ const App = (() => {
     $$('.view').forEach((v) => (v.hidden = v.dataset.view !== next));
     moveInk();
     location.hash = next;
+    if (next === 'preview3d') Preview3D.onShow();
   }
 
   function bindTitles() {
@@ -527,6 +534,7 @@ const App = (() => {
     Matrix.init(api);
     Compare.init(api);
     Reviews.init(api);
+    Preview3D.init(api);
     Users.init(api);
     Admin.init(api);
     bindTitles();
@@ -537,7 +545,7 @@ const App = (() => {
     $('#btn-edit').onclick = () => setEditing(!editing);
     setEditing(localStorage.getItem('wb.editing') === '1');
     const hash = location.hash.slice(1);
-    go(['compare', 'reviews'].includes(hash) ? hash : 'matrix');
+    go(['compare', 'reviews', 'preview3d'].includes(hash) ? hash : 'matrix');
     window.addEventListener('resize', moveInk);
 
     $('#btn-undo').onclick = undo;

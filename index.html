@@ -22,6 +22,7 @@
     <button class="tab is-active" role="tab" data-view="matrix">价格带沙盘</button>
     <button class="tab" role="tab" data-view="compare">竞品对位</button>
     <button class="tab tab-rv" role="tab" data-view="reviews">评论风向标</button>
+    <button class="tab" role="tab" data-view="preview3d">竞品3D预览</button>
     <i class="tab-ink" aria-hidden="true"></i>
   </nav>
 
@@ -181,6 +182,46 @@
     </div>
   </section>
 
+  <!-- ══════════════ 视图四：竞品3D预览 ══════════════ -->
+  <section class="view" id="view-preview3d" data-view="preview3d" hidden>
+    <aside class="rail">
+      <div class="rail-head">
+        <span>数据源</span>
+        <button class="rail-toggle" title="收起工作台" aria-label="收起工作台"></button>
+      </div>
+      <div class="rail-body">
+        <div class="rail-sec">导入 / 更新表格</div>
+        <p class="rail-hint">表头需含：品牌、型号、商品ID、价格、颗粒物CADR、甲醛CADR、商品链接。每次导入用整份表格覆盖当前数据。</p>
+        <div class="rv-drop" id="p3d-drop">
+          <button class="solid" id="p3d-import-btn">导入 / 更新 Excel</button>
+          <span>或把文件拖到这里</span>
+        </div>
+
+        <div class="rail-sec">怎么看这张图</div>
+        <p class="rail-hint">三根轴分别是价格、颗粒物CADR、甲醛CADR；气泡越大，性价比（两项CADR之和 / 价格）越高。拖动可旋转视角，滚轮缩放，点气泡跳转商品页。</p>
+
+        <div class="rail-sec">
+          品牌
+          <button class="ghost" id="p3d-show-all" style="float:right;padding:2px 8px;font-size:11px;">全部显示</button>
+        </div>
+        <p class="rail-hint">点品牌名可以单独隐藏它，方便对比看剩下的几家。</p>
+        <div id="p3d-brands"></div>
+      </div>
+    </aside>
+
+    <div class="canvas p3d-canvas">
+      <div class="rv-head">
+        <h1>竞品3D预览</h1>
+        <p>价格 × 颗粒物CADR × 甲醛CADR · 三维竞品定位</p>
+      </div>
+      <div class="p3d-stats" id="p3d-stats"></div>
+      <div class="p3d-chart-wrap">
+        <p class="rv-empty" id="p3d-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份进来。</p>
+        <div class="p3d-chart" id="p3d-chart" hidden></div>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <div class="marquee" id="marquee" hidden></div>
@@ -198,13 +239,17 @@
 <input type="file" id="filepick" accept="image/png,image/jpeg,image/webp" hidden>
 <input type="file" id="jsonpick" accept="application/json,.json" hidden>
 <input type="file" id="rv-file" accept=".xlsx" hidden>
+<input type="file" id="p3d-file" accept=".xlsx" hidden>
 
+<script src="/echarts.min.js"></script>
+<script src="/echarts-gl.min.js"></script>
 <script src="/core.js"></script>
 <script src="/users.js"></script>
 <script src="/admin.js"></script>
 <script src="/matrix.js"></script>
 <script src="/compare.js"></script>
 <script src="/reviews.js"></script>
+<script src="/preview3d.js"></script>
 <script>App.boot();</script>
 </body>
 </html>

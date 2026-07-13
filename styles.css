@@ -1072,6 +1072,42 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rv-brow:hover .kill { opacity: 1; }
 
 /* ═══════════════════════════════════════════════════════════
+   竞品3D预览 —— 价格 × 颗粒物CADR × 甲醛CADR，气泡是性价比
+   ═══════════════════════════════════════════════════════════ */
+.p3d-canvas {
+  background:
+    radial-gradient(1200px 500px at 15% -10%, #4ee0c118, transparent 60%),
+    radial-gradient(900px 460px at 88% 6%, #5b8cff16, transparent 62%),
+    linear-gradient(180deg, #080c14, #0a1018);
+  color: var(--text); padding: 0;
+}
+.p3d-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  padding: 16px 34px 0;
+}
+.p3d-stat {
+  background: linear-gradient(180deg, #ffffff0a, #ffffff03);
+  border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px;
+}
+.p3d-stat b { display: block; font-family: var(--f-mono); font-size: 19px; color: var(--mint); letter-spacing: -0.5px; }
+.p3d-stat span { font-size: 11px; color: var(--dim); letter-spacing: 0.4px; }
+
+.p3d-chart-wrap { flex: 1; min-height: 0; position: relative; padding: 10px 20px 20px; }
+.p3d-chart { width: 100%; height: 100%; }
+.p3d-chart-wrap .rv-empty { padding-top: 120px; }
+
+.p3d-brow.off { opacity: 0.38; filter: grayscale(0.5); }
+.p3d-brow.off i { box-shadow: none; }
+
+/* echarts tooltip 的内容——外层 backgroundColor/border 由 option 里配置，这里只管排版 */
+.p3d-tip { padding: 11px 13px; min-width: 190px; font-size: 12.5px; }
+.p3d-tip-head { font-size: 14px; font-weight: 700; }
+.p3d-tip-model { font-size: 11.5px; color: var(--dim); margin-top: 1px; }
+.p3d-tip-row { display: flex; justify-content: space-between; gap: 14px; margin-top: 6px; color: var(--dim); }
+.p3d-tip-row b { font-family: var(--f-mono); color: var(--text); font-weight: 600; }
+.p3d-tip-link { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line-soft); color: var(--mint); font-size: 11px; }
+
+/* ═══════════════════════════════════════════════════════════
    移动端
    对位表是 5 列 × 11 行的二维表，手机上不可能不横滚。
    与其折成一维卡片流丢掉横向对比，不如保留横滚 + scroll-snap，
@@ -1134,5 +1170,7 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
   .rv-clouds { grid-template-columns: 1fr; }
   .rv-heat { overflow-x: auto; }
   .kw-tip { width: calc(100vw - 20px); }
+  .p3d-stats { grid-template-columns: 1fr 1fr; padding: 12px 14px 0; }
+  .p3d-chart-wrap { padding: 10px 8px 14px; }
   .lb-bar { flex-wrap: wrap; justify-content: center; left: 10px; right: 10px; transform: none; }
 }

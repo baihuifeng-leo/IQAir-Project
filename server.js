@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const { merge3, deepEqual } = require('./merge.js');
 const { diffSummary } = require('./audit.js');
 const { ReviewStore } = require('./reviews-store.js');
+const { Preview3DStore } = require('./preview3d-store.js');
 const { pipeline } = require('stream/promises');
 
 const PORT = Number(process.env.PORT || 8080);
@@ -21,6 +22,7 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SECRET_FILE = path.join(DATA_DIR, '.session-secret');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.log');
 const REVIEWS_DIR = path.join(DATA_DIR, 'reviews');
+const PRODUCTS3D_DIR = path.join(DATA_DIR, 'products3d');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SEED_FILE = path.join(PUBLIC_DIR, 'seed.json');
 
@@ -533,6 +535,21 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    /* ── 竞品 3D 预览 ────────────────────────────────────── */
+    if (p === '/api/products3d/summary') return json(res, 200, preview3d.summary);
+
+    if (p === '/api/products3d/import' && req.method === 'POST') {
+      const buf = await readBinary(req, MAX_XLSX);
+      let report;
+      try { report = await preview3d.import(buf); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'products3d.import', {
+        detail: [`导入 ${report.total} 款产品，覆盖 ${report.brands} 个品牌，跳过 ${report.skipped} 行`]
+      });
+      broadcast('products3d', { by: pubUser(me) }, null);
+      return json(res, 200, report);
+    }
+
     if (p.startsWith('/uploads/')) return serveStatic(res, UPLOAD_DIR, p.slice('/uploads/'.length), true);
 
     if (req.method === 'GET' || req.method === 'HEAD')
@@ -546,14 +563,16 @@ const server = http.createServer(async (req, res) => {
 });
 
 const reviews = new ReviewStore(REVIEWS_DIR);
+const preview3d = new Preview3DStore(PRODUCTS3D_DIR);
 
 (async () => {
-  for (const d of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, REVIEWS_DIR]) await fsp.mkdir(d, { recursive: true });
+  for (const d of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, REVIEWS_DIR, PRODUCTS3D_DIR]) await fsp.mkdir(d, { recursive: true });
   try { SECRET = await fsp.readFile(SECRET_FILE); }
   catch { SECRET = crypto.randomBytes(32); await fsp.writeFile(SECRET_FILE, SECRET, { mode: 0o600 }); }
   await loadUsers();
   await loadDb();
   await reviews.load();
+  await preview3d.load();
   scheduleNightly();
   server.listen(PORT, '0.0.0.0', () => console.log(`竞品作战台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
 })();
