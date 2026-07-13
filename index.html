@@ -238,23 +238,19 @@
         </div>
 
         <div id="rpt-personal-rail">
-          <div class="rail-sec">访客 / 浏览趋势</div>
-          <p class="rail-hint">表头需含：统计日期、店铺名称、访客数、浏览量。支持多店铺；同一天同一店铺重复导入会用新数据覆盖旧数据，其余日期不受影响。</p>
+          <div class="rail-sec">访客 / 浏览趋势 · 店铺整体</div>
+          <p class="rail-hint">表头需含：统计日期、店铺名称、访客数、浏览量——目前只统计 IQAir天猫旗舰店，是整个店铺级别的数据。同一天重复导入会用新数据覆盖旧数据，其余日期不受影响。</p>
           <div class="rv-drop" id="rpt-traffic-drop">
             <button class="solid" id="rpt-traffic-btn">导入 / 更新 Excel</button>
             <span>或把文件拖到这里</span>
           </div>
 
-          <div class="rail-sec">生意参谋指标</div>
-          <p class="rail-hint">表头需含：统计时段、浏览量、访客数、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数。目前只支持 .xlsx——如果导出的是老版 .xls，先用 Excel/WPS 另存为 .xlsx 再传。</p>
+          <div class="rail-sec">生意参谋指标 · 首页</div>
+          <p class="rail-hint">表头需含：统计时段、浏览量、访客数、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数——这些是「首页」相关指标，范围比上面的店铺整体数据要窄。目前只支持 .xlsx——如果导出的是老版 .xls，先用 Excel/WPS 另存为 .xlsx 再传。</p>
           <div class="rv-drop" id="rpt-metrics-drop">
             <button class="solid" id="rpt-metrics-btn">导入 / 更新 Excel</button>
             <span>或把文件拖到这里</span>
           </div>
-
-          <div class="rail-sec">店铺</div>
-          <p class="rail-hint">点店铺名可以单独隐藏它，方便只看其中几家。</p>
-          <div id="rpt-stores"></div>
         </div>
 
         <div id="rpt-public-rail" hidden>
@@ -272,7 +268,7 @@
         <section class="rv-sec rpt-sec-first">
           <div class="rpt-sec-head">
             <div>
-              <h2>访客 / 浏览趋势</h2>
+              <h2>访客 / 浏览趋势 <span class="rpt-scope-badge">店铺整体</span></h2>
               <p class="rv-sub">按日、周、月切换聚合口径；线是浏览量，虚线是访客数。</p>
             </div>
             <div class="rpt-seg" id="rpt-granularity">
@@ -288,8 +284,8 @@
         </section>
 
         <section class="rv-sec">
-          <h2>更多指标 · 上周 vs 本周</h2>
-          <p class="rv-sub">取最近有数据的 14 天，按日期从新到旧切成两组各 7 天；计数类指标取两组各自的总和，比率类指标取两组各自的平均值。</p>
+          <h2>更多指标 · 上周 vs 本周 <span class="rpt-scope-badge alt">首页数据</span></h2>
+          <p class="rv-sub">取最近有数据的 14 天，按日期从新到旧切成两组各 7 天；计数类指标取两组各自的总和，比率类指标取两组各自的平均值。这些是店铺「首页」相关指标，范围比上面的店铺整体数据要窄。</p>
           <div id="rpt-compare"></div>
         </section>
       </div>

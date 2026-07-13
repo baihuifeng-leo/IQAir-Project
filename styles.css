@@ -1125,27 +1125,39 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-trend-chart { width: 100%; height: 100%; }
 .rpt-trend-wrap .rv-empty { padding-top: 140px; }
 
-.rpt-cmp-group { margin-top: 26px; }
-.rpt-cmp-group:first-of-type { margin-top: 18px; }
-.rpt-cmp-group h3 { margin: 0 0 10px; font-size: 13px; color: var(--dim); letter-spacing: 0.4px; }
-.rpt-cmp-row {
-  background: linear-gradient(180deg, #ffffff08, #ffffff02);
-  border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px 16px; margin-bottom: 10px;
+.rpt-scope-badge {
+  display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.3px; vertical-align: middle;
+  background: var(--mint-dim); color: var(--mint);
 }
-.rpt-cmp-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
-.rpt-cmp-label { font-size: 13.5px; font-weight: 600; color: var(--text); }
-.rpt-cmp-delta { font-family: var(--f-mono); font-size: 12.5px; font-weight: 700; color: var(--dim); }
+.rpt-scope-badge.alt { background: #5b8cff22; color: #a9c3ff; }
+
+.rpt-cmp-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px;
+  margin-top: 16px;
+}
+.rpt-cmp-card {
+  background: linear-gradient(180deg, #ffffff08, #ffffff02);
+  border: 1px solid var(--line-soft); border-radius: 12px; padding: 13px 15px;
+  animation: rise 0.4s var(--ease) both;
+}
+.rpt-cmp-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+.rpt-cmp-label { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.rpt-cmp-delta { font-family: var(--f-mono); font-size: 11.5px; font-weight: 700; color: var(--dim); flex: 0 0 auto; }
 .rpt-cmp-delta.up { color: var(--mint); }
 .rpt-cmp-delta.down { color: #ff9a90; }
 .rpt-cmp-delta.flat { color: var(--dim); }
 
-.rpt-cmp-bar-line { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
-.rpt-cmp-tag { flex: 0 0 32px; font-size: 11px; color: var(--dimmer); }
-.rpt-cmp-track { flex: 1; height: 8px; border-radius: 5px; background: #ffffff0a; overflow: hidden; }
-.rpt-cmp-fill { height: 100%; border-radius: 5px; transition: width 0.5s var(--ease); }
-.rpt-cmp-fill.last { background: var(--dimmer); }
-.rpt-cmp-fill.cur { background: linear-gradient(90deg, var(--mint), var(--blue)); }
-.rpt-cmp-num { flex: 0 0 90px; text-align: right; font-family: var(--f-mono); font-size: 12.5px; color: var(--dim); }
+.rpt-cmp-track { position: relative; height: 7px; border-radius: 4px; background: #ffffff0a; }
+.rpt-cmp-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--mint), var(--blue)); transition: width 0.5s var(--ease); }
+.rpt-cmp-mark {
+  position: absolute; top: -3px; width: 2px; height: 13px; border-radius: 1px;
+  background: var(--dimmer); transform: translateX(-1px);
+}
+.rpt-cmp-foot { display: flex; align-items: baseline; justify-content: space-between; margin-top: 9px; font-size: 11px; color: var(--dim); }
+.rpt-cmp-foot b { font-family: var(--f-mono); color: var(--text); font-weight: 600; font-size: 12px; }
+.rpt-cmp-foot .dim { color: var(--dimmer); }
+.rpt-cmp-foot .dim b { color: var(--dim); font-weight: 600; }
 
 .rpt-devnote {
   margin: 80px auto; max-width: 360px; text-align: center; padding: 40px 30px;

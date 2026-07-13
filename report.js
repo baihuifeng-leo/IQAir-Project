@@ -3,30 +3,28 @@
 
    两张表分属两条完全独立的上传通道：
    · 访客/浏览趋势——简单的「日期+店铺+访客数+浏览量」，做成可按日/周/月
-     切换的趋势图，支持多店铺。
+     切换的趋势图。目前只统计 IQAir天猫旗舰店，是店铺整体口径。
    · 生意参谋指标——原周报 PPT 第一页那 7 组「上周 vs 本周」对比数据，
-     字段更多（点击率、停留时长、引导支付……），单独一张表、单独一个入口。
+     字段更多（点击率、停留时长、引导支付……），是店铺「首页」口径，
+     和上面的店铺整体数据范围不同，单独一张表、单独一个入口。
    公共报告目前只是占位，入口先留着。
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
   let A, sub = 'personal', data = null, granularity = 'day', chart = null, ro = null;
-  const hiddenStores = new Set();
 
-  const PALETTE = ['#4ee0c1', '#5b8cff', '#f4a63b', '#e2679a', '#9b7ff0', '#3fbf6f', '#ef6b5e', '#3fc0d8', '#c9922f', '#e34848', '#7c6fe0', '#b3653f'];
-  const storeColorMap = new Map();
-  const storeColor = (s) => {
-    if (!storeColorMap.has(s)) storeColorMap.set(s, PALETTE[storeColorMap.size % PALETTE.length]);
-    return storeColorMap.get(s);
-  };
-
-  const METRIC_GROUPS = [
-    { title: '浏览量 / 访客数', fields: [['pageviews', '浏览量', 'sum', 'count'], ['visitors', '访客数', 'sum', 'count']] },
-    { title: '点击率 / 跳失率', fields: [['clickRate', '点击率', 'avg', 'pct'], ['bounceRate', '跳失率', 'avg', 'pct']] },
-    { title: '平均停留时长', fields: [['avgStay', '平均停留时长', 'avg', 'sec']] },
-    { title: '引导详情次数 / 人数', fields: [['detailViews', '引导详情次数', 'sum', 'count'], ['detailVisitors', '引导详情人数', 'sum', 'count']] },
-    { title: '引导加购件数 / 人数', fields: [['cartItems', '引导加购件数', 'sum', 'count'], ['cartVisitors', '引导加购人数', 'sum', 'count']] },
-    { title: '点击次数 / 人数', fields: [['clicks', '点击次数', 'sum', 'count'], ['clickVisitors', '点击人数', 'sum', 'count']] },
-    { title: '引导支付金额', fields: [['payAmount', '引导支付金额', 'sum', 'money']] }
+  const METRIC_FIELDS = [
+    ['pageviews', '浏览量', 'sum', 'count'],
+    ['visitors', '访客数', 'sum', 'count'],
+    ['clickRate', '点击率', 'avg', 'pct'],
+    ['bounceRate', '跳失率', 'avg', 'pct'],
+    ['avgStay', '平均停留时长', 'avg', 'sec'],
+    ['detailViews', '引导详情次数', 'sum', 'count'],
+    ['detailVisitors', '引导详情人数', 'sum', 'count'],
+    ['cartItems', '引导加购件数', 'sum', 'count'],
+    ['cartVisitors', '引导加购人数', 'sum', 'count'],
+    ['clicks', '点击次数', 'sum', 'count'],
+    ['clickVisitors', '点击人数', 'sum', 'count'],
+    ['payAmount', '引导支付金额', 'sum', 'money']
   ];
 
   async function call(url, opts) {
@@ -55,40 +53,36 @@ const Report = (() => {
   const bucketLabel = (k, g) => (g === 'month' ? k : g === 'week' ? k + ' 起' : k.slice(5));
 
   function buildTrendOption() {
+    // 只统计 IQAir天猫旗舰店，多个店铺的行（如果表里混进来）按日期直接相加，不做区分
     const rows = data.traffic;
-    const stores = [...new Set(rows.map((r) => r.store))].filter((s) => !hiddenStores.has(s));
-    const byStore = {};
+    const byBucket = {};
     const bucketSet = new Set();
     rows.forEach((r) => {
-      if (hiddenStores.has(r.store)) return;
       const k = bucketKey(r.date, granularity);
       bucketSet.add(k);
-      const s = byStore[r.store] || (byStore[r.store] = {});
-      const e = s[k] || (s[k] = { visitors: 0, pageviews: 0 });
+      const e = byBucket[k] || (byBucket[k] = { visitors: 0, pageviews: 0 });
       e.visitors += r.visitors;
       e.pageviews += r.pageviews;
     });
     const buckets = [...bucketSet].sort();
+    const pvColor = '#4ee0c1', vvColor = '#5b8cff';
 
-    const series = [];
-    stores.forEach((store) => {
-      const color = storeColor(store);
-      series.push({
-        name: `${store} · 浏览量`, type: 'line', smooth: 0.25, symbol: 'circle', symbolSize: 6,
-        lineStyle: { width: 2.5, color }, itemStyle: { color },
-        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: color + '33' }, { offset: 1, color: color + '00' }] } },
-        data: buckets.map((k) => byStore[store]?.[k]?.pageviews ?? null)
-      });
-      series.push({
-        name: `${store} · 访客数`, type: 'line', smooth: 0.25, symbol: 'circle', symbolSize: 5,
-        lineStyle: { width: 2, color, type: 'dashed' }, itemStyle: { color },
-        data: buckets.map((k) => byStore[store]?.[k]?.visitors ?? null)
-      });
-    });
+    const series = [
+      {
+        name: '浏览量', type: 'line', smooth: 0.25, symbol: 'circle', symbolSize: 6,
+        lineStyle: { width: 2.5, color: pvColor }, itemStyle: { color: pvColor },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: pvColor + '33' }, { offset: 1, color: pvColor + '00' }] } },
+        data: buckets.map((k) => byBucket[k].pageviews)
+      },
+      {
+        name: '访客数', type: 'line', smooth: 0.25, symbol: 'circle', symbolSize: 5,
+        lineStyle: { width: 2, color: vvColor, type: 'dashed' }, itemStyle: { color: vvColor },
+        data: buckets.map((k) => byBucket[k].visitors)
+      }
+    ];
 
     return {
       backgroundColor: 'transparent',
-      color: stores.map(storeColor),
       grid: { left: 52, right: 20, top: 30, bottom: 34 },
       legend: {
         top: 0, textStyle: { color: '#79879f', fontSize: 11.5 }, icon: 'roundRect', itemWidth: 10, itemHeight: 10,
@@ -130,23 +124,6 @@ const Report = (() => {
     ensureChart().setOption(buildTrendOption(), true);
   }
 
-  function renderStores() {
-    const list = A.$('#rpt-stores');
-    list.innerHTML = '';
-    const stores = [...new Set((data?.traffic || []).map((r) => r.store))];
-    if (!stores.length) { list.innerHTML = '<p class="rail-hint">还没有数据。</p>'; return; }
-    stores.forEach((s) => {
-      const row = document.createElement('div');
-      row.className = 'rv-brow p3d-brow' + (hiddenStores.has(s) ? ' off' : '');
-      row.innerHTML = `<i></i><div><b></b></div>`;
-      row.querySelector('i').style.background = storeColor(s);
-      row.querySelector('b').textContent = s;
-      row.title = hiddenStores.has(s) ? '点击显示这个店铺' : '点击隐藏这个店铺';
-      row.onclick = () => { if (hiddenStores.has(s)) hiddenStores.delete(s); else hiddenStores.add(s); renderTrend(); renderStores(); };
-      list.appendChild(row);
-    });
-  }
-
   /* ── 生意参谋指标：上周 vs 本周 ───────────────────────── */
   function renderCompare() {
     const box = A.$('#rpt-compare');
@@ -169,51 +146,45 @@ const Report = (() => {
       return mode === 'sum' ? sum : sum / rows.length;
     };
 
-    METRIC_GROUPS.forEach((g) => {
-      const group = document.createElement('div');
-      group.className = 'rpt-cmp-group';
-      const h = document.createElement('h3');
-      h.textContent = g.title;
-      group.appendChild(h);
+    const grid = document.createElement('div');
+    grid.className = 'rpt-cmp-grid';
 
-      g.fields.forEach(([field, label, mode, unit]) => {
-        const cur = rollup(thisWeek, field, mode), last = rollup(lastWeek, field, mode);
-        const max = Math.max(cur, last, 1);
-        let delta = null;
-        if (lastWeek.length) delta = last > 0 ? ((cur - last) / last) * 100 : (cur > 0 ? Infinity : 0);
+    METRIC_FIELDS.forEach(([field, label, mode, unit]) => {
+      const cur = rollup(thisWeek, field, mode), last = rollup(lastWeek, field, mode);
+      const max = Math.max(cur, last, 1);
+      let delta = null;
+      if (lastWeek.length) delta = last > 0 ? ((cur - last) / last) * 100 : (cur > 0 ? Infinity : 0);
 
-        const row = document.createElement('div');
-        row.className = 'rpt-cmp-row';
-        const deltaCls = delta === null ? '' : delta === Infinity ? 'up' : delta > 0.5 ? 'up' : delta < -0.5 ? 'down' : 'flat';
-        const deltaTxt = delta === null ? '—' : delta === Infinity ? '新增' : (delta > 0 ? '+' : '') + delta.toFixed(1) + '%';
+      const card = document.createElement('div');
+      card.className = 'rpt-cmp-card';
+      const deltaCls = delta === null ? '' : delta === Infinity ? 'up' : delta > 0.5 ? 'up' : delta < -0.5 ? 'down' : 'flat';
+      const deltaTxt = delta === null ? '—' : delta === Infinity ? '新增' : (delta > 0 ? '+' : '') + delta.toFixed(1) + '%';
 
-        row.innerHTML = `
-          <div class="rpt-cmp-top">
-            <span class="rpt-cmp-label"></span>
-            <span class="rpt-cmp-delta ${deltaCls}"></span>
-          </div>
-          <div class="rpt-cmp-bar-line">
-            <span class="rpt-cmp-tag">上周</span>
-            <div class="rpt-cmp-track"><div class="rpt-cmp-fill last" style="width:${max ? (last / max) * 100 : 0}%"></div></div>
-            <span class="rpt-cmp-num"></span>
-          </div>
-          <div class="rpt-cmp-bar-line">
-            <span class="rpt-cmp-tag">本周</span>
-            <div class="rpt-cmp-track"><div class="rpt-cmp-fill cur" style="width:${max ? (cur / max) * 100 : 0}%"></div></div>
-            <span class="rpt-cmp-num"></span>
-          </div>`;
-        row.querySelector('.rpt-cmp-label').textContent = label;
-        row.querySelector('.rpt-cmp-delta').textContent = deltaTxt;
-        row.querySelectorAll('.rpt-cmp-num')[0].textContent = fmt(last, unit);
-        row.querySelectorAll('.rpt-cmp-num')[1].textContent = fmt(cur, unit);
-        group.appendChild(row);
-      });
-
-      box.appendChild(group);
+      card.innerHTML = `
+        <div class="rpt-cmp-top">
+          <span class="rpt-cmp-label"></span>
+          <span class="rpt-cmp-delta ${deltaCls}"></span>
+        </div>
+        <div class="rpt-cmp-track">
+          <div class="rpt-cmp-fill" style="width:${max ? (cur / max) * 100 : 0}%"></div>
+          <div class="rpt-cmp-mark" style="left:${max ? (last / max) * 100 : 0}%"></div>
+        </div>
+        <div class="rpt-cmp-foot">
+          <span><b></b> 本周</span>
+          <span class="dim">上周 <b></b></span>
+        </div>`;
+      card.querySelector('.rpt-cmp-label').textContent = label;
+      card.querySelector('.rpt-cmp-delta').textContent = deltaTxt;
+      card.querySelectorAll('.rpt-cmp-foot b')[0].textContent = fmt(cur, unit);
+      card.querySelectorAll('.rpt-cmp-foot b')[1].textContent = fmt(last, unit);
+      card.title = `${label}\n本周 ${fmt(cur, unit)} · 上周 ${fmt(last, unit)}`;
+      grid.appendChild(card);
     });
+
+    box.appendChild(grid);
   }
 
-  function render() { renderTrend(); renderStores(); renderCompare(); }
+  function render() { renderTrend(); renderCompare(); }
 
   /* ── 子页签：个人 / 公共 ──────────────────────────────── */
   function switchSub(s) {
