@@ -2,8 +2,11 @@
    report.js — 报告管理 · 个人报告（第一期：访客/浏览趋势 + 生意参谋指标）
 
    一份 Excel、一个上传入口，里面同时有两种口径的字段：
-   · 访客/浏览趋势——"浏览量（店铺）/访客数（店铺）"，做成可按日/周/月
-     切换的趋势图。目前只统计 IQAir天猫旗舰店，是店铺整体口径。
+   · 访客/浏览趋势——"浏览量（店铺）/访客数（店铺）"，趋势图。目前只
+     统计 IQAir天猫旗舰店，是店铺整体口径。右上角是时间范围，不是
+     手动选粒度——默认「本年」按周聚合，「上周/本周」这种窄范围自动
+     切回按日，自定义范围按跨度自适应（≤31天=日，≤370天=周，更长=
+     月），范围决定粒度，少一层要自己想清楚该选哪个粒度的心智负担。
    · 生意参谋指标——"浏览量（首页）/访客数（首页）"+ 点击率、停留时长、
      引导支付…… 原周报 PPT 第一页那 7 组「上周 vs 本周」对比数据，
      是店铺「首页」口径，范围比店铺整体窄。
@@ -13,7 +16,8 @@
    公共报告目前只是占位，入口先留着。
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
-  let A, sub = 'personal', data = null, granularity = 'day', chart = null, ro = null;
+  let A, sub = 'personal', data = null, chart = null, ro = null;
+  let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
 
   const METRIC_FIELDS = [
     ['pageviews', '浏览量', 'sum', 'count'],
@@ -44,7 +48,54 @@ const Report = (() => {
     return Math.round(v).toLocaleString();
   };
 
-  /* ── 访客/浏览趋势（店铺整体） ────────────────────────── */
+  /* ── 访客/浏览趋势（店铺整体）：范围 + 自动聚合口径 ────── */
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+
+  /** 周一为一周的起点，offset=0 是本周，-1 是上周 */
+  function isoWeekRange(offset) {
+    const now = new Date();
+    const dow = (now.getDay() + 6) % 7;
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - dow + offset * 7);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    return [mon.toISOString().slice(0, 10), sun.toISOString().slice(0, 10)];
+  }
+
+  /** 跨度越大，天级别的点越挤——按天数自适应选日/周/月粒度 */
+  function autoGranularity(start, end) {
+    if (!start) return 'week';
+    const days = (new Date(end || todayStr()) - new Date(start)) / 86400000;
+    if (days <= 31) return 'day';
+    if (days <= 370) return 'week';
+    return 'month';
+  }
+
+  function applyRangePreset(mode) {
+    rangeMode = mode;
+    if (mode === 'thisWeek') { [rangeStart, rangeEnd] = isoWeekRange(0); granularity = 'day'; }
+    else if (mode === 'lastWeek') { [rangeStart, rangeEnd] = isoWeekRange(-1); granularity = 'day'; }
+    else if (mode === 'thisYear') { rangeStart = new Date().getFullYear() + '-01-01'; rangeEnd = null; granularity = 'week'; }
+    updateRangeNote();
+    renderTrend();
+  }
+
+  function applyCustomRange() {
+    rangeMode = 'custom';
+    rangeStart = A.$('#rpt-range-start').value || null;
+    rangeEnd = A.$('#rpt-range-end').value || null;
+    granularity = autoGranularity(rangeStart, rangeEnd);
+    updateRangeNote();
+    renderTrend();
+  }
+
+  const GRANULARITY_LABEL = { day: '日', week: '周', month: '月' };
+  function updateRangeNote() {
+    const note = A.$('#rpt-range-note');
+    const range = rangeStart ? `${rangeStart} 至 ${rangeEnd || todayStr()}` : '全部数据';
+    note.textContent = `当前按${GRANULARITY_LABEL[granularity]}聚合展示 ${range}`;
+  }
+
   function bucketKey(date, g) {
     if (g === 'month') return date.slice(0, 7);
     if (g === 'day') return date;
@@ -56,7 +107,7 @@ const Report = (() => {
   const bucketLabel = (k, g) => (g === 'month' ? k : g === 'week' ? k + ' 起' : k.slice(5));
 
   function buildTrendOption() {
-    const rows = data.daily;
+    const rows = data.daily.filter((r) => (!rangeStart || r.date >= rangeStart) && (!rangeEnd || r.date <= rangeEnd));
     const byBucket = {};
     const bucketSet = new Set();
     rows.forEach((r) => {
@@ -120,7 +171,15 @@ const Report = (() => {
 
   function renderTrend() {
     const empty = A.$('#rpt-trend-empty'), box = A.$('#rpt-trend-chart');
-    if (!data || !data.daily.length) { empty.hidden = false; box.hidden = true; return; }
+    if (!data || !data.daily.length) {
+      empty.textContent = '还没有数据。用左边的「导入 / 更新 Excel」传一份进来。';
+      empty.hidden = false; box.hidden = true; return;
+    }
+    const inRange = data.daily.some((r) => (!rangeStart || r.date >= rangeStart) && (!rangeEnd || r.date <= rangeEnd));
+    if (!inRange) {
+      empty.textContent = '这段时间范围里没有数据，换个范围看看。';
+      empty.hidden = false; box.hidden = true; return;
+    }
     empty.hidden = true;
     box.hidden = false;
     ensureChart().setOption(buildTrendOption(), true);
@@ -248,11 +307,22 @@ const Report = (() => {
     A.$('#rpt-import-btn').onclick = () => { A.$('#rpt-import-file').value = ''; A.$('#rpt-import-file').click(); };
     wireDrop('#rpt-import-drop', '#rpt-import-file');
 
-    A.$$('#rpt-granularity button').forEach((b) => (b.onclick = () => {
-      granularity = b.dataset.g;
-      A.$$('#rpt-granularity button').forEach((x) => x.classList.toggle('on', x === b));
-      renderTrend();
+    A.$$('#rpt-range-tabs button').forEach((b) => (b.onclick = () => {
+      A.$$('#rpt-range-tabs button').forEach((x) => x.classList.toggle('on', x === b));
+      const mode = b.dataset.range;
+      A.$('#rpt-range-custom').hidden = mode !== 'custom';
+      if (mode === 'custom') {
+        if (!A.$('#rpt-range-start').value) A.$('#rpt-range-start').value = rangeStart || todayStr();
+        if (!A.$('#rpt-range-end').value) A.$('#rpt-range-end').value = rangeEnd || todayStr();
+        applyCustomRange();
+      } else {
+        applyRangePreset(mode);
+      }
     }));
+    A.$('#rpt-range-start').onchange = applyCustomRange;
+    A.$('#rpt-range-end').onchange = applyCustomRange;
+
+    updateRangeNote();
   }
 
   return { init, refresh, render, onShow };

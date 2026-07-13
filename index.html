@@ -263,12 +263,20 @@
           <div class="rpt-sec-head">
             <div>
               <h2>访客 / 浏览趋势 <span class="rpt-scope-badge">店铺整体</span></h2>
-              <p class="rv-sub">按日、周、月切换聚合口径；线是浏览量，虚线是访客数。</p>
+              <p class="rv-sub">线是浏览量，虚线是访客数；<span id="rpt-range-note">默认按周聚合展示本年数据</span>。</p>
             </div>
-            <div class="rpt-seg" id="rpt-granularity">
-              <button data-g="day" class="on">日</button>
-              <button data-g="week">周</button>
-              <button data-g="month">月</button>
+            <div class="rpt-range">
+              <div class="rpt-seg" id="rpt-range-tabs">
+                <button data-range="lastWeek">上周</button>
+                <button data-range="thisWeek">本周</button>
+                <button data-range="thisYear" class="on">本年</button>
+                <button data-range="custom">自定义</button>
+              </div>
+              <div class="rpt-range-custom" id="rpt-range-custom" hidden>
+                <input type="date" id="rpt-range-start">
+                <span>至</span>
+                <input type="date" id="rpt-range-end">
+              </div>
             </div>
           </div>
           <div class="p3d-chart-wrap rpt-trend-wrap">
