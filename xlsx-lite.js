@@ -1,11 +1,11 @@
 /**
  * xlsx-lite.js — 零依赖 .xlsx 读取器
  *
- * 只做一件事：把第一个工作表读成 { headers, rows }。
- * 够用的前提是这批淘宝评论导出文件的特征：
- *   · 单 sheet、有 sharedStrings、无 inlineStr
- *   · 日期以文本存储（"2026-06-14"），不是 Excel 序列号
- * 但仍然兼容 inlineStr、数字、布尔和序列号日期，免得换个导出工具就炸。
+ * 主要是把工作表读成 { headers, rows }（readSheet 只读第一个，
+ * readAllSheets 读全部——有些导出文件真正的数据不在第一个 sheet）。
+ * 兼容 inlineStr、数字、布尔、序列号日期，以及 Excel 百分比格式
+ * （靠读 styles.xml 的数字格式，不是瞎猜小数点位置），免得换个导出
+ * 工具或者多几个辅助 sheet 就炸。
  */
 'use strict';
 const zlib = require('zlib');
@@ -80,7 +80,36 @@ function serialToDate(n) {
   return isNaN(d) ? String(n) : d.toISOString().slice(0, 10);
 }
 
-function parseSheet(xml, shared, dateCols = new Set()) {
+/**
+ * styles.xml → 「百分比格式」的 cellXf 下标集合。
+ * Excel 的规则很死：单元格显示成 "14.23%"，但存的原始值永远是 0.1423——
+ * 显示成百分比只是套了个数字格式（内置 9="0%"、10="0.00%"，或者自定义
+ * formatCode 里带 "%"）。不看格式直接读数字，会把 0.1423 当成 14.23% 读错。
+ * 这里只需要 <cellXfs> 里第几个 <xf> 用了百分比格式，parseSheet 按下标查表。
+ */
+function parsePercentCellXfs(stylesXml) {
+  if (!stylesXml) return new Set();
+  const customPct = new Set([9, 10]); // 内置：9="0%"，10="0.00%"
+  const numFmtRe = /<numFmt\b[^>]*numFmtId="(\d+)"[^>]*formatCode="([^"]*)"/g;
+  let nm;
+  while ((nm = numFmtRe.exec(stylesXml))) {
+    if (unescape(nm[2]).includes('%')) customPct.add(Number(nm[1]));
+  }
+
+  const xfsBlock = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(stylesXml);
+  if (!xfsBlock) return new Set();
+  const pctXfIdx = new Set();
+  const xfRe = /<xf\b[^>]*?\/?>/g;
+  let xm, i = 0;
+  while ((xm = xfRe.exec(xfsBlock[1]))) {
+    const fmtId = /numFmtId="(\d+)"/.exec(xm[0]);
+    if (fmtId && customPct.has(Number(fmtId[1]))) pctXfIdx.add(i);
+    i++;
+  }
+  return pctXfIdx;
+}
+
+function parseSheet(xml, shared, dateCols = new Set(), pctCellXfs = new Set()) {
   const rows = [];
   const rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/g;
   let r;
@@ -95,6 +124,7 @@ function parseSheet(xml, shared, dateCols = new Set()) {
       if (!ref) continue;
       const idx = colIndex(ref[1]);
       const type = /t="(\w+)"/.exec(attrs)?.[1] || 'n';
+      const styleIdx = Number(/s="(\d+)"/.exec(attrs)?.[1] ?? -1);
 
       let val = '';
       if (type === 's') {
@@ -110,6 +140,7 @@ function parseSheet(xml, shared, dateCols = new Set()) {
         const v = /<v>([\s\S]*?)<\/v>/.exec(inner);
         val = v ? unescape(v[1]) : '';
         if (val && dateCols.has(idx) && /^\d+(\.\d+)?$/.test(val)) val = serialToDate(Number(val));
+        else if (val && pctCellXfs.has(styleIdx) && /^-?\d+(\.\d+)?$/.test(val)) val = String(Number(val) * 100);
       }
       cells[idx] = val;
     }
@@ -124,6 +155,7 @@ function readSheet(buf) {
   const get = (n) => (files.has(n) ? files.get(n)().toString('utf8') : '');
 
   const shared = files.has('xl/sharedStrings.xml') ? parseSharedStrings(get('xl/sharedStrings.xml')) : [];
+  const pctCellXfs = files.has('xl/styles.xml') ? parsePercentCellXfs(get('xl/styles.xml')) : new Set();
 
   // 找第一个 sheet 的实际路径（不一定叫 sheet1.xml）
   let sheetPath = 'xl/worksheets/sheet1.xml';
@@ -132,7 +164,7 @@ function readSheet(buf) {
     if (!sheetPath) throw new Error('这个 xlsx 里没有工作表');
   }
 
-  const grid = parseSheet(get(sheetPath), shared);
+  const grid = parseSheet(get(sheetPath), shared, new Set(), pctCellXfs);
   if (!grid.length) return { headers: [], rows: [] };
 
   const width = Math.max(...grid.map((r) => r.length));
@@ -147,4 +179,49 @@ function readRecords(buf) {
   return rows.map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
 }
 
-module.exports = { readSheet, readRecords };
+/**
+ * 读所有工作表 → [{ name, headers, rows }, ...]，按工作簿里声明的顺序。
+ * 有些导出文件真正的数据不在第一个 sheet（前面几个是透视图/对比表），
+ * 调用方要自己在返回的多个 sheet 里找表头对得上的那个。
+ */
+function readAllSheets(buf) {
+  const files = unzip(buf);
+  const get = (n) => (files.has(n) ? files.get(n)().toString('utf8') : '');
+  const shared = files.has('xl/sharedStrings.xml') ? parseSharedStrings(get('xl/sharedStrings.xml')) : [];
+  const pctCellXfs = files.has('xl/styles.xml') ? parsePercentCellXfs(get('xl/styles.xml')) : new Set();
+
+  const wbXml = get('xl/workbook.xml');
+  const relsXml = get('xl/_rels/workbook.xml.rels');
+
+  // rId → 实际文件路径
+  const ridToTarget = new Map();
+  const relRe = /<Relationship\b[^>]*\bId="([^"]+)"[^>]*\bTarget="([^"]+)"[^>]*\/>/g;
+  let rm;
+  while ((rm = relRe.exec(relsXml))) {
+    if (/worksheets\//.test(rm[2])) ridToTarget.set(rm[1], 'xl/' + rm[2].replace(/^\.?\/*/, ''));
+  }
+
+  const sheetMetas = [];
+  const sheetRe = /<sheet\b[^>]*\bname="([^"]*)"[^>]*\br:id="([^"]+)"[^>]*\/>/g;
+  let sm;
+  while ((sm = sheetRe.exec(wbXml))) {
+    const path = ridToTarget.get(sm[2]);
+    if (path && files.has(path)) sheetMetas.push({ name: unescape(sm[1]), path });
+  }
+  // 解析不出 workbook.xml 就退化成「文件里所有 sheetN.xml，按文件名排」
+  if (!sheetMetas.length) {
+    [...files.keys()].filter((n) => /^xl\/worksheets\/.*\.xml$/.test(n)).sort()
+      .forEach((path, i) => sheetMetas.push({ name: 'Sheet' + (i + 1), path }));
+  }
+
+  return sheetMetas.map(({ name, path }) => {
+    const grid = parseSheet(get(path), shared, new Set(), pctCellXfs);
+    if (!grid.length) return { name, headers: [], rows: [] };
+    const width = Math.max(...grid.map((r) => r.length));
+    const headers = Array.from({ length: width }, (_, i) => (grid[0][i] ?? '').trim());
+    const rows = grid.slice(1).map((r) => Array.from({ length: width }, (_, i) => r[i] ?? ''));
+    return { name, headers, rows };
+  });
+}
+
+module.exports = { readSheet, readRecords, readAllSheets };

@@ -555,21 +555,12 @@ const server = http.createServer(async (req, res) => {
     /* ── 报告管理 · 个人报告 ─────────────────────────────── */
     if (p === '/api/reports/personal/summary') return json(res, 200, await reports.summary(me.id));
 
-    if (p === '/api/reports/personal/traffic/import' && req.method === 'POST') {
+    if (p === '/api/reports/personal/import' && req.method === 'POST') {
       const buf = await readBinary(req, MAX_XLSX);
       let report;
-      try { report = await reports.importTraffic(me.id, buf); }
+      try { report = await reports.import(me.id, buf); }
       catch (e) { return json(res, 400, { error: e.message }); }
-      audit(me, 'reports.traffic.import', { detail: [`访客/浏览趋势：新增 ${report.added} 天，更新 ${report.updated} 天`] });
-      return json(res, 200, report);
-    }
-
-    if (p === '/api/reports/personal/metrics/import' && req.method === 'POST') {
-      const buf = await readBinary(req, MAX_XLSX);
-      let report;
-      try { report = await reports.importMetrics(me.id, buf); }
-      catch (e) { return json(res, 400, { error: e.message }); }
-      audit(me, 'reports.metrics.import', { detail: [`生意参谋指标：新增 ${report.added} 天，更新 ${report.updated} 天`] });
+      audit(me, 'reports.import', { detail: [`个人报告：新增 ${report.added} 天，更新 ${report.updated} 天`] });
       return json(res, 200, report);
     }
 

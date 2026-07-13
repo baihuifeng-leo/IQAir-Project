@@ -1,12 +1,15 @@
 /* ═══════════════════════════════════════════════════════════
    report.js — 报告管理 · 个人报告（第一期：访客/浏览趋势 + 生意参谋指标）
 
-   两张表分属两条完全独立的上传通道：
-   · 访客/浏览趋势——简单的「日期+店铺+访客数+浏览量」，做成可按日/周/月
+   一份 Excel、一个上传入口，里面同时有两种口径的字段：
+   · 访客/浏览趋势——"浏览量（店铺）/访客数（店铺）"，做成可按日/周/月
      切换的趋势图。目前只统计 IQAir天猫旗舰店，是店铺整体口径。
-   · 生意参谋指标——原周报 PPT 第一页那 7 组「上周 vs 本周」对比数据，
-     字段更多（点击率、停留时长、引导支付……），是店铺「首页」口径，
-     和上面的店铺整体数据范围不同，单独一张表、单独一个入口。
+   · 生意参谋指标——"浏览量（首页）/访客数（首页）"+ 点击率、停留时长、
+     引导支付…… 原周报 PPT 第一页那 7 组「上周 vs 本周」对比数据，
+     是店铺「首页」口径，范围比店铺整体窄。
+   两种口径共用同一份按日期增量合并的历史记录（report-store.js 的
+   data.daily），每周重新导出、时间窗口有重叠也没关系，已有日期直接
+   覆盖，不会重复。
    公共报告目前只是占位，入口先留着。
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
@@ -41,7 +44,7 @@ const Report = (() => {
     return Math.round(v).toLocaleString();
   };
 
-  /* ── 访客/浏览趋势 ────────────────────────────────────── */
+  /* ── 访客/浏览趋势（店铺整体） ────────────────────────── */
   function bucketKey(date, g) {
     if (g === 'month') return date.slice(0, 7);
     if (g === 'day') return date;
@@ -53,16 +56,15 @@ const Report = (() => {
   const bucketLabel = (k, g) => (g === 'month' ? k : g === 'week' ? k + ' 起' : k.slice(5));
 
   function buildTrendOption() {
-    // 只统计 IQAir天猫旗舰店，多个店铺的行（如果表里混进来）按日期直接相加，不做区分
-    const rows = data.traffic;
+    const rows = data.daily;
     const byBucket = {};
     const bucketSet = new Set();
     rows.forEach((r) => {
       const k = bucketKey(r.date, granularity);
       bucketSet.add(k);
       const e = byBucket[k] || (byBucket[k] = { visitors: 0, pageviews: 0 });
-      e.visitors += r.visitors;
-      e.pageviews += r.pageviews;
+      e.visitors += r.shopVisitors;
+      e.pageviews += r.shopPageviews;
     });
     const buckets = [...bucketSet].sort();
     const pvColor = '#4ee0c1', vvColor = '#5b8cff';
@@ -118,25 +120,25 @@ const Report = (() => {
 
   function renderTrend() {
     const empty = A.$('#rpt-trend-empty'), box = A.$('#rpt-trend-chart');
-    if (!data || !data.traffic.length) { empty.hidden = false; box.hidden = true; return; }
+    if (!data || !data.daily.length) { empty.hidden = false; box.hidden = true; return; }
     empty.hidden = true;
     box.hidden = false;
     ensureChart().setOption(buildTrendOption(), true);
   }
 
-  /* ── 生意参谋指标：上周 vs 本周 ───────────────────────── */
+  /* ── 生意参谋指标（首页）：上周 vs 本周 ───────────────── */
   function renderCompare() {
     const box = A.$('#rpt-compare');
     box.innerHTML = '';
-    const metrics = data?.metrics || [];
-    if (!metrics.length) { box.innerHTML = '<p class="rv-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份生意参谋指标表进来。</p>'; return; }
+    const daily = data?.daily || [];
+    if (!daily.length) { box.innerHTML = '<p class="rv-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份进来。</p>'; return; }
 
-    const desc = [...metrics].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    const desc = [...daily].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     const thisWeek = desc.slice(0, 7), lastWeek = desc.slice(7, 14);
     if (lastWeek.length < 7) {
       const p = document.createElement('p');
       p.className = 'rv-note';
-      p.textContent = `目前只有 ${metrics.length} 天的数据，不足两周（14 天）——下面的「上周」暂时只用 ${lastWeek.length} 天估算，数据攒够了会自动准确。`;
+      p.textContent = `目前只有 ${daily.length} 天的数据，不足两周（14 天）——下面的「上周」暂时只用 ${lastWeek.length} 天估算，数据攒够了会自动准确。`;
       box.appendChild(p);
     }
 
@@ -199,13 +201,12 @@ const Report = (() => {
   }
 
   /* ── 导入 ─────────────────────────────────────────────── */
-  async function doImport(kind, file) {
+  async function doImport(file) {
     if (!/\.xlsx$/i.test(file.name)) return A.toast('只支持 .xlsx', 'bad');
-    const btnId = kind === 'traffic' ? '#rpt-traffic-btn' : '#rpt-metrics-btn';
-    const btn = A.$(btnId);
+    const btn = A.$('#rpt-import-btn');
     btn.disabled = true; btn.textContent = '解析中…';
     try {
-      const r = await call(`/api/reports/personal/${kind}/import`, {
+      const r = await call('/api/reports/personal/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: file
@@ -219,12 +220,12 @@ const Report = (() => {
     }
   }
 
-  function wireDrop(dropId, fileInputId, kind) {
+  function wireDrop(dropId, fileInputId) {
     const drop = A.$(dropId), pick = A.$(fileInputId);
     ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('hot'); }));
     ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove('hot')));
-    drop.addEventListener('drop', (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) doImport(kind, f); });
-    pick.onchange = () => { if (pick.files[0]) doImport(kind, pick.files[0]); };
+    drop.addEventListener('drop', (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) doImport(f); });
+    pick.onchange = () => { if (pick.files[0]) doImport(pick.files[0]); };
   }
 
   async function refresh() {
@@ -244,10 +245,8 @@ const Report = (() => {
 
     A.$$('#rpt-switch button').forEach((b) => (b.onclick = () => switchSub(b.dataset.sub)));
 
-    A.$('#rpt-traffic-btn').onclick = () => { A.$('#rpt-traffic-file').value = ''; A.$('#rpt-traffic-file').click(); };
-    A.$('#rpt-metrics-btn').onclick = () => { A.$('#rpt-metrics-file').value = ''; A.$('#rpt-metrics-file').click(); };
-    wireDrop('#rpt-traffic-drop', '#rpt-traffic-file', 'traffic');
-    wireDrop('#rpt-metrics-drop', '#rpt-metrics-file', 'metrics');
+    A.$('#rpt-import-btn').onclick = () => { A.$('#rpt-import-file').value = ''; A.$('#rpt-import-file').click(); };
+    wireDrop('#rpt-import-drop', '#rpt-import-file');
 
     A.$$('#rpt-granularity button').forEach((b) => (b.onclick = () => {
       granularity = b.dataset.g;

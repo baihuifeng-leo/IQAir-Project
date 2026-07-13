@@ -238,17 +238,11 @@
         </div>
 
         <div id="rpt-personal-rail">
-          <div class="rail-sec">访客 / 浏览趋势 · 店铺整体</div>
-          <p class="rail-hint">表头需含：统计日期、店铺名称、访客数、浏览量——目前只统计 IQAir天猫旗舰店，是整个店铺级别的数据。同一天重复导入会用新数据覆盖旧数据，其余日期不受影响。</p>
-          <div class="rv-drop" id="rpt-traffic-drop">
-            <button class="solid" id="rpt-traffic-btn">导入 / 更新 Excel</button>
-            <span>或把文件拖到这里</span>
-          </div>
-
-          <div class="rail-sec">生意参谋指标 · 首页</div>
-          <p class="rail-hint">表头需含：统计时段、浏览量、访客数、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数——这些是「首页」相关指标，范围比上面的店铺整体数据要窄。目前只支持 .xlsx——如果导出的是老版 .xls，先用 Excel/WPS 另存为 .xlsx 再传。</p>
-          <div class="rv-drop" id="rpt-metrics-drop">
-            <button class="solid" id="rpt-metrics-btn">导入 / 更新 Excel</button>
+          <div class="rail-sec">导入 / 更新数据</div>
+          <p class="rail-hint">一份 Excel 里同时含「店铺整体」和「首页」两种口径，表头需含：统计时段、浏览量（店铺）、访客数（店铺）、浏览量（首页）、访客数（首页）、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数。目前只统计 IQAir天猫旗舰店。</p>
+          <p class="rail-hint">按日期增量合并——已经有的日期用新数据覆盖，其余日期不受影响，所以每周传同一份表格、时间窗口有重叠也没关系，只会追加新内容。目前只支持 .xlsx——如果导出的是老版 .xls，先用 Excel/WPS 另存为 .xlsx 再传。</p>
+          <div class="rv-drop" id="rpt-import-drop">
+            <button class="solid" id="rpt-import-btn">导入 / 更新 Excel</button>
             <span>或把文件拖到这里</span>
           </div>
         </div>
@@ -317,8 +311,7 @@
 <input type="file" id="jsonpick" accept="application/json,.json" hidden>
 <input type="file" id="rv-file" accept=".xlsx" hidden>
 <input type="file" id="p3d-file" accept=".xlsx" hidden>
-<input type="file" id="rpt-traffic-file" accept=".xlsx" hidden>
-<input type="file" id="rpt-metrics-file" accept=".xlsx" hidden>
+<input type="file" id="rpt-import-file" accept=".xlsx" hidden>
 
 <script src="/echarts.min.js"></script>
 <script src="/echarts-gl.min.js"></script>
