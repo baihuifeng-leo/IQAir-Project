@@ -820,6 +820,9 @@ body.readonly #btn-add-cbrand,
 body.readonly #btn-add-group,
 body.readonly .rail-sec.edit-only,
 body.readonly #default-color, body.readonly #default-color-hex { display: none !important; }
+/* .sheet-head .kill 是弹层的关闭按钮，不是价格带/对位表的编辑态删除按钮，
+   只读模式下也要能关掉弹层，所以要从上面这条全局隐藏规则里排除出去 */
+body.readonly .sheet-head .kill { display: grid !important; }
 
 body.readonly .markdot { opacity: 0.001; }
 body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1; cursor: default; }
@@ -1110,6 +1113,19 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 /* ═══════════════════════════════════════════════════════════
    报告管理 · 个人报告
    ═══════════════════════════════════════════════════════════ */
+.rpt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+
+.rpt-page-switch {
+  display: flex; gap: 4px; background: #ffffff08; border: 1px solid var(--line); border-radius: 10px;
+  padding: 4px; margin-bottom: 20px; width: fit-content;
+}
+.rpt-page-switch button {
+  padding: 7px 16px; border-radius: 7px; font-size: 12.5px; font-weight: 600; color: var(--dim);
+  background: none; border: 0; cursor: pointer; transition: background var(--fast), color var(--fast);
+}
+.rpt-page-switch button.on { background: var(--mint-dim); color: var(--mint); }
+.rpt-page-switch button:not(.on):hover { color: var(--text); }
+
 .rpt-sec-first { margin-top: 6px; }
 .rpt-sec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 
@@ -1210,6 +1226,13 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
   border: 1px solid var(--line-soft); font-size: 12.5px; color: var(--dim); line-height: 1.6;
 }
 
+.rpt-wm-weekbar { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.rpt-wm-weekbar select {
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+  padding: 6px 9px; border-radius: 7px; font-size: 12px; font-family: var(--f-mono);
+}
+.rpt-wm-weekbar select:focus { outline: none; border-color: var(--mint); }
+
 /* ── 微盟数据：填表弹层 ───────────────────────────────── */
 .rpt-wm-field { display: block; margin-bottom: 14px; }
 .rpt-wm-field span { display: block; font-size: 11.5px; color: var(--dim); margin-bottom: 5px; }
@@ -1224,6 +1247,58 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 }
 .rpt-wm-grid input:focus { outline: none; border-color: var(--mint); }
 .rpt-wm-savebtn { margin-top: 18px; width: 100%; }
+
+/* ── 放映模式：全屏、隐藏一切跟内容无关的东西、把数字放大 ── */
+.rpt-exit-present {
+  position: fixed; top: 18px; right: 18px; z-index: 300;
+  padding: 9px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: #04070dcc; backdrop-filter: blur(6px); color: var(--dim);
+  border: 1px solid var(--line); cursor: pointer; transition: color var(--fast), border-color var(--fast);
+}
+.rpt-exit-present:hover { color: var(--text); border-color: #33456a; }
+
+body.rpt-presenting .topbar,
+body.rpt-presenting .rail,
+body.rpt-presenting .rpt-head,
+body.rpt-presenting .rail-toggle { display: none !important; }
+
+body.rpt-presenting #workspace { height: 100%; }
+
+body.rpt-presenting .rv-scroll {
+  max-width: 1320px; margin: 0 auto; padding: clamp(20px, 4vh, 56px) clamp(20px, 4vw, 56px);
+}
+body.rpt-presenting .rpt-page-switch {
+  margin: 0 auto 28px; transform: scale(1.15); transform-origin: top center;
+}
+body.rpt-presenting .rpt-sec-head h2 { font-size: clamp(20px, 2.6vw, 30px); }
+body.rpt-presenting .rv-sub,
+body.rpt-presenting .rail-hint { font-size: clamp(12px, 1.3vw, 14.5px); }
+body.rpt-presenting .rpt-scope-badge { font-size: clamp(11px, 1.1vw, 13px); padding: 4px 12px; }
+
+body.rpt-presenting .rpt-trend-wrap { height: clamp(320px, 46vh, 560px); }
+
+body.rpt-presenting .rpt-cmp-grid,
+body.rpt-presenting .rpt-wm-metrics { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+body.rpt-presenting .rpt-cmp-foot { flex-wrap: wrap; row-gap: 2px; }
+body.rpt-presenting .rpt-cmp-card,
+body.rpt-presenting .rpt-wm-stat { padding: 18px 20px; }
+body.rpt-presenting .rpt-cmp-label,
+body.rpt-presenting .rpt-wm-stat-label { font-size: clamp(13px, 1.3vw, 15px); }
+body.rpt-presenting .rpt-cmp-foot,
+body.rpt-presenting .rpt-cmp-delta,
+body.rpt-presenting .rpt-wm-stat-delta { font-size: clamp(13px, 1.3vw, 16px); }
+body.rpt-presenting .rpt-cmp-foot b { font-size: clamp(14px, 1.5vw, 18px); }
+body.rpt-presenting .rpt-wm-stat b { font-size: clamp(26px, 3.2vw, 40px); }
+
+body.rpt-presenting .rpt-wm-channels { gap: 32px; }
+body.rpt-presenting .rpt-wm-chgroup h3 { font-size: clamp(13px, 1.4vw, 16px); }
+body.rpt-presenting .rpt-wm-chrow { margin-bottom: 14px; }
+body.rpt-presenting .rpt-wm-chbar { height: 12px; }
+body.rpt-presenting .rpt-wm-chname,
+body.rpt-presenting .rpt-wm-chval { font-size: clamp(13px, 1.4vw, 16px); }
+
+body.rpt-presenting .rpt-wm-note { font-size: clamp(13px, 1.4vw, 16px); padding: 16px 20px; }
+body.rpt-presenting .rpt-wm-weekbar { display: none; }
 
 /* ═══════════════════════════════════════════════════════════
    移动端
@@ -1291,6 +1366,11 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
   .p3d-stats { grid-template-columns: 1fr 1fr; padding: 12px 14px 0; }
   .p3d-chart-wrap { padding: 10px 8px 14px; }
   .rpt-sec-head { flex-direction: column; }
+  .rpt-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .rpt-wm-weekbar { width: 100%; }
+  .rpt-wm-weekbar select { flex: 1; min-width: 0; }
+  .rpt-page-switch { width: 100%; }
+  .rpt-page-switch button { flex: 1; }
   .rpt-trend-wrap { height: 300px; }
   .rpt-cmp-num { flex-basis: 74px; }
   .lb-bar { flex-wrap: wrap; justify-content: center; left: 10px; right: 10px; transform: none; }

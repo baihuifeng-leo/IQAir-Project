@@ -15,16 +15,24 @@
    data.daily），每周重新导出、时间窗口有重叠也没关系，已有日期直接
    覆盖，不会重复。
    · 微盟数据——公众号/小程序/APP 三端，微盟后台没有导出功能，运营
-     每周手动填一次（浏览量/访客数/访问次数/平均访问深度/点击人数/
-     点击次数/人均停留时长/跳出率 8 个指标 + 浏览量、访客数各自的三
-     端拆分）。按周一主键 upsert（report-store.js 的 data.weimeng），
-     环比统一跟"上一次填的记录"算，不用自己心算涨跌；同时挑波动最大
-     的渠道自动拼一句话式点评，呼应原周报 PPT 第二页的叙述风格。
+     按周手动填（浏览量/访客数/访问次数/平均访问深度/点击人数/点击
+     次数/人均停留时长/跳出率 8 个指标 + 浏览量、访客数各自的三端拆
+     分）。可以补填任意一周，按周一主键 upsert（report-store.js 的
+     data.weimeng）；环比不是"跟上一条记录"，是按自然周查找"这一周
+     的前一周"，所以乱序补数据也不会错位。同时挑波动最大的渠道自动
+     拼一句话式点评，呼应原周报 PPT 第二页的叙述风格。
+
+   访客/生意参谋和微盟数据分成两页（#rpt-page-1 / #rpt-page-2），跟
+   原周报 PPT 的两页对应，避免挤在同一屏。右上角「放映模式」进全屏、
+   隐藏顶栏和侧栏、把图表和数字放大，方便会议里直接投屏；左右方向键
+   在两页间切换，Esc 或点右上角退出。
+
    公共报告目前只是占位，入口先留着。
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
   let A, sub = 'personal', data = null, chart = null, ro = null;
   let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
+  let page = 1, presenting = false, wmSelectedWeek = null;
 
   const METRIC_FIELDS = [
     ['pageviews', '浏览量', 'sum', 'count'],
@@ -298,7 +306,20 @@ const Report = (() => {
     box.appendChild(grid);
   }
 
-  /* ── 微盟数据：本周概览，环比上一次填的记录 ────────────── */
+  /* ── 微盟数据：可以补填任意一周，环比按自然周查找上一周 ── */
+  function weekMonday(dateStr) {
+    const d = new Date((dateStr || todayStr()) + 'T00:00:00');
+    const dow = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - dow);
+    return d.toISOString().slice(0, 10);
+  }
+  const weekBefore = (weekStart) => {
+    const d = new Date(weekStart + 'T00:00:00');
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  };
+  const weimengByWeek = () => new Map((data?.weimeng || []).map((w) => [w.weekStart, w]));
+
   function buildWeimengCommentary(cur, prev) {
     const deltas = WM_METRICS.map(([field]) => deltaOf(cur[field], prev[field]));
     const upCount = deltas.filter((d) => d === Infinity || d > 0.5).length;
@@ -325,18 +346,26 @@ const Report = (() => {
 
   function renderWeimeng() {
     const sub = A.$('#rpt-wm-sub'), metricsBox = A.$('#rpt-wm-metrics'), chBox = A.$('#rpt-wm-channels'), note = A.$('#rpt-wm-commentary');
+    const select = A.$('#rpt-wm-week-select');
     metricsBox.innerHTML = '';
     chBox.innerHTML = '';
 
     const weeks = data?.weimeng || [];
     if (!weeks.length) {
-      sub.textContent = '还没有记录，点左边「记录本周数据」填一份。';
+      select.innerHTML = '';
+      sub.textContent = '还没有记录，点左边「记录 / 编辑某周数据」填一份。';
       note.hidden = true;
       return;
     }
-    const cur = weeks[weeks.length - 1];
-    const prev = weeks.length > 1 ? weeks[weeks.length - 2] : null;
-    sub.textContent = prev ? `${cur.weekStart} 那一周 · 环比上一次记录（${prev.weekStart}）` : `${cur.weekStart} 那一周 · 这是第一次记录，还没有上一次可比`;
+
+    const desc = [...weeks].sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
+    if (!wmSelectedWeek || !weeks.some((w) => w.weekStart === wmSelectedWeek)) wmSelectedWeek = desc[0].weekStart;
+    select.innerHTML = desc.map((w) => `<option value="${w.weekStart}">${w.weekStart} 那一周</option>`).join('');
+    select.value = wmSelectedWeek;
+
+    const cur = weeks.find((w) => w.weekStart === wmSelectedWeek);
+    const prev = weimengByWeek().get(weekBefore(cur.weekStart)) || null;
+    sub.textContent = prev ? `${cur.weekStart} 那一周 · 环比上一周（${prev.weekStart}）` : `${cur.weekStart} 那一周 · 上一周还没有记录，暂时没法环比`;
 
     WM_METRICS.forEach(([field, label, unit]) => {
       const d = prev ? deltaOf(cur[field], prev[field]) : null;
@@ -384,17 +413,21 @@ const Report = (() => {
     note.textContent = buildWeimengCommentary(cur, prev);
   }
 
-  function weekMonday(dateStr) {
-    const d = new Date((dateStr || todayStr()) + 'T00:00:00');
-    const dow = (d.getDay() + 6) % 7;
-    d.setDate(d.getDate() - dow);
-    return d.toISOString().slice(0, 10);
+  /** 把某一周的表单填好：已经有记录就是编辑（带出旧值），没有就是空白新建 */
+  function loadWeekIntoForm(weekStart) {
+    const monday = weekMonday(weekStart);
+    const existing = weimengByWeek().get(monday);
+    A.$('#wm-weekStart').value = monday;
+    WM_METRICS.forEach(([field]) => { A.$('#wm-' + field).value = existing ? existing[field] : ''; });
+    WM_CHANNELS.forEach(([key]) => {
+      A.$(`#wm-ch-${key}-pv`).value = existing ? existing.channels[key].pv : '';
+      A.$(`#wm-ch-${key}-uv`).value = existing ? existing.channels[key].uv : '';
+    });
+    A.$('#rpt-wm-title').textContent = existing ? `编辑 ${monday} 那一周` : `记录 ${monday} 那一周`;
   }
 
-  function openWeimengForm() {
-    A.$('#wm-weekStart').value = weekMonday(todayStr());
-    WM_METRICS.forEach(([field]) => { A.$('#wm-' + field).value = ''; });
-    WM_CHANNELS.forEach(([key]) => { A.$(`#wm-ch-${key}-pv`).value = ''; A.$(`#wm-ch-${key}-uv`).value = ''; });
+  function openWeimengForm(weekStart) {
+    loadWeekIntoForm(weekStart || wmSelectedWeek || todayStr());
     A.$('#rpt-wm-mask').hidden = false;
   }
   function closeWeimengForm() { A.$('#rpt-wm-mask').hidden = true; }
@@ -410,10 +443,11 @@ const Report = (() => {
     const btn = A.$('#rpt-wm-save');
     btn.disabled = true; btn.textContent = '保存中…';
     try {
-      await call('/api/reports/personal/weimeng/save', {
+      const r = await call('/api/reports/personal/weimeng/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
       A.toast('已保存');
+      wmSelectedWeek = r.entry.weekStart;
       closeWeimengForm();
       await refresh();
     } catch (e) {
@@ -421,6 +455,37 @@ const Report = (() => {
     } finally {
       btn.disabled = false; btn.textContent = '保存';
     }
+  }
+
+  /* ── 页面切换：报告分两页，分别对应原周报 PPT 的第 1、2 页 ── */
+  function switchPage(n) {
+    page = n;
+    A.$$('#rpt-page-switch button').forEach((b) => b.classList.toggle('on', Number(b.dataset.page) === n));
+    A.$('#rpt-page-1').hidden = n !== 1;
+    A.$('#rpt-page-2').hidden = n !== 2;
+    if (n === 1 && chart) requestAnimationFrame(() => chart.resize());
+  }
+
+  /* ── 放映模式：全屏、隐藏顶栏/侧栏，内容放大，方便会议投屏 ── */
+  function togglePresent() { presenting ? exitPresent() : enterPresent(); }
+
+  function enterPresent() {
+    presenting = true;
+    document.body.classList.add('rpt-presenting');
+    A.$('#rpt-present-btn').textContent = '■ 退出放映';
+    A.$('#rpt-exit-present').hidden = false;
+    const fs = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen;
+    fs?.call(document.documentElement)?.catch(() => {});
+    if (chart) requestAnimationFrame(() => chart.resize());
+  }
+
+  function exitPresent() {
+    presenting = false;
+    document.body.classList.remove('rpt-presenting');
+    A.$('#rpt-present-btn').textContent = '▶ 放映模式';
+    A.$('#rpt-exit-present').hidden = true;
+    if (document.fullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document).catch?.(() => {});
+    if (chart) requestAnimationFrame(() => chart.resize());
   }
 
   function render() { renderTrend(); renderShopWeekCompare(); renderCompare(); renderWeimeng(); }
@@ -434,6 +499,8 @@ const Report = (() => {
     A.$('#rpt-personal-view').hidden = s !== 'personal';
     A.$('#rpt-public-view').hidden = s !== 'public';
     A.$('#rpt-head-sub').textContent = s === 'personal' ? '周报数据看板 · 个人报告' : '周报数据看板 · 公共报告';
+    A.$('#rpt-present-btn').hidden = s !== 'personal';
+    if (s !== 'personal' && presenting) exitPresent();
     if (s === 'personal' && chart) requestAnimationFrame(() => chart.resize());
   }
 
@@ -485,10 +552,23 @@ const Report = (() => {
     A.$('#rpt-import-btn').onclick = () => { A.$('#rpt-import-file').value = ''; A.$('#rpt-import-file').click(); };
     wireDrop('#rpt-import-drop', '#rpt-import-file');
 
-    A.$('#rpt-weimeng-btn').onclick = openWeimengForm;
+    A.$('#rpt-weimeng-btn').onclick = () => openWeimengForm();
+    A.$('#rpt-wm-edit-btn').onclick = () => openWeimengForm(A.$('#rpt-wm-week-select').value);
+    A.$('#rpt-wm-week-select').onchange = (e) => { wmSelectedWeek = e.target.value; renderWeimeng(); };
     A.$('#rpt-wm-close').onclick = closeWeimengForm;
     A.$('#rpt-wm-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-wm-mask') closeWeimengForm(); });
     A.$('#rpt-wm-save').onclick = saveWeimeng;
+    A.$('#wm-weekStart').onchange = (e) => loadWeekIntoForm(e.target.value);
+
+    A.$$('#rpt-page-switch button').forEach((b) => (b.onclick = () => switchPage(Number(b.dataset.page))));
+    A.$('#rpt-present-btn').onclick = togglePresent;
+    A.$('#rpt-exit-present').onclick = exitPresent;
+    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) exitPresent(); });
+    document.addEventListener('keydown', (e) => {
+      if (!presenting) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') switchPage(2);
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') switchPage(1);
+    });
 
     A.$$('#rpt-range-tabs button').forEach((b) => (b.onclick = () => {
       A.$$('#rpt-range-tabs button').forEach((x) => x.classList.toggle('on', x === b));

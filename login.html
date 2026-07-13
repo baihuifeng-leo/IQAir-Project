@@ -42,16 +42,20 @@
   }
 
   .hero { position: relative; z-index: 3; text-align: center; animation: rise 0.6s var(--ease) both; }
+  .hero .title {
+    display: flex; align-items: baseline; justify-content: center; flex-wrap: nowrap;
+    gap: clamp(8px, 1.6vw, 16px);
+  }
   .hero .en {
-    font-family: var(--f-display); font-weight: 700; font-size: clamp(40px, 7vw, 68px);
-    letter-spacing: 3px; margin: 0; line-height: 1;
+    font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 6vw, 60px);
+    letter-spacing: 2px; margin: 0; line-height: 1; white-space: nowrap;
     background: linear-gradient(135deg, #eafffb, #4ee0c1 55%, #5b8cff);
     -webkit-background-clip: text; background-clip: text; color: transparent;
     filter: drop-shadow(0 0 24px #4ee0c13d);
   }
   .hero .cn {
-    margin: 10px 0 0; font-family: var(--f-body); font-weight: 700;
-    font-size: clamp(20px, 3vw, 30px); letter-spacing: 4px; color: var(--text);
+    margin: 0; font-family: var(--f-body); font-weight: 700; white-space: nowrap;
+    font-size: clamp(15px, 2.6vw, 26px); letter-spacing: 3px; color: var(--text);
     text-shadow: 0 0 30px #4ee0c126;
   }
   .hero .tag {
@@ -128,8 +132,10 @@
 <div class="bg-glow" id="bg-glow"></div>
 
 <div class="hero">
-  <h2 class="en">IQAir</h2>
-  <p class="cn">电商管理系统</p>
+  <div class="title">
+    <h2 class="en">IQAir</h2>
+    <p class="cn">电商管理系统</p>
+  </div>
   <p class="tag">E-Commerce Management System</p>
 </div>
 

@@ -238,17 +238,17 @@
         </div>
 
         <div id="rpt-personal-rail">
-          <div class="rail-sec">导入 / 更新数据</div>
-          <p class="rail-hint">一份 Excel 里同时含「店铺整体」和「首页」两种口径，表头需含：统计时段、浏览量（店铺）、访客数（店铺）、浏览量（首页）、访客数（首页）、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数。目前只统计 IQAir天猫旗舰店。</p>
+          <div class="rail-sec">导入 / 更新数据 · 第 1 页</div>
+          <p class="rail-hint">一份 Excel 里同时含「天猫旗舰店整体」和「首页」两种口径，表头需含：统计时段、浏览量（店铺）、访客数（店铺）、浏览量（首页）、访客数（首页）、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数。目前只统计 IQAir天猫旗舰店。</p>
           <p class="rail-hint">按日期增量合并——已经有的日期用新数据覆盖，其余日期不受影响，所以每周传同一份表格、时间窗口有重叠也没关系，只会追加新内容。目前只支持 .xlsx——如果导出的是老版 .xls，先用 Excel/WPS 另存为 .xlsx 再传。</p>
           <div class="rv-drop" id="rpt-import-drop">
             <button class="solid" id="rpt-import-btn">导入 / 更新 Excel</button>
             <span>或把文件拖到这里</span>
           </div>
 
-          <div class="rail-sec">微盟数据</div>
-          <p class="rail-hint">微盟（公众号/小程序/APP）后台没有导出功能，这部分每周手动填一次；环比自动跟上一次填的记录算，不用自己算涨跌。</p>
-          <button class="solid" id="rpt-weimeng-btn">记录本周数据</button>
+          <div class="rail-sec">微盟数据 · 第 2 页</div>
+          <p class="rail-hint">微盟（公众号/小程序/APP）后台没有导出功能，按周手动填。可以补填任意一周，环比默认跟该周的上一个自然周对比，不用自己算涨跌；再次填同一周是编辑更新，不是重复记录。</p>
+          <button class="solid" id="rpt-weimeng-btn">记录 / 编辑某周数据</button>
         </div>
 
         <div id="rpt-public-rail" hidden>
@@ -258,56 +258,72 @@
     </aside>
 
     <div class="canvas rv-canvas" id="rpt-canvas">
-      <div class="rv-head">
-        <h1>报告管理</h1>
-        <p id="rpt-head-sub">周报数据看板 · 个人报告</p>
+      <div class="rv-head rpt-head">
+        <div>
+          <h1>报告管理</h1>
+          <p id="rpt-head-sub">周报数据看板 · 个人报告</p>
+        </div>
+        <button class="ghost" id="rpt-present-btn">▶ 放映模式</button>
       </div>
       <div class="rv-scroll" id="rpt-personal-view">
-        <section class="rv-sec rpt-sec-first">
-          <div class="rpt-sec-head">
-            <div>
-              <h2>访客 / 浏览趋势 <span class="rpt-scope-badge">店铺整体</span></h2>
-              <p class="rv-sub">线是浏览量，虚线是访客数；<span id="rpt-range-note">默认按周聚合展示本年数据</span>。</p>
-            </div>
-            <div class="rpt-range">
-              <div class="rpt-seg" id="rpt-range-tabs">
-                <button data-range="lastWeek">上周</button>
-                <button data-range="thisWeek">本周</button>
-                <button data-range="thisYear" class="on">本年</button>
-                <button data-range="custom">自定义</button>
-              </div>
-              <div class="rpt-range-custom" id="rpt-range-custom" hidden>
-                <input type="date" id="rpt-range-start">
-                <span>至</span>
-                <input type="date" id="rpt-range-end">
-              </div>
-            </div>
-          </div>
-          <div class="p3d-chart-wrap rpt-trend-wrap">
-            <p class="rv-empty" id="rpt-trend-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份访客/浏览趋势表进来。</p>
-            <div class="p3d-chart rpt-trend-chart" id="rpt-trend-chart" hidden></div>
-          </div>
-          <p class="rpt-subhead">上周 vs 上上周 · 两个完整周的对比，不受本周还没过完影响</p>
-          <div id="rpt-shop-compare"></div>
-        </section>
+        <div class="rpt-page-switch" id="rpt-page-switch">
+          <button data-page="1" class="on">第 1 页 · 生意参谋</button>
+          <button data-page="2">第 2 页 · 微盟数据</button>
+        </div>
 
-        <section class="rv-sec">
-          <h2>更多指标 · 上周 vs 本周 <span class="rpt-scope-badge alt">首页数据</span></h2>
-          <p class="rv-sub">取最近有数据的 14 天，按日期从新到旧切成两组各 7 天；计数类指标取两组各自的总和，比率类指标取两组各自的平均值。这些是店铺「首页」相关指标，范围比上面的店铺整体数据要窄。</p>
-          <div id="rpt-compare"></div>
-        </section>
-
-        <section class="rv-sec">
-          <div class="rpt-sec-head">
-            <div>
-              <h2>微盟数据 <span class="rpt-scope-badge alt2">公众号 / 小程序 / APP</span></h2>
-              <p class="rv-sub" id="rpt-wm-sub">还没有记录，点左边「记录本周数据」填一份。</p>
+        <div class="rpt-page" id="rpt-page-1">
+          <section class="rv-sec rpt-sec-first">
+            <div class="rpt-sec-head">
+              <div>
+                <h2>访客 / 浏览趋势 <span class="rpt-scope-badge">天猫旗舰店整体</span></h2>
+                <p class="rv-sub">线是浏览量，虚线是访客数；<span id="rpt-range-note">默认按周聚合展示本年数据</span>。</p>
+              </div>
+              <div class="rpt-range">
+                <div class="rpt-seg" id="rpt-range-tabs">
+                  <button data-range="lastWeek">上周</button>
+                  <button data-range="thisWeek">本周</button>
+                  <button data-range="thisYear" class="on">本年</button>
+                  <button data-range="custom">自定义</button>
+                </div>
+                <div class="rpt-range-custom" id="rpt-range-custom" hidden>
+                  <input type="date" id="rpt-range-start">
+                  <span>至</span>
+                  <input type="date" id="rpt-range-end">
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="rpt-wm-metrics" id="rpt-wm-metrics"></div>
-          <div class="rpt-wm-channels" id="rpt-wm-channels"></div>
-          <p class="rpt-wm-note" id="rpt-wm-commentary" hidden></p>
-        </section>
+            <div class="p3d-chart-wrap rpt-trend-wrap">
+              <p class="rv-empty" id="rpt-trend-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份访客/浏览趋势表进来。</p>
+              <div class="p3d-chart rpt-trend-chart" id="rpt-trend-chart" hidden></div>
+            </div>
+            <p class="rpt-subhead">上周 vs 上上周 · 两个完整周的对比，不受本周还没过完影响</p>
+            <div id="rpt-shop-compare"></div>
+          </section>
+
+          <section class="rv-sec">
+            <h2>更多指标 · 上周 vs 本周 <span class="rpt-scope-badge alt">首页数据</span></h2>
+            <p class="rv-sub">取最近有数据的 14 天，按日期从新到旧切成两组各 7 天；计数类指标取两组各自的总和，比率类指标取两组各自的平均值。这些是店铺「首页」相关指标，范围比上面的天猫旗舰店整体数据要窄。</p>
+            <div id="rpt-compare"></div>
+          </section>
+        </div>
+
+        <div class="rpt-page" id="rpt-page-2" hidden>
+          <section class="rv-sec rpt-sec-first">
+            <div class="rpt-sec-head">
+              <div>
+                <h2>微盟数据 <span class="rpt-scope-badge alt2">公众号 / 小程序 / APP</span></h2>
+                <p class="rv-sub" id="rpt-wm-sub">还没有记录，点左边「记录 / 编辑某周数据」填一份。</p>
+              </div>
+              <div class="rpt-wm-weekbar">
+                <select id="rpt-wm-week-select"></select>
+                <button class="ghost" id="rpt-wm-edit-btn">编辑这一周</button>
+              </div>
+            </div>
+            <div class="rpt-wm-metrics" id="rpt-wm-metrics"></div>
+            <div class="rpt-wm-channels" id="rpt-wm-channels"></div>
+            <p class="rpt-wm-note" id="rpt-wm-commentary" hidden></p>
+          </section>
+        </div>
       </div>
 
       <div class="rv-scroll" id="rpt-public-view" hidden>
@@ -342,7 +358,7 @@
 <div class="sheet-mask" id="rpt-wm-mask" hidden>
   <div class="sheet">
     <div class="sheet-head">
-      <h2>记录本周微盟数据</h2>
+      <h2 id="rpt-wm-title">记录微盟数据</h2>
       <button class="kill" id="rpt-wm-close" aria-label="关闭">✕</button>
     </div>
     <div class="sheet-body">
@@ -380,6 +396,8 @@
     </div>
   </div>
 </div>
+
+<button class="rpt-exit-present" id="rpt-exit-present" hidden>✕ 退出放映</button>
 
 <script src="/echarts.min.js"></script>
 <script src="/echarts-gl.min.js"></script>
