@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════
-   report.js — 报告管理 · 个人报告（第一期：访客/浏览趋势 + 生意参谋指标）
+   report.js — 报告管理 · 个人报告
+   第一期：访客/浏览趋势 + 生意参谋指标；第二期：微盟数据
 
    一份 Excel、一个上传入口，里面同时有两种口径的字段：
    · 访客/浏览趋势——"浏览量（店铺）/访客数（店铺）"，趋势图。目前只
@@ -13,6 +14,12 @@
    两种口径共用同一份按日期增量合并的历史记录（report-store.js 的
    data.daily），每周重新导出、时间窗口有重叠也没关系，已有日期直接
    覆盖，不会重复。
+   · 微盟数据——公众号/小程序/APP 三端，微盟后台没有导出功能，运营
+     每周手动填一次（浏览量/访客数/访问次数/平均访问深度/点击人数/
+     点击次数/人均停留时长/跳出率 8 个指标 + 浏览量、访客数各自的三
+     端拆分）。按周一主键 upsert（report-store.js 的 data.weimeng），
+     环比统一跟"上一次填的记录"算，不用自己心算涨跌；同时挑波动最大
+     的渠道自动拼一句话式点评，呼应原周报 PPT 第二页的叙述风格。
    公共报告目前只是占位，入口先留着。
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
@@ -34,6 +41,19 @@ const Report = (() => {
     ['payAmount', '引导支付金额', 'sum', 'money']
   ];
 
+  /* ── 微盟数据（公众号/小程序/APP）：手动填表，按周环比 ── */
+  const WM_METRICS = [
+    ['pageviews', '浏览量', 'count'],
+    ['visitors', '访客数', 'count'],
+    ['visits', '访问次数', 'count'],
+    ['avgDepth', '平均访问深度', 'depth'],
+    ['clickUsers', '点击人数', 'count'],
+    ['clicks', '点击次数', 'count'],
+    ['avgStay', '人均停留时长', 'sec'],
+    ['bounceRate', '跳出率', 'pct']
+  ];
+  const WM_CHANNELS = [['wechat', '公众号'], ['miniprogram', '小程序'], ['app', 'APP']];
+
   async function call(url, opts) {
     const r = A.guard(await fetch(url, opts));
     const j = await r.json().catch(() => ({}));
@@ -44,9 +64,14 @@ const Report = (() => {
   const fmt = (v, unit) => {
     if (unit === 'pct') return v.toFixed(2) + '%';
     if (unit === 'sec') return v.toFixed(1) + ' 秒';
+    if (unit === 'depth') return v.toFixed(2);
     if (unit === 'money') return '¥' + Math.round(v).toLocaleString();
     return Math.round(v).toLocaleString();
   };
+
+  const deltaOf = (cur, prev) => (prev > 0 ? ((cur - prev) / prev) * 100 : (cur > 0 ? Infinity : null));
+  const deltaCls = (d) => (d === null ? '' : d === Infinity ? 'up' : d > 0.5 ? 'up' : d < -0.5 ? 'down' : 'flat');
+  const deltaTxt = (d) => (d === null ? '—' : d === Infinity ? '新增' : (d > 0 ? '+' : '') + d.toFixed(1) + '%');
 
   /* ── 访客/浏览趋势（店铺整体）：范围 + 自动聚合口径 ────── */
   const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -188,17 +213,15 @@ const Report = (() => {
   /** 一张对比卡：label 指标名，cur/last 两个周期的值，curLabel/lastLabel 是两个周期各自的叫法 */
   function buildCompareCard(label, cur, last, unit, curLabel, lastLabel) {
     const max = Math.max(cur, last, 1);
-    const delta = last > 0 ? ((cur - last) / last) * 100 : (cur > 0 ? Infinity : null);
+    const delta = deltaOf(cur, last);
 
     const card = document.createElement('div');
     card.className = 'rpt-cmp-card';
-    const deltaCls = delta === null ? '' : delta === Infinity ? 'up' : delta > 0.5 ? 'up' : delta < -0.5 ? 'down' : 'flat';
-    const deltaTxt = delta === null ? '—' : delta === Infinity ? '新增' : (delta > 0 ? '+' : '') + delta.toFixed(1) + '%';
 
     card.innerHTML = `
       <div class="rpt-cmp-top">
         <span class="rpt-cmp-label"></span>
-        <span class="rpt-cmp-delta ${deltaCls}"></span>
+        <span class="rpt-cmp-delta ${deltaCls(delta)}"></span>
       </div>
       <div class="rpt-cmp-track">
         <div class="rpt-cmp-fill" style="width:${max ? (cur / max) * 100 : 0}%"></div>
@@ -209,7 +232,7 @@ const Report = (() => {
         <span class="dim">${lastLabel} <b></b></span>
       </div>`;
     card.querySelector('.rpt-cmp-label').textContent = label;
-    card.querySelector('.rpt-cmp-delta').textContent = deltaTxt;
+    card.querySelector('.rpt-cmp-delta').textContent = deltaTxt(delta);
     card.querySelectorAll('.rpt-cmp-foot b')[0].textContent = fmt(cur, unit);
     card.querySelectorAll('.rpt-cmp-foot b')[1].textContent = fmt(last, unit);
     card.title = `${label}\n${curLabel} ${fmt(cur, unit)} · ${lastLabel} ${fmt(last, unit)}`;
@@ -275,7 +298,132 @@ const Report = (() => {
     box.appendChild(grid);
   }
 
-  function render() { renderTrend(); renderShopWeekCompare(); renderCompare(); }
+  /* ── 微盟数据：本周概览，环比上一次填的记录 ────────────── */
+  function buildWeimengCommentary(cur, prev) {
+    const deltas = WM_METRICS.map(([field]) => deltaOf(cur[field], prev[field]));
+    const upCount = deltas.filter((d) => d === Infinity || d > 0.5).length;
+    const downCount = deltas.filter((d) => d !== null && d < -0.5).length;
+    const trend = downCount > upCount ? '普遍下滑' : upCount > downCount ? '普遍上涨' : '涨跌互现';
+
+    let worst = null;
+    [['pageviews', '浏览量', 'pv'], ['visitors', '访客数', 'uv']].forEach(([, mlabel, ckey]) => {
+      WM_CHANNELS.forEach(([key, clabel]) => {
+        const c = (cur.channels && cur.channels[key] && cur.channels[key][ckey]) || 0;
+        const p = (prev.channels && prev.channels[key] && prev.channels[key][ckey]) || 0;
+        const d = deltaOf(c, p);
+        if (d === null || d === Infinity) return;
+        if (!worst || Math.abs(d) > Math.abs(worst.d)) worst = { label: clabel + mlabel, d };
+      });
+    });
+
+    let extra = '';
+    if (worst && Math.abs(worst.d) > 5) {
+      extra = `，其中${worst.label}${worst.d > 0 ? '涨幅' : '跌幅'}达 ${Math.abs(worst.d).toFixed(1)}%，是主要${worst.d > 0 ? '拉高' : '拉低'}项`;
+    }
+    return `本周全渠道流量及互动${trend}${extra}。`;
+  }
+
+  function renderWeimeng() {
+    const sub = A.$('#rpt-wm-sub'), metricsBox = A.$('#rpt-wm-metrics'), chBox = A.$('#rpt-wm-channels'), note = A.$('#rpt-wm-commentary');
+    metricsBox.innerHTML = '';
+    chBox.innerHTML = '';
+
+    const weeks = data?.weimeng || [];
+    if (!weeks.length) {
+      sub.textContent = '还没有记录，点左边「记录本周数据」填一份。';
+      note.hidden = true;
+      return;
+    }
+    const cur = weeks[weeks.length - 1];
+    const prev = weeks.length > 1 ? weeks[weeks.length - 2] : null;
+    sub.textContent = prev ? `${cur.weekStart} 那一周 · 环比上一次记录（${prev.weekStart}）` : `${cur.weekStart} 那一周 · 这是第一次记录，还没有上一次可比`;
+
+    WM_METRICS.forEach(([field, label, unit]) => {
+      const d = prev ? deltaOf(cur[field], prev[field]) : null;
+      const card = document.createElement('div');
+      card.className = 'rpt-wm-stat';
+      card.innerHTML = `<span class="rpt-wm-stat-label"></span><b></b><span class="rpt-wm-stat-delta"></span>`;
+      card.querySelector('.rpt-wm-stat-label').textContent = label;
+      card.querySelector('b').textContent = fmt(cur[field] || 0, unit);
+      const dl = card.querySelector('.rpt-wm-stat-delta');
+      dl.textContent = deltaTxt(d);
+      dl.className = 'rpt-wm-stat-delta ' + deltaCls(d);
+      metricsBox.appendChild(card);
+    });
+
+    [['pageviews', '浏览量渠道构成', 'pv'], ['visitors', '访客数渠道构成', 'uv']].forEach(([, title, ckey]) => {
+      const group = document.createElement('div');
+      group.className = 'rpt-wm-chgroup';
+      const h3 = document.createElement('h3');
+      h3.textContent = title;
+      group.appendChild(h3);
+      const total = WM_CHANNELS.reduce((s, [key]) => s + ((cur.channels && cur.channels[key] && cur.channels[key][ckey]) || 0), 0) || 1;
+      WM_CHANNELS.forEach(([key, label]) => {
+        const v = (cur.channels && cur.channels[key] && cur.channels[key][ckey]) || 0;
+        const p = prev ? (prev.channels && prev.channels[key] && prev.channels[key][ckey]) || 0 : null;
+        const d = prev ? deltaOf(v, p) : null;
+        const row = document.createElement('div');
+        row.className = 'rpt-wm-chrow';
+        row.innerHTML = `
+          <span class="rpt-wm-chname"></span>
+          <span class="rpt-wm-chbar"><span class="rpt-wm-chfill"></span></span>
+          <span class="rpt-wm-chval"><b></b><span class="rpt-wm-chdelta"></span></span>`;
+        row.querySelector('.rpt-wm-chname').textContent = label;
+        row.querySelector('.rpt-wm-chfill').style.width = `${(v / total) * 100}%`;
+        row.querySelector('.rpt-wm-chval b').textContent = fmt(v, 'count');
+        const dl = row.querySelector('.rpt-wm-chdelta');
+        dl.textContent = deltaTxt(d);
+        dl.className = 'rpt-wm-chdelta ' + deltaCls(d);
+        group.appendChild(row);
+      });
+      chBox.appendChild(group);
+    });
+
+    if (!prev) { note.hidden = true; return; }
+    note.hidden = false;
+    note.textContent = buildWeimengCommentary(cur, prev);
+  }
+
+  function weekMonday(dateStr) {
+    const d = new Date((dateStr || todayStr()) + 'T00:00:00');
+    const dow = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - dow);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function openWeimengForm() {
+    A.$('#wm-weekStart').value = weekMonday(todayStr());
+    WM_METRICS.forEach(([field]) => { A.$('#wm-' + field).value = ''; });
+    WM_CHANNELS.forEach(([key]) => { A.$(`#wm-ch-${key}-pv`).value = ''; A.$(`#wm-ch-${key}-uv`).value = ''; });
+    A.$('#rpt-wm-mask').hidden = false;
+  }
+  function closeWeimengForm() { A.$('#rpt-wm-mask').hidden = true; }
+
+  async function saveWeimeng() {
+    const weekStart = A.$('#wm-weekStart').value;
+    if (!weekStart) return A.toast('先选周开始日期', 'bad');
+    const payload = { weekStart, channels: {} };
+    WM_METRICS.forEach(([field]) => { payload[field] = A.$('#wm-' + field).value; });
+    WM_CHANNELS.forEach(([key]) => {
+      payload.channels[key] = { pv: A.$(`#wm-ch-${key}-pv`).value, uv: A.$(`#wm-ch-${key}-uv`).value };
+    });
+    const btn = A.$('#rpt-wm-save');
+    btn.disabled = true; btn.textContent = '保存中…';
+    try {
+      await call('/api/reports/personal/weimeng/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      A.toast('已保存');
+      closeWeimengForm();
+      await refresh();
+    } catch (e) {
+      A.toast('保存失败：' + e.message, 'bad');
+    } finally {
+      btn.disabled = false; btn.textContent = '保存';
+    }
+  }
+
+  function render() { renderTrend(); renderShopWeekCompare(); renderCompare(); renderWeimeng(); }
 
   /* ── 子页签：个人 / 公共 ──────────────────────────────── */
   function switchSub(s) {
@@ -336,6 +484,11 @@ const Report = (() => {
 
     A.$('#rpt-import-btn').onclick = () => { A.$('#rpt-import-file').value = ''; A.$('#rpt-import-file').click(); };
     wireDrop('#rpt-import-drop', '#rpt-import-file');
+
+    A.$('#rpt-weimeng-btn').onclick = openWeimengForm;
+    A.$('#rpt-wm-close').onclick = closeWeimengForm;
+    A.$('#rpt-wm-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-wm-mask') closeWeimengForm(); });
+    A.$('#rpt-wm-save').onclick = saveWeimeng;
 
     A.$$('#rpt-range-tabs button').forEach((b) => (b.onclick = () => {
       A.$$('#rpt-range-tabs button').forEach((x) => x.classList.toggle('on', x === b));

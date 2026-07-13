@@ -564,6 +564,15 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, report);
     }
 
+    if (p === '/api/reports/personal/weimeng/save' && req.method === 'POST') {
+      const input = await body(req, 8192);
+      let result;
+      try { result = await reports.weimengSave(me.id, input); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'reports.weimeng.save', { detail: [`微盟数据：${result.entry.weekStart} 周${result.isNew ? '新增' : '更新'}`] });
+      return json(res, 200, result);
+    }
+
     if (p.startsWith('/uploads/')) return serveStatic(res, UPLOAD_DIR, p.slice('/uploads/'.length), true);
 
     if (req.method === 'GET' || req.method === 'HEAD')

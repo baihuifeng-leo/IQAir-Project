@@ -245,6 +245,10 @@
             <button class="solid" id="rpt-import-btn">导入 / 更新 Excel</button>
             <span>或把文件拖到这里</span>
           </div>
+
+          <div class="rail-sec">微盟数据</div>
+          <p class="rail-hint">微盟（公众号/小程序/APP）后台没有导出功能，这部分每周手动填一次；环比自动跟上一次填的记录算，不用自己算涨跌。</p>
+          <button class="solid" id="rpt-weimeng-btn">记录本周数据</button>
         </div>
 
         <div id="rpt-public-rail" hidden>
@@ -292,6 +296,18 @@
           <p class="rv-sub">取最近有数据的 14 天，按日期从新到旧切成两组各 7 天；计数类指标取两组各自的总和，比率类指标取两组各自的平均值。这些是店铺「首页」相关指标，范围比上面的店铺整体数据要窄。</p>
           <div id="rpt-compare"></div>
         </section>
+
+        <section class="rv-sec">
+          <div class="rpt-sec-head">
+            <div>
+              <h2>微盟数据 <span class="rpt-scope-badge alt2">公众号 / 小程序 / APP</span></h2>
+              <p class="rv-sub" id="rpt-wm-sub">还没有记录，点左边「记录本周数据」填一份。</p>
+            </div>
+          </div>
+          <div class="rpt-wm-metrics" id="rpt-wm-metrics"></div>
+          <div class="rpt-wm-channels" id="rpt-wm-channels"></div>
+          <p class="rpt-wm-note" id="rpt-wm-commentary" hidden></p>
+        </section>
       </div>
 
       <div class="rv-scroll" id="rpt-public-view" hidden>
@@ -322,6 +338,48 @@
 <input type="file" id="rv-file" accept=".xlsx" hidden>
 <input type="file" id="p3d-file" accept=".xlsx" hidden>
 <input type="file" id="rpt-import-file" accept=".xlsx" hidden>
+
+<div class="sheet-mask" id="rpt-wm-mask" hidden>
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>记录本周微盟数据</h2>
+      <button class="kill" id="rpt-wm-close" aria-label="关闭">✕</button>
+    </div>
+    <div class="sheet-body">
+      <label class="rpt-wm-field">
+        <span>周一（周开始日期）</span>
+        <input type="date" id="wm-weekStart">
+      </label>
+
+      <div class="rpt-wm-grid">
+        <label><span>浏览量</span><input type="text" inputmode="decimal" id="wm-pageviews"></label>
+        <label><span>访客数</span><input type="text" inputmode="decimal" id="wm-visitors"></label>
+        <label><span>访问次数</span><input type="text" inputmode="decimal" id="wm-visits"></label>
+        <label><span>平均访问深度</span><input type="text" inputmode="decimal" id="wm-avgDepth"></label>
+        <label><span>点击人数</span><input type="text" inputmode="decimal" id="wm-clickUsers"></label>
+        <label><span>点击次数</span><input type="text" inputmode="decimal" id="wm-clicks"></label>
+        <label><span>人均停留时长(秒)</span><input type="text" inputmode="decimal" id="wm-avgStay"></label>
+        <label><span>跳出率(%)</span><input type="text" inputmode="decimal" id="wm-bounceRate"></label>
+      </div>
+
+      <div class="rpt-wm-group-label">浏览量渠道构成</div>
+      <div class="rpt-wm-grid">
+        <label><span>公众号</span><input type="text" inputmode="decimal" id="wm-ch-wechat-pv"></label>
+        <label><span>小程序</span><input type="text" inputmode="decimal" id="wm-ch-miniprogram-pv"></label>
+        <label><span>APP</span><input type="text" inputmode="decimal" id="wm-ch-app-pv"></label>
+      </div>
+
+      <div class="rpt-wm-group-label">访客数渠道构成</div>
+      <div class="rpt-wm-grid">
+        <label><span>公众号</span><input type="text" inputmode="decimal" id="wm-ch-wechat-uv"></label>
+        <label><span>小程序</span><input type="text" inputmode="decimal" id="wm-ch-miniprogram-uv"></label>
+        <label><span>APP</span><input type="text" inputmode="decimal" id="wm-ch-app-uv"></label>
+      </div>
+
+      <button class="solid rpt-wm-savebtn" id="rpt-wm-save">保存</button>
+    </div>
+  </div>
+</div>
 
 <script src="/echarts.min.js"></script>
 <script src="/echarts-gl.min.js"></script>

@@ -1,5 +1,5 @@
 /**
- * report-store.js — 个人报告：每日数据（店铺整体 + 首页）
+ * report-store.js — 个人报告：每日数据（店铺整体 + 首页）+ 微盟数据（按周）
  *
  * 按用户隔离：每个人的周报是自己的数据，不是团队共享文档，
  * 所以不走 matrix/compare 那套三方合并协同，一人一个文件就够。
@@ -12,6 +12,11 @@
  *
  * 真正的数据经常不在第一个 sheet 里（前面可能还有透视表/对比表之类
  * 的辅助 sheet），所以要把所有 sheet 都扫一遍，找表头对得上的那个。
+ *
+ * 微盟数据（公众号/小程序/APP 三端）没有导出接口，原周报 PPT 第二页
+ * 是运营每周手动誊抄的 8 个指标 + 三端浏览量/访客数拆分，所以这部分
+ * 走手动填表，不走 Excel 导入。按「周一」为主键增量合并，同一周重新
+ * 填一次就是覆盖更新，环比统一跟「上一次填的记录」算，不用自己算。
  */
 'use strict';
 const fs = require('fs');
@@ -48,6 +53,18 @@ const normDate = (v) => {
   return s;
 };
 
+const WEIMENG_METRICS = ['pageviews', 'visitors', 'visits', 'avgDepth', 'clickUsers', 'clicks', 'avgStay', 'bounceRate'];
+const WEIMENG_CHANNELS = ['wechat', 'miniprogram', 'app'];
+
+/** 任意日期落到当周周一，微盟数据按周记录，主键是周一 */
+const mondayOf = (v) => {
+  const d = new Date(String(v ?? '').trim() + 'T00:00:00');
+  if (isNaN(d)) return null;
+  const dow = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dow);
+  return d.toISOString().slice(0, 10);
+};
+
 /** 在所有 sheet、每个 sheet 的前 10 行里找「包含所有必需列名」的表头行 */
 function recordsFrom(buf, requiredCols) {
   const sheets = readAllSheets(buf);
@@ -73,8 +90,11 @@ class ReportStore {
   async _load(userId) {
     try {
       const s = JSON.parse(await fsp.readFile(this.file(userId), 'utf8'));
-      return { daily: Array.isArray(s.daily) ? s.daily : [] };
-    } catch { return { daily: [] }; }
+      return {
+        daily: Array.isArray(s.daily) ? s.daily : [],
+        weimeng: Array.isArray(s.weimeng) ? s.weimeng : []
+      };
+    } catch { return { daily: [], weimeng: [] }; }
   }
 
   async _save(userId, data) {
@@ -103,6 +123,28 @@ class ReportStore {
     data.daily = [...map.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     await this._save(userId, data);
     return { added, updated, skipped, total: data.daily.length };
+  }
+
+  /** 手动填一周的微盟数据，按周一主键 upsert */
+  async weimengSave(userId, input) {
+    const weekStart = mondayOf(input && input.weekStart);
+    if (!weekStart) throw new Error('周开始日期不对，选一个日期');
+
+    const entry = { weekStart };
+    for (const key of WEIMENG_METRICS) entry[key] = num(input[key]);
+    entry.channels = {};
+    for (const key of WEIMENG_CHANNELS) {
+      const c = (input.channels && input.channels[key]) || {};
+      entry.channels[key] = { pv: num(c.pv), uv: num(c.uv) };
+    }
+
+    const data = await this._load(userId);
+    const map = new Map(data.weimeng.map((r) => [r.weekStart, r]));
+    const isNew = !map.has(weekStart);
+    map.set(weekStart, entry);
+    data.weimeng = [...map.values()].sort((a, b) => (a.weekStart < b.weekStart ? -1 : a.weekStart > b.weekStart ? 1 : 0));
+    await this._save(userId, data);
+    return { entry, isNew, total: data.weimeng.length };
   }
 }
 
