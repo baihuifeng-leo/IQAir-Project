@@ -320,6 +320,29 @@ const Report = (() => {
   };
   const weimengByWeek = () => new Map((data?.weimeng || []).map((w) => [w.weekStart, w]));
 
+  /** <input type="week"> 只能选"第几周"，不能选具体某一天——彻底避开
+   *  "周一 vs 周日" 这种日期选择器容易选错的问题。这两个函数负责在
+   *  ISO 周字符串（"2026-W26"）和周一日期（"2026-06-22"）之间转换。 */
+  function isoWeekToMonday(value) {
+    const m = /^(\d{4})-W(\d{2})$/.exec(value || '');
+    if (!m) return null;
+    const year = Number(m[1]), week = Number(m[2]);
+    const jan4 = new Date(year, 0, 4);
+    const jan4Dow = (jan4.getDay() + 6) % 7;
+    const week1Mon = new Date(jan4);
+    week1Mon.setDate(jan4.getDate() - jan4Dow + (week - 1) * 7);
+    return week1Mon.toISOString().slice(0, 10);
+  }
+  function mondayToIsoWeek(monday) {
+    const d = new Date(monday + 'T00:00:00');
+    const thu = new Date(d);
+    thu.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+    const firstThu = new Date(thu.getFullYear(), 0, 4);
+    firstThu.setDate(firstThu.getDate() + 3 - ((firstThu.getDay() + 6) % 7));
+    const week = 1 + Math.round((thu - firstThu) / (7 * 86400000));
+    return `${thu.getFullYear()}-W${String(week).padStart(2, '0')}`;
+  }
+
   function buildWeimengCommentary(cur, prev) {
     const deltas = WM_METRICS.map(([field]) => deltaOf(cur[field], prev[field]));
     const upCount = deltas.filter((d) => d === Infinity || d > 0.5).length;
@@ -417,7 +440,9 @@ const Report = (() => {
   function loadWeekIntoForm(weekStart) {
     const monday = weekMonday(weekStart);
     const existing = weimengByWeek().get(monday);
-    A.$('#wm-weekStart').value = monday;
+    A.$('#wm-weekStart').value = mondayToIsoWeek(monday);
+    const sunday = new Date(monday + 'T00:00:00'); sunday.setDate(sunday.getDate() + 6);
+    A.$('#wm-weekStart-hint').textContent = `即 ${monday} 至 ${sunday.toISOString().slice(0, 10)} 这一周`;
     WM_METRICS.forEach(([field]) => { A.$('#wm-' + field).value = existing ? existing[field] : ''; });
     WM_CHANNELS.forEach(([key]) => {
       A.$(`#wm-ch-${key}-pv`).value = existing ? existing.channels[key].pv : '';
@@ -433,8 +458,8 @@ const Report = (() => {
   function closeWeimengForm() { A.$('#rpt-wm-mask').hidden = true; }
 
   async function saveWeimeng() {
-    const weekStart = A.$('#wm-weekStart').value;
-    if (!weekStart) return A.toast('先选周开始日期', 'bad');
+    const weekStart = isoWeekToMonday(A.$('#wm-weekStart').value);
+    if (!weekStart) return A.toast('先选一周', 'bad');
     const payload = { weekStart, channels: {} };
     WM_METRICS.forEach(([field]) => { payload[field] = A.$('#wm-' + field).value; });
     WM_CHANNELS.forEach(([key]) => {
@@ -558,7 +583,7 @@ const Report = (() => {
     A.$('#rpt-wm-close').onclick = closeWeimengForm;
     A.$('#rpt-wm-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-wm-mask') closeWeimengForm(); });
     A.$('#rpt-wm-save').onclick = saveWeimeng;
-    A.$('#wm-weekStart').onchange = (e) => loadWeekIntoForm(e.target.value);
+    A.$('#wm-weekStart').onchange = (e) => { const m = isoWeekToMonday(e.target.value); if (m) loadWeekIntoForm(m); };
 
     A.$$('#rpt-page-switch button').forEach((b) => (b.onclick = () => switchPage(Number(b.dataset.page))));
     A.$('#rpt-present-btn').onclick = togglePresent;
