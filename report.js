@@ -82,7 +82,12 @@ const Report = (() => {
   const deltaTxt = (d) => (d === null ? '—' : d === Infinity ? '新增' : (d > 0 ? '+' : '') + d.toFixed(1) + '%');
 
   /* ── 访客/浏览趋势（店铺整体）：范围 + 自动聚合口径 ────── */
-  const todayStr = () => new Date().toISOString().slice(0, 10);
+  /** 本地日期转 YYYY-MM-DD。不能用 toISOString()——那个转的是 UTC，
+   *  在东八区这种 UTC+ 时区，本地 0 点换算过去是前一天下午，午夜前后
+   *  跑这段代码就会把日期往前拨一天。微盟周选择器的"选了这周却显示
+   *  上一周"就是栽在这个坑上，这里统一用本地年月日拼字符串。 */
+  const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const todayStr = () => ymd(new Date());
 
   /** 周一为一周的起点，offset=0 是本周，-1 是上周 */
   function isoWeekRange(offset) {
@@ -92,7 +97,7 @@ const Report = (() => {
     mon.setDate(now.getDate() - dow + offset * 7);
     const sun = new Date(mon);
     sun.setDate(mon.getDate() + 6);
-    return [mon.toISOString().slice(0, 10), sun.toISOString().slice(0, 10)];
+    return [ymd(mon), ymd(sun)];
   }
 
   /** 跨度越大，天级别的点越挤——按天数自适应选日/周/月粒度 */
@@ -135,7 +140,7 @@ const Report = (() => {
     const d = new Date(date + 'T00:00:00');
     const dow = (d.getDay() + 6) % 7;
     d.setDate(d.getDate() - dow);
-    return d.toISOString().slice(0, 10);
+    return ymd(d);
   }
   const bucketLabel = (k, g) => (g === 'month' ? k : g === 'week' ? k + ' 起' : k.slice(5));
 
@@ -311,12 +316,12 @@ const Report = (() => {
     const d = new Date((dateStr || todayStr()) + 'T00:00:00');
     const dow = (d.getDay() + 6) % 7;
     d.setDate(d.getDate() - dow);
-    return d.toISOString().slice(0, 10);
+    return ymd(d);
   }
   const weekBefore = (weekStart) => {
     const d = new Date(weekStart + 'T00:00:00');
     d.setDate(d.getDate() - 7);
-    return d.toISOString().slice(0, 10);
+    return ymd(d);
   };
   const weimengByWeek = () => new Map((data?.weimeng || []).map((w) => [w.weekStart, w]));
 
@@ -331,7 +336,7 @@ const Report = (() => {
     const jan4Dow = (jan4.getDay() + 6) % 7;
     const week1Mon = new Date(jan4);
     week1Mon.setDate(jan4.getDate() - jan4Dow + (week - 1) * 7);
-    return week1Mon.toISOString().slice(0, 10);
+    return ymd(week1Mon);
   }
   function mondayToIsoWeek(monday) {
     const d = new Date(monday + 'T00:00:00');
@@ -442,7 +447,7 @@ const Report = (() => {
     const existing = weimengByWeek().get(monday);
     A.$('#wm-weekStart').value = mondayToIsoWeek(monday);
     const sunday = new Date(monday + 'T00:00:00'); sunday.setDate(sunday.getDate() + 6);
-    A.$('#wm-weekStart-hint').textContent = `即 ${monday} 至 ${sunday.toISOString().slice(0, 10)} 这一周`;
+    A.$('#wm-weekStart-hint').textContent = `即 ${monday} 至 ${ymd(sunday)} 这一周`;
     WM_METRICS.forEach(([field]) => { A.$('#wm-' + field).value = existing ? existing[field] : ''; });
     WM_CHANNELS.forEach(([key]) => {
       A.$(`#wm-ch-${key}-pv`).value = existing ? existing.channels[key].pv : '';
@@ -500,7 +505,13 @@ const Report = (() => {
     A.$('#rpt-present-btn').textContent = '■ 退出放映';
     A.$('#rpt-exit-present').hidden = false;
     const fs = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen;
-    fs?.call(document.documentElement)?.catch(() => {});
+    if (fs) {
+      fs.call(document.documentElement)?.catch(() => {
+        A.toast('浏览器拒绝了全屏请求，只切到放映排版——按 F11 可以手动全屏', 'bad');
+      });
+    } else {
+      A.toast('这个浏览器不支持全屏 API，只切到放映排版——按 F11 可以手动全屏', 'bad');
+    }
     if (chart) requestAnimationFrame(() => chart.resize());
   }
 
