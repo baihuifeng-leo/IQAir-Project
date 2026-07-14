@@ -259,7 +259,7 @@ const Reviews = (() => {
   function heatmap() {
     const sec = document.createElement('section');
     sec.className = 'rv-sec';
-    sec.innerHTML = `<h2>品牌 × 维度</h2><p class="rv-sub">颜色越红，这个维度被吐槽得越多；格子里 <i class="n-pos">绿字</i> 是好评句数、<i class="n-neg">红字</i> 是差评句数。</p>`;
+    sec.innerHTML = `<h2>品牌 × 维度</h2><p class="rv-sub">颜色越红，这个维度被吐槽的差评句数越多（按绝对数量，不是占比）；格子里大字是差评句数，小字左边 <i class="n-pos">绿字</i> 是好评句数、右边 <i class="n-neg">红字</i> 是差评占比。</p>`;
 
     const aspects = ASPECT_ORDER.filter((a) => data.aspects[a]);
     const grid = document.createElement('div');
@@ -268,6 +268,11 @@ const Reviews = (() => {
 
     grid.appendChild(cell('', 'rv-h-corner'));
     aspects.forEach((a) => grid.appendChild(cell(a, 'rv-h-head')));
+
+    // 颜色深浅按「差评句数」在整张表里排名，不是差评占比——1条评论100%差评不该比
+    // 200条里50条差评(25%)颜色还深。好评数、差评率只在格子文字里展示，供参考。
+    let maxNeg = 0;
+    data.brands.forEach((b) => aspects.forEach((a) => { maxNeg = Math.max(maxNeg, (b.aspects[a] || {}).neg || 0); }));
 
     data.brands.forEach((b, rowIdx) => {
       const name = cell(b.name, 'rv-h-brand');
@@ -284,11 +289,11 @@ const Reviews = (() => {
         c.style.animationDelay = (rowIdx * 30) + 'ms';
         if (!total) { c.classList.add('void'); c.textContent = '—'; grid.appendChild(c); return; }
         const rate = v.neg / total;
-        // 大部分格子的负向率其实都不高（个位数到二十几%），线性映射颜色区分不出来；
-        // 开个 0.55 次方把低段拉开，1.0 和 0 两端不受影响
-        c.style.setProperty('--heat', Math.pow(rate, 0.55).toFixed(3));
-        c.innerHTML = `<b>${Math.round(rate * 100)}%</b><span><i class="n-pos">${v.pos}</i>·<i class="n-neg">${v.neg}</i></span>`;
-        c.title = `${b.name} · ${a}\n正向 ${v.pos} 句，负向 ${v.neg} 句`;
+        // 大部分格子的差评数其实都不高，线性映射颜色区分不出来；
+        // 开个 0.55 次方把低段拉开，1.0（全场差评最多）和 0（没有差评）两端不受影响
+        c.style.setProperty('--heat', (maxNeg ? Math.pow(v.neg / maxNeg, 0.55) : 0).toFixed(3));
+        c.innerHTML = `<b>${v.neg}</b><span><i class="n-pos">${v.pos}</i>·<i class="n-neg">${Math.round(rate * 100)}%</i></span>`;
+        c.title = `${b.name} · ${a}\n差评 ${v.neg} 句 · 好评 ${v.pos} 句 · 差评率 ${Math.round(rate * 100)}%`;
         grid.appendChild(c);
       });
     });

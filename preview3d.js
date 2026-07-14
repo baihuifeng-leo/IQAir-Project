@@ -1,12 +1,12 @@
 /* ═══════════════════════════════════════════════════════════
    preview3d.js — 竞品 3D 预览
-   价格 × 颗粒物CADR × 甲醛CADR 三个轴摆开，气泡大小可以在
+   颗粒物CADR × 价格 × 甲醛CADR 三个轴摆开，气泡大小可以在
    「性价比 / 5-6月销售额 / 5-6月销量」三种口径之间切换——
    三个轴的空间已经占满了，销售表现这两项新数据改用气泡大小
    来承载，而不是硬塞成第四根轴。
    ═══════════════════════════════════════════════════════════ */
 const Preview3D = (() => {
-  let A, data = null, chart = null, ro = null, sizeMode = 'costEff';
+  let A, data = null, chart = null, ro = null, sizeMode = 'costEff', autoRotate = true;
   const hidden = new Set();   // 被隐藏（取消勾选）的品牌
 
   const SIZE_MODES = {
@@ -43,13 +43,13 @@ const Preview3D = (() => {
 
     const points = shown.map((p) => ({
       name: `${p.brand} ${p.model}`,
-      value: [p.price, p.pmCadr, p.hchoCadr],
+      value: [p.pmCadr, p.price, p.hchoCadr],
       brand: p.brand, model: p.model, price: p.price, pmCadr: p.pmCadr, hchoCadr: p.hchoCadr,
       costEff: p.costEff, sales: p.sales || 0, qty: p.qty || 0, url: p.url,
       itemStyle: { color: p.color, opacity: 0.9 },
       symbolSize: size(mode.calc(p)),
       label: {
-        show: true, formatter: p.brand, position: 'top', distance: 6,
+        show: true, formatter: `${p.brand}\n${p.model}`, position: 'top', distance: 6, lineHeight: 14,
         color: '#e9eef8', fontSize: 11, fontWeight: 600,
         textBorderColor: '#0b1220', textBorderWidth: 2.5
       }
@@ -63,8 +63,8 @@ const Preview3D = (() => {
           return `<div class="p3d-tip">
             <div class="p3d-tip-head" style="color:${d.itemStyle.color}">${esc(d.brand)}</div>
             <div class="p3d-tip-model">${esc(d.model)}</div>
-            <div class="p3d-tip-row"><span>价格</span><b>¥${d.price.toLocaleString()}</b></div>
             <div class="p3d-tip-row"><span>颗粒物 CADR</span><b>${d.pmCadr.toLocaleString()}</b></div>
+            <div class="p3d-tip-row"><span>价格</span><b>¥${d.price.toLocaleString()}</b></div>
             <div class="p3d-tip-row"><span>甲醛 CADR</span><b>${d.hchoCadr.toLocaleString()}</b></div>
             <div class="p3d-tip-row${sizeMode === 'costEff' ? ' cur' : ''}"><span>性价比指数${sizeMode === 'costEff' ? ' ●' : ''}</span><b>${d.costEff.toFixed(1)}</b></div>
             <div class="p3d-tip-row${sizeMode === 'sales' ? ' cur' : ''}"><span>5-6月销售额${sizeMode === 'sales' ? ' ●' : ''}</span><b>¥${Math.round(d.sales).toLocaleString()}</b></div>
@@ -75,8 +75,8 @@ const Preview3D = (() => {
         backgroundColor: '#101725f2', borderColor: '#1f2b42', borderWidth: 1, padding: 0,
         extraCssText: 'box-shadow:0 20px 44px -18px #000;border-radius:10px;'
       },
-      xAxis3D: { type: 'value', name: '价格 (¥)', min: 0, ...AXIS },
-      yAxis3D: { type: 'value', name: '颗粒物 CADR', min: 0, ...AXIS },
+      xAxis3D: { type: 'value', name: '颗粒物 CADR', min: 0, ...AXIS },
+      yAxis3D: { type: 'value', name: '价格 (¥)', min: 0, ...AXIS },
       zAxis3D: { type: 'value', name: '甲醛 CADR', min: 0, ...AXIS },
       grid3D: {
         boxWidth: 100, boxHeight: 76, boxDepth: 76,
@@ -84,7 +84,7 @@ const Preview3D = (() => {
         axisLine: { lineStyle: { color: '#33456a' } },
         splitLine: { show: true, lineStyle: { color: '#17203292' } },
         viewControl: {
-          autoRotate: true, autoRotateSpeed: 5, autoRotateAfterStill: 2.5,
+          autoRotate, autoRotateSpeed: 5, autoRotateAfterStill: 2.5,
           distance: 215, alpha: 20, beta: 30, damping: 0.86,
           panSensitivity: 0.8, zoomSensitivity: 0.9
         },
@@ -160,7 +160,7 @@ const Preview3D = (() => {
     if (!box) return;
     [...box.children].forEach((btn) => btn.classList.toggle('on', btn.dataset.mode === sizeMode));
     const hint = A.$('#p3d-sizehint');
-    if (hint) hint.textContent = `三根轴分别是价格、颗粒物CADR、甲醛CADR；${SIZE_MODES[sizeMode].hint}拖动可旋转视角，滚轮缩放，点气泡跳转商品页。`;
+    if (hint) hint.textContent = `X轴颗粒物CADR、Y轴价格、Z轴甲醛CADR；${SIZE_MODES[sizeMode].hint}滚轮缩放，点气泡跳转商品页${autoRotate ? '，拖动可临时接管视角' : '，拖动旋转视角'}。`;
   }
 
   function setSizeMode(mode) {
@@ -172,6 +172,20 @@ const Preview3D = (() => {
         A.toast(`当前数据没有${SIZE_MODES[mode].label}信息，气泡都会显示为最小——重新导入含该列的表格即可`, 'bad');
       }
     }
+    renderSizeMode();
+    render();
+  }
+
+  function renderAutoRotateBtn() {
+    const btn = A.$('#p3d-autorotate');
+    if (!btn) return;
+    btn.classList.toggle('on', autoRotate);
+    btn.textContent = autoRotate ? '⟲ 自动旋转：开' : '⟲ 自动旋转：关';
+  }
+
+  function setAutoRotate(v) {
+    autoRotate = v;
+    renderAutoRotateBtn();
     renderSizeMode();
     render();
   }
@@ -255,6 +269,9 @@ const Preview3D = (() => {
       if (btn) setSizeMode(btn.dataset.mode);
     };
     renderSizeMode();
+
+    A.$('#p3d-autorotate').onclick = () => setAutoRotate(!autoRotate);
+    renderAutoRotateBtn();
   }
 
   return { init, refresh, render, onShow };

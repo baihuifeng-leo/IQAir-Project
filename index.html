@@ -199,8 +199,8 @@
         </div>
 
         <div class="rail-sec">怎么看这张图</div>
-        <p class="rail-hint" id="p3d-sizehint">三根轴分别是价格、颗粒物CADR、甲醛CADR；气泡越大，性价比（两项CADR之和 / 价格）越高。拖动可旋转视角，滚轮缩放，点气泡跳转商品页。</p>
-        <p class="rail-hint">气泡上方的文字是品牌名，视角旋转时相近的点可能会互相遮挡，鼠标停留看具体产品更准确。</p>
+        <p class="rail-hint" id="p3d-sizehint">X轴颗粒物CADR、Y轴价格、Z轴甲醛CADR；气泡越大，性价比（两项CADR之和 / 价格）越高。滚轮缩放，点气泡跳转商品页，拖动可临时接管视角。</p>
+        <p class="rail-hint">气泡上方是品牌名和型号，视角旋转时相近的点可能会互相遮挡，鼠标停留看具体产品更准确。</p>
 
         <div class="rail-sec">
           品牌
@@ -215,12 +215,15 @@
       <div class="rv-head rpt-head">
         <div>
           <h1>竞品3D预览</h1>
-          <p>价格 × 颗粒物CADR × 甲醛CADR · 三维竞品定位</p>
+          <p>颗粒物CADR × 价格 × 甲醛CADR · 三维竞品定位</p>
         </div>
-        <div class="rpt-page-switch" id="p3d-sizemode">
-          <button class="on" data-mode="costEff">气泡＝性价比</button>
-          <button data-mode="sales">气泡＝销售额</button>
-          <button data-mode="qty">气泡＝销量</button>
+        <div class="p3d-head-controls">
+          <button class="ghost on" id="p3d-autorotate" title="关闭后改为手动拖拽控制视角">⟲ 自动旋转：开</button>
+          <div class="rpt-page-switch" id="p3d-sizemode">
+            <button class="on" data-mode="costEff">气泡＝性价比</button>
+            <button data-mode="sales">气泡＝销售额</button>
+            <button data-mode="qty">气泡＝销量</button>
+          </div>
         </div>
       </div>
       <div class="p3d-stats" id="p3d-stats"></div>

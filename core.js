@@ -351,7 +351,10 @@ const App = (() => {
     $$('.view').forEach((v) => (v.hidden = v.dataset.view !== next));
     moveInk();
     location.hash = next;
-    $('#btn-edit').hidden = !DOCS.includes(next);
+    const isDoc = DOCS.includes(next);
+    $('#btn-edit').hidden = !isDoc;
+    $('#btn-undo').hidden = !isDoc;
+    $('#btn-redo').hidden = !isDoc;
     if (next === 'preview3d') Preview3D.onShow();
     if (next === 'reports') Report.onShow();
   }
