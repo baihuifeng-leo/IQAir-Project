@@ -1102,6 +1102,12 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .p3d-brow.off { opacity: 0.38; filter: grayscale(0.5); }
 .p3d-brow.off i { box-shadow: none; }
 
+#p3d-sizemode { margin-bottom: 0; flex: 0 0 auto; }
+
+/* echarts 3D label 常显品牌名——外层容器不做特殊处理，样式由 option 里的 textStyle 直接控制 */
+.p3d-tip-row.cur { color: var(--mint); }
+.p3d-tip-row.cur b { color: var(--mint); }
+
 /* echarts tooltip 的内容——外层 backgroundColor/border 由 option 里配置，这里只管排版 */
 .p3d-tip { padding: 11px 13px; min-width: 190px; font-size: 12.5px; }
 .p3d-tip-head { font-size: 14px; font-weight: 700; }

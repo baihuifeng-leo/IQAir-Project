@@ -192,14 +192,15 @@
       </div>
       <div class="rail-body">
         <div class="rail-sec">导入 / 更新表格</div>
-        <p class="rail-hint">表头需含：品牌、型号、商品ID、价格、颗粒物CADR、甲醛CADR、商品链接。每次导入用整份表格覆盖当前数据。</p>
+        <p class="rail-hint">表头必须含：品牌、型号、商品ID、价格、颗粒物CADR、甲醛CADR、商品链接；可以再加两列可选的「5-6月销售额」「5-6月销量」，用来在图上切换气泡口径。每次导入用整份表格覆盖当前数据。</p>
         <div class="rv-drop" id="p3d-drop">
           <button class="solid" id="p3d-import-btn">导入 / 更新 Excel</button>
           <span>或把文件拖到这里</span>
         </div>
 
         <div class="rail-sec">怎么看这张图</div>
-        <p class="rail-hint">三根轴分别是价格、颗粒物CADR、甲醛CADR；气泡越大，性价比（两项CADR之和 / 价格）越高。拖动可旋转视角，滚轮缩放，点气泡跳转商品页。</p>
+        <p class="rail-hint" id="p3d-sizehint">三根轴分别是价格、颗粒物CADR、甲醛CADR；气泡越大，性价比（两项CADR之和 / 价格）越高。拖动可旋转视角，滚轮缩放，点气泡跳转商品页。</p>
+        <p class="rail-hint">气泡上方的文字是品牌名，视角旋转时相近的点可能会互相遮挡，鼠标停留看具体产品更准确。</p>
 
         <div class="rail-sec">
           品牌
@@ -211,9 +212,16 @@
     </aside>
 
     <div class="canvas p3d-canvas">
-      <div class="rv-head">
-        <h1>竞品3D预览</h1>
-        <p>价格 × 颗粒物CADR × 甲醛CADR · 三维竞品定位</p>
+      <div class="rv-head rpt-head">
+        <div>
+          <h1>竞品3D预览</h1>
+          <p>价格 × 颗粒物CADR × 甲醛CADR · 三维竞品定位</p>
+        </div>
+        <div class="rpt-page-switch" id="p3d-sizemode">
+          <button class="on" data-mode="costEff">气泡＝性价比</button>
+          <button data-mode="sales">气泡＝销售额</button>
+          <button data-mode="qty">气泡＝销量</button>
+        </div>
       </div>
       <div class="p3d-stats" id="p3d-stats"></div>
       <div class="p3d-chart-wrap">

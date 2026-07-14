@@ -18,6 +18,8 @@ const PALETTE = ['#4ee0c1', '#5b8cff', '#f4a63b', '#e2679a', '#9b7ff0', '#3fbf6f
 
 const COL = { brand: '品牌', model: '型号', sku: '商品ID', price: '价格', pmCadr: '颗粒物CADR', hchoCadr: '甲醛CADR', url: '商品链接' };
 const REQUIRED = Object.values(COL);
+// 销售额/销量是可选列——旧表格没有这两列也能正常导入，只是气泡在这两个维度下会显示为 0
+const COL_OPT = { sales: '5-6月销售额', qty: '5-6月销量' };
 
 const num = (v) => {
   const n = Number(String(v ?? '').replace(/[^\d.\-]/g, ''));
@@ -62,6 +64,7 @@ class Preview3DStore {
       products.push({
         sku, brand, model: String(r[COL.model] || '').trim(),
         price: num(r[COL.price]), pmCadr: num(r[COL.pmCadr]), hchoCadr: num(r[COL.hchoCadr]),
+        sales: num(r[COL_OPT.sales]), qty: num(r[COL_OPT.qty]),
         url: String(r[COL.url] || '').trim()
       });
     }

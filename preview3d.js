@@ -1,11 +1,19 @@
 /* ═══════════════════════════════════════════════════════════
    preview3d.js — 竞品 3D 预览
-   价格 × 颗粒物CADR × 甲醛CADR 三个轴摆开，气泡大小是性价比
-   （两项 CADR 之和 / 价格），点开就是商品链接。
+   价格 × 颗粒物CADR × 甲醛CADR 三个轴摆开，气泡大小可以在
+   「性价比 / 5-6月销售额 / 5-6月销量」三种口径之间切换——
+   三个轴的空间已经占满了，销售表现这两项新数据改用气泡大小
+   来承载，而不是硬塞成第四根轴。
    ═══════════════════════════════════════════════════════════ */
 const Preview3D = (() => {
-  let A, data = null, chart = null, ro = null;
+  let A, data = null, chart = null, ro = null, sizeMode = 'costEff';
   const hidden = new Set();   // 被隐藏（取消勾选）的品牌
+
+  const SIZE_MODES = {
+    costEff: { label: '性价比', calc: (p) => (p.price > 0 ? ((p.pmCadr + p.hchoCadr) / p.price) * 1000 : 0), fmt: (v) => v.toFixed(1), hint: '气泡越大，性价比（两项CADR之和 / 价格）越高。' },
+    sales: { label: '销售额', calc: (p) => p.sales || 0, fmt: (v) => `¥${Math.round(v).toLocaleString()}`, hint: '气泡越大，5-6月销售额越高。' },
+    qty: { label: '销量', calc: (p) => p.qty || 0, fmt: (v) => Math.round(v).toLocaleString(), hint: '气泡越大，5-6月销量越高。' }
+  };
 
   async function call(url, opts) {
     const r = A.guard(await fetch(url, opts));
@@ -26,19 +34,25 @@ const Preview3D = (() => {
   };
 
   function buildOption() {
+    const mode = SIZE_MODES[sizeMode];
     const all = data.products.filter((p) => p.price > 0).map(withCostEff);
     const shown = all.filter((p) => !hidden.has(p.brand));
-    const effs = shown.map((p) => p.costEff);
-    const lo = Math.min(...effs, 0), hi = Math.max(...effs, 1);
+    const vals = shown.map((p) => mode.calc(p));
+    const lo = Math.min(...vals, 0), hi = Math.max(...vals, 1);
     const size = (v) => 15 + Math.sqrt(Math.max(0, (v - lo) / ((hi - lo) || 1))) * 34;
 
     const points = shown.map((p) => ({
       name: `${p.brand} ${p.model}`,
       value: [p.price, p.pmCadr, p.hchoCadr],
       brand: p.brand, model: p.model, price: p.price, pmCadr: p.pmCadr, hchoCadr: p.hchoCadr,
-      costEff: p.costEff, url: p.url,
+      costEff: p.costEff, sales: p.sales || 0, qty: p.qty || 0, url: p.url,
       itemStyle: { color: p.color, opacity: 0.9 },
-      symbolSize: size(p.costEff)
+      symbolSize: size(mode.calc(p)),
+      label: {
+        show: true, formatter: p.brand, position: 'top', distance: 6,
+        color: '#e9eef8', fontSize: 11, fontWeight: 600,
+        textBorderColor: '#0b1220', textBorderWidth: 2.5
+      }
     }));
 
     return {
@@ -52,7 +66,9 @@ const Preview3D = (() => {
             <div class="p3d-tip-row"><span>价格</span><b>¥${d.price.toLocaleString()}</b></div>
             <div class="p3d-tip-row"><span>颗粒物 CADR</span><b>${d.pmCadr.toLocaleString()}</b></div>
             <div class="p3d-tip-row"><span>甲醛 CADR</span><b>${d.hchoCadr.toLocaleString()}</b></div>
-            <div class="p3d-tip-row"><span>性价比指数</span><b>${d.costEff.toFixed(1)}</b></div>
+            <div class="p3d-tip-row${sizeMode === 'costEff' ? ' cur' : ''}"><span>性价比指数${sizeMode === 'costEff' ? ' ●' : ''}</span><b>${d.costEff.toFixed(1)}</b></div>
+            <div class="p3d-tip-row${sizeMode === 'sales' ? ' cur' : ''}"><span>5-6月销售额${sizeMode === 'sales' ? ' ●' : ''}</span><b>¥${Math.round(d.sales).toLocaleString()}</b></div>
+            <div class="p3d-tip-row${sizeMode === 'qty' ? ' cur' : ''}"><span>5-6月销量${sizeMode === 'qty' ? ' ●' : ''}</span><b>${Math.round(d.qty).toLocaleString()}</b></div>
             ${d.url ? '<div class="p3d-tip-link">点击气泡跳转商品页 ↗</div>' : ''}
           </div>`;
         },
@@ -83,8 +99,7 @@ const Preview3D = (() => {
         type: 'scatter3D',
         data: points,
         symbol: 'circle',
-        emphasis: { itemStyle: { opacity: 1, borderWidth: 1.5, borderColor: '#fff' } },
-        label: { show: false }
+        emphasis: { itemStyle: { opacity: 1, borderWidth: 1.5, borderColor: '#fff' } }
       }]
     };
   }
@@ -138,6 +153,27 @@ const Preview3D = (() => {
       c.querySelector('span').textContent = k;
       bar.appendChild(c);
     });
+  }
+
+  function renderSizeMode() {
+    const box = A.$('#p3d-sizemode');
+    if (!box) return;
+    [...box.children].forEach((btn) => btn.classList.toggle('on', btn.dataset.mode === sizeMode));
+    const hint = A.$('#p3d-sizehint');
+    if (hint) hint.textContent = `三根轴分别是价格、颗粒物CADR、甲醛CADR；${SIZE_MODES[sizeMode].hint}拖动可旋转视角，滚轮缩放，点气泡跳转商品页。`;
+  }
+
+  function setSizeMode(mode) {
+    if (mode === sizeMode || !SIZE_MODES[mode]) return;
+    sizeMode = mode;
+    if (mode !== 'costEff' && data && data.products.length) {
+      const shown = data.products.filter((p) => !hidden.has(p.brand));
+      if (shown.length && shown.every((p) => !(p[mode] || SIZE_MODES[mode].calc(p)))) {
+        A.toast(`当前数据没有${SIZE_MODES[mode].label}信息，气泡都会显示为最小——重新导入含该列的表格即可`, 'bad');
+      }
+    }
+    renderSizeMode();
+    render();
   }
 
   /* ── 侧栏：导入与品牌筛选 ─────────────────────────────── */
@@ -213,6 +249,12 @@ const Preview3D = (() => {
     });
 
     A.$('#p3d-show-all').onclick = () => { hidden.clear(); render(); renderRail(); };
+
+    A.$('#p3d-sizemode').onclick = (e) => {
+      const btn = e.target.closest('button[data-mode]');
+      if (btn) setSizeMode(btn.dataset.mode);
+    };
+    renderSizeMode();
   }
 
   return { init, refresh, render, onShow };
