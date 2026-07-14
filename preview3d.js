@@ -1,9 +1,12 @@
 /* ═══════════════════════════════════════════════════════════
    preview3d.js — 竞品 3D 预览
-   颗粒物CADR × 价格 × 甲醛CADR 三个轴摆开，气泡大小可以在
-   「性价比 / 5-6月销售额 / 5-6月销量」三种口径之间切换——
-   三个轴的空间已经占满了，销售表现这两项新数据改用气泡大小
-   来承载，而不是硬塞成第四根轴。
+   价格摆在竖直方向（视觉纵轴），水平面两个方向分别是颗粒物CADR、
+   甲醛CADR。注意 ECharts-GL 的 3D 坐标系里，视觉上"竖起来"的
+   那根轴技术上其实是 zAxis3D，xAxis3D/yAxis3D 才是水平面的两个
+   方向——这里特意把「价格」配置给 zAxis3D，不要被技术轴名误导。
+   气泡大小可以在「性价比 / 5-6月销售额 / 5-6月销量」三种口径
+   之间切换：三个轴的空间已经占满了，销售表现这两项新数据改用
+   气泡大小来承载，而不是硬塞成第四根轴。
    ═══════════════════════════════════════════════════════════ */
 const Preview3D = (() => {
   let A, data = null, chart = null, ro = null, sizeMode = 'costEff', autoRotate = true;
@@ -43,7 +46,7 @@ const Preview3D = (() => {
 
     const points = shown.map((p) => ({
       name: `${p.brand} ${p.model}`,
-      value: [p.pmCadr, p.price, p.hchoCadr],
+      value: [p.pmCadr, p.hchoCadr, p.price],
       brand: p.brand, model: p.model, price: p.price, pmCadr: p.pmCadr, hchoCadr: p.hchoCadr,
       costEff: p.costEff, sales: p.sales || 0, qty: p.qty || 0, url: p.url,
       itemStyle: { color: p.color, opacity: 0.9 },
@@ -64,8 +67,8 @@ const Preview3D = (() => {
             <div class="p3d-tip-head" style="color:${d.itemStyle.color}">${esc(d.brand)}</div>
             <div class="p3d-tip-model">${esc(d.model)}</div>
             <div class="p3d-tip-row"><span>颗粒物 CADR</span><b>${d.pmCadr.toLocaleString()}</b></div>
-            <div class="p3d-tip-row"><span>价格</span><b>¥${d.price.toLocaleString()}</b></div>
             <div class="p3d-tip-row"><span>甲醛 CADR</span><b>${d.hchoCadr.toLocaleString()}</b></div>
+            <div class="p3d-tip-row"><span>价格</span><b>¥${d.price.toLocaleString()}</b></div>
             <div class="p3d-tip-row${sizeMode === 'costEff' ? ' cur' : ''}"><span>性价比指数${sizeMode === 'costEff' ? ' ●' : ''}</span><b>${d.costEff.toFixed(1)}</b></div>
             <div class="p3d-tip-row${sizeMode === 'sales' ? ' cur' : ''}"><span>5-6月销售额${sizeMode === 'sales' ? ' ●' : ''}</span><b>¥${Math.round(d.sales).toLocaleString()}</b></div>
             <div class="p3d-tip-row${sizeMode === 'qty' ? ' cur' : ''}"><span>5-6月销量${sizeMode === 'qty' ? ' ●' : ''}</span><b>${Math.round(d.qty).toLocaleString()}</b></div>
@@ -76,8 +79,8 @@ const Preview3D = (() => {
         extraCssText: 'box-shadow:0 20px 44px -18px #000;border-radius:10px;'
       },
       xAxis3D: { type: 'value', name: '颗粒物 CADR', min: 0, ...AXIS },
-      yAxis3D: { type: 'value', name: '价格 (¥)', min: 0, ...AXIS },
-      zAxis3D: { type: 'value', name: '甲醛 CADR', min: 0, ...AXIS },
+      yAxis3D: { type: 'value', name: '甲醛 CADR', min: 0, ...AXIS },
+      zAxis3D: { type: 'value', name: '价格 (¥)', min: 0, ...AXIS },
       grid3D: {
         boxWidth: 100, boxHeight: 76, boxDepth: 76,
         environment: 'transparent',
@@ -160,7 +163,7 @@ const Preview3D = (() => {
     if (!box) return;
     [...box.children].forEach((btn) => btn.classList.toggle('on', btn.dataset.mode === sizeMode));
     const hint = A.$('#p3d-sizehint');
-    if (hint) hint.textContent = `X轴颗粒物CADR、Y轴价格、Z轴甲醛CADR；${SIZE_MODES[sizeMode].hint}滚轮缩放，点气泡跳转商品页${autoRotate ? '，拖动可临时接管视角' : '，拖动旋转视角'}。`;
+    if (hint) hint.textContent = `纵轴（竖直方向）是价格，水平面两个方向分别是颗粒物CADR、甲醛CADR；${SIZE_MODES[sizeMode].hint}滚轮缩放，点气泡跳转商品页${autoRotate ? '，拖动可临时接管视角' : '，拖动旋转视角'}。`;
   }
 
   function setSizeMode(mode) {

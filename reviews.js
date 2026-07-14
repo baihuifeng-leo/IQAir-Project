@@ -36,8 +36,10 @@ const Reviews = (() => {
    * 原文溯源浮层。term 给了就是关键词云那种"这个词在哪些原文里"；
    * 不给 term、只给 aspect（或都不给）就是"这个维度/这个品牌的所有差评句"——
    * 统计卡片和维度总览的差评段悬浮用这种。
+   * brandId 不传时跟着当前选中的品牌筛选（activeBrand）；热力图每个格子
+   * 本来就对应固定的一行品牌，跟 activeBrand 无关，所以要显式传进来覆盖。
    */
-  function showTip(anchor, { term = '', aspect = '', polarity, label }) {
+  function showTip(anchor, { term = '', aspect = '', polarity, label, brandId }) {
     clearTimeout(tipTimer);
     tipTimer = setTimeout(async () => {
       hideTip();
@@ -55,7 +57,7 @@ const Reviews = (() => {
       requestAnimationFrame(() => tipBox.classList.add('in'));
 
       try {
-        const q = new URLSearchParams({ term, aspect, polarity, brand: activeBrand });
+        const q = new URLSearchParams({ term, aspect, polarity, brand: brandId !== undefined ? brandId : activeBrand });
         const rows = await call('/api/reviews/keyword?' + q);
         if (!tipBox) return;
         tipBox.querySelector('.kw-tip-head span').textContent = `${rows.length} 条原文 · 按「有用」排序`;
@@ -259,7 +261,7 @@ const Reviews = (() => {
   function heatmap() {
     const sec = document.createElement('section');
     sec.className = 'rv-sec';
-    sec.innerHTML = `<h2>品牌 × 维度</h2><p class="rv-sub">颜色越红，这个维度被吐槽的差评句数越多（按绝对数量，不是占比）；格子里大字是差评句数，小字左边 <i class="n-pos">绿字</i> 是好评句数、右边 <i class="n-neg">红字</i> 是差评占比。</p>`;
+    sec.innerHTML = `<h2>品牌 × 维度</h2><p class="rv-sub">颜色越红，这个维度被吐槽的差评句数越多（按绝对数量，不是占比）；格子里大字是差评句数，小字左边 <i class="n-pos">绿字</i> 是好评句数、右边 <i class="n-neg">红字</i> 是差评占比。鼠标停在有差评的格子上可以直接看差评原句。</p>`;
 
     const aspects = ASPECT_ORDER.filter((a) => data.aspects[a]);
     const grid = document.createElement('div');
@@ -293,7 +295,15 @@ const Reviews = (() => {
         // 开个 0.55 次方把低段拉开，1.0（全场差评最多）和 0（没有差评）两端不受影响
         c.style.setProperty('--heat', (maxNeg ? Math.pow(v.neg / maxNeg, 0.55) : 0).toFixed(3));
         c.innerHTML = `<b>${v.neg}</b><span><i class="n-pos">${v.pos}</i>·<i class="n-neg">${Math.round(rate * 100)}%</i></span>`;
-        c.title = `${b.name} · ${a}\n差评 ${v.neg} 句 · 好评 ${v.pos} 句 · 差评率 ${Math.round(rate * 100)}%`;
+        if (v.neg > 0) {
+          // 有差评句才值得悬浮看原文——鼠标停在格子上直接看这个品牌在这个维度上具体被怎么吐槽的
+          c.classList.add('hoverable');
+          const tip = () => showTip(c, { aspect: a, polarity: 'neg', brandId: b.id, label: `${b.name} · ${a} · 差评句` });
+          c.addEventListener('mouseenter', tip);
+          c.addEventListener('mouseleave', hideTip);
+        } else {
+          c.title = `${b.name} · ${a}\n差评 0 句 · 好评 ${v.pos} 句`;
+        }
         grid.appendChild(c);
       });
     });
