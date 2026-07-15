@@ -87,11 +87,11 @@
     </aside>
 
     <div class="canvas paper" id="matrix-canvas">
-      <div class="paper-head">
-        <h1 contenteditable="plaintext-only" data-bind="matrix.title"></h1>
-        <p contenteditable="plaintext-only" data-bind="matrix.subtitle"></p>
-      </div>
-      <div class="matrix-toolbar">
+      <div class="paper-head matrix-head">
+        <div class="matrix-head-text">
+          <h1 contenteditable="plaintext-only" data-bind="matrix.title"></h1>
+          <p contenteditable="plaintext-only" data-bind="matrix.subtitle"></p>
+        </div>
         <button class="ghost" id="matrix-export-btn">⭳ 导出 PNG（16:9）</button>
       </div>
       <div class="matrix-scroll">

@@ -107,7 +107,11 @@ const Matrix = (() => {
 
     const dot = document.createElement('button');
     dot.className = 'dot'; dot.title = '选择分类';
-    dot.onclick = (e) => { e.stopPropagation(); openTagMenu(e.currentTarget, [p.id]); };
+    // 跟拖拽整批移动（idsInFlight）同样的道理：这张卡片如果本来就在
+    // 多选选区里，点它自己的改分类按钮也该对整批生效，不能只改这一个——
+    // 不然用户框选一堆卡片后随手点其中一张的分类按钮，会发现只有点到
+    // 的那张变了色，其余选中的都没变，很容易被当成"批量改分类坏了"。
+    dot.onclick = (e) => { e.stopPropagation(); openTagMenu(e.currentTarget, idsInFlight(p.id)); };
 
     const it = document.createElement('button');
     it.textContent = 'I'; it.title = '斜体'; it.style.fontStyle = 'italic';
@@ -610,6 +614,7 @@ const Matrix = (() => {
     markScalableGroup(origHead, head, 'h1, p');
     markScalableGroup(origLegend, legend, 'span');
 
+    head.querySelector('#matrix-export-btn')?.remove(); // 按钮现在跟标题同一行，克隆时得摘掉，不然会截进图里
     head.querySelectorAll('[contenteditable]').forEach((el) => { el.contentEditable = 'false'; });
     grid.querySelectorAll('.chip-tools, .addhere, .addrow, .addline, .kill, .mx-brand .kill').forEach((el) => el.remove());
     grid.querySelectorAll('.chip').forEach((el) => el.classList.remove('sel', 'dragging'));
@@ -619,40 +624,44 @@ const Matrix = (() => {
     wrap.style.cssText = 'position:fixed; left:-99999px; top:0; width:max-content; background:#fdfaf3;';
     wrap.append(head, grid, legend);
     document.body.appendChild(wrap);
-    return { wrap, grid };
+    return { wrap, head, grid, legend };
   }
 
   /**
-   * 先挑字号、再调列宽，两个旋钮一起找一个能塞进 16:9 的方案：
+   * 先挑字号、再调列宽，两个旋钮一起找一个能让"表格主体"塞进合适
+   * 比例的方案：
    *   1. 从最大字号挡位试起，每挡字号下都用列宽收窄去够比例——
    *      字号不变时收窄列宽是唯一能让内容变"瘦"的办法。
-   *   2. 收到 COL_MIN 还是比 16:9 宽，说明这挡字号放不下，降一挡重试。
-   *   3. 找到能装下的字号后，如果内容反而比 16:9 更瘦高（品牌少、
+   *   2. 收到 COL_MIN 还是比目标宽，说明这挡字号放不下，降一挡重试。
+   *   3. 找到能装下的字号后，如果内容反而比目标更瘦高（品牌少、
    *      价格带多），再把列宽放宽一点，让图更"扁"，减少留白。
+   * 这里的"目标比例"不是直接的 16:9——标题和图例最后会完整绘制、
+   * 不参与裁切（它们只出现一次，哪怕只裁掉一点点也是整段消失，
+   * 跟裁一点表格边缘完全不是一个风险等级），所以表格主体分到的
+   * 高度要先把标题+图例预留掉的那部分扣掉，算出的目标会比 16:9
+   * 略"宽"一点，这样表格主体和标题图例的高度加起来才正好是 16:9。
    * 返回值只用来决定导出后的提示文案。
    */
-  function fitScaleAndColumns(wrap, grid) {
+  function fitScaleAndColumns(wrap, head, grid, legend) {
     const brands = M().brands.length;
     if (!brands) return { adjusted: false, scale: 1 };
-    const target = EXPORT_W / EXPORT_H;
     const setCols = (w) => { grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`; };
     const aspect = () => grid.scrollWidth / grid.scrollHeight;
+    const gridTarget = () => {
+      const s = EXPORT_W / grid.scrollWidth;
+      const extraH = (head.scrollHeight + legend.scrollHeight) * s;
+      return EXPORT_W / Math.max(1, EXPORT_H - extraH);
+    };
 
-    // 字号一放大，价格带里堆叠的产品卡片会让整块内容变得又高又窄——
-    // 光靠"太宽就收窄列宽"应付不了这种情况，收窄反而会让换行更多、
-    // 更高，越收越糟。所以这一档字号站不站得住，得看收窄/放宽列宽
-    // 两头都试过之后宽高比能不能落回 16:9 附近（放宽到 ±15%——最后
-    // 拉伸铺满这点残差基本看不出来，换来字号能明显更大是值得的），
-    // 两头都够不着就说明这挡字号太大，退一档再试；scale=1 兜底，
-    // 退回到跟原来一样能稳定工作的效果。
     let scale = FONT_SCALE_MAX, w = COL_START;
     for (;;) {
       applyFontScale(wrap, scale);
       w = COL_START;
       setCols(w);
-      while (w > COL_MIN && aspect() > target * 1.08) { w -= COL_STEP; setCols(w); }
-      while (w < COL_MAX && aspect() < target * 0.92) { w += COL_STEP; setCols(w); }
-      if ((aspect() >= target * 0.85 && aspect() <= target * 1.15) || scale <= FONT_SCALE_MIN + 1e-9) break;
+      let target = gridTarget();
+      while (w > COL_MIN && aspect() > target * 1.08) { w -= COL_STEP; setCols(w); target = gridTarget(); }
+      while (w < COL_MAX && aspect() < target * 0.92) { w += COL_STEP; setCols(w); target = gridTarget(); }
+      if ((aspect() >= target * 0.92 && aspect() <= target * 1.08) || scale <= FONT_SCALE_MIN + 1e-9) break;
       scale = +(scale - FONT_SCALE_STEP).toFixed(2);
     }
 
@@ -666,7 +675,7 @@ const Matrix = (() => {
     let clone;
     try {
       clone = buildExportClone();
-      const fit = fitScaleAndColumns(clone.wrap, clone.grid);
+      const fit = fitScaleAndColumns(clone.wrap, clone.head, clone.grid, clone.legend);
 
       const shot = await html2canvas(clone.wrap, { backgroundColor: '#fdfaf3', scale: 2, useCORS: true, logging: false });
 
@@ -677,9 +686,14 @@ const Matrix = (() => {
       ctx.imageSmoothingQuality = 'high';
       ctx.fillStyle = '#fdfaf3';
       ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
-      // 第一步已经把内容比例带到很接近 16:9 了，这里直接拉伸铺满画布，
-      // 不再等比缩放+居中留白——剩下的形变幅度很小，肉眼基本看不出来
-      ctx.drawImage(shot, 0, 0, shot.width, shot.height, 0, 0, EXPORT_W, EXPORT_H);
+      // 等比缩放，取能让内容完整装进画布的那个缩放系数（不裁任何
+      // 东西）——宁可留一点点边，也不能拉伸变形或裁掉标题/表头/
+      // 数据。留出来的边用背景色天然融合（跟画布底色一致），基本
+      // 看不出来：字号+列宽搜索已经把内容比例带到接近 16:9 了，
+      // 残差很小，不会是那种大片违和的空白。
+      const fitScale = Math.min(EXPORT_W / shot.width, EXPORT_H / shot.height);
+      const drawW = shot.width * fitScale, drawH = shot.height * fitScale;
+      ctx.drawImage(shot, 0, 0, shot.width, shot.height, (EXPORT_W - drawW) / 2, (EXPORT_H - drawH) / 2, drawW, drawH);
 
       const blob = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
       const a = document.createElement('a');

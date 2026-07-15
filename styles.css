@@ -242,8 +242,11 @@ select#own-brand {
 .compare-head { border-left: 5px solid var(--dis); padding-left: 14px; margin-left: -4px; }
 
 /* ── 沙盘矩阵 ─────────────────────────────────────────── */
-.matrix-toolbar { flex: 0 0 auto; display: flex; justify-content: flex-end; margin-bottom: 10px; }
-.matrix-toolbar button[disabled] { opacity: 0.55; cursor: wait; }
+/* 导出按钮跟标题挤在同一行，省掉单独一行工具条的高度，正文可视区域更大 */
+.matrix-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.matrix-head-text { min-width: 0; }
+.matrix-head #matrix-export-btn { flex: 0 0 auto; margin-top: 2px; }
+.matrix-head #matrix-export-btn[disabled] { opacity: 0.55; cursor: wait; }
 .matrix-scroll { flex: 1; overflow: auto; padding-bottom: 6px; }
 .matrix { display: grid; gap: 1px; background: var(--hair); border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; min-width: max-content; }
 
