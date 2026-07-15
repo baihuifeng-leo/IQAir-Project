@@ -94,12 +94,15 @@ const Preview3D = (() => {
       symbolSize: size(mode.calc(p)),
       // 标题颜色跟着气泡自己的品牌色走，不再统一用一个灰白色——
       // 之前气泡五颜六色、标题却都是一个色，看着是两张皮；换成
-      // 等宽字体 + 品牌色 + 轻微同色发光，标题和气泡才像一个整体。
+      // 等宽字体 + 品牌色，标题和气泡才像一个整体。
+      // 试过再加 textShadowBlur 做"发光"，Canvas 2D 画多行文字时
+      // 阴影会跟粗描边糊成一整块实心矩形，跟 tooltip 那种 CSS 阴影
+      // 完全是两个效果（CSS 是精细的发光描边，Canvas 的 shadowBlur
+      // 是对整个绘制路径做模糊扩散）——这条路走不通，去掉了。
       label: {
         show: true, formatter: `${p.brand}\n${p.model}`, position: 'top', distance: 7 * scale, lineHeight: 15 * scale,
         color: labelColor(p.color), fontFamily: FONT_MONO, fontSize: 11.5 * scale, fontWeight: 600,
-        textBorderColor: '#0b1220', textBorderWidth: 2.5,
-        textShadowColor: p.color, textShadowBlur: 6
+        textBorderColor: '#0b1220', textBorderWidth: 2.5
       }
     }));
 
