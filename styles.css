@@ -614,6 +614,14 @@ select#own-brand {
 .uacts { display: flex; align-items: center; gap: 6px; }
 .uacts .kill { opacity: 1; background: #ffffff0c; color: var(--dimmer); }
 
+.st-list { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
+.st-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 4px;
+  border-bottom: 1px solid var(--line-soft); cursor: pointer; font-size: 13.5px;
+}
+.st-row:last-child { border-bottom: 0; }
+.st-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--mint); cursor: pointer; }
+
 input.pin {
   width: 96px; background: #060a12; border: 1px solid var(--line); color: var(--text);
   padding: 6px 9px; border-radius: 7px; font-family: var(--f-mono); letter-spacing: 3px;

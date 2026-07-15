@@ -100,7 +100,8 @@ async function loadUsers() {
   }
 }
 const saveUsers = () => writeAtomic(USERS_FILE, JSON.stringify(users, null, 1));
-const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin });
+const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [] });
+const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports'];
 
 /* ═══ 文档：每份独立 rev，冲突走三方合并 ═════════════════ */
 /* ═══ 变更日志：JSONL 追加写，超过 8MB 轮转一次 ═════════ */
@@ -351,7 +352,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'PATCH') {
         const isSelf = u.id === me.id;
         if (!isSelf && !me.admin) return json(res, 403, { error: '只能改自己的 PIN' });
-        const { pin, name, admin } = await body(req, 4096);
+        const { pin, name, admin, hiddenModules } = await body(req, 4096);
         if (pin !== undefined) {
           if (!validPin(pin)) return json(res, 400, { error: 'PIN 必须是 6 位数字' });
           u.pin = hashPin(pin);
@@ -367,13 +368,22 @@ const server = http.createServer(async (req, res) => {
           if (u.id === me.id && !admin) return json(res, 400, { error: '不能取消自己的管理员身份' });
           u.admin = !!admin;
         }
+        // 界面显示偏好，只能改自己的——就算是管理员也不能帮别人关模块，这跟账号安全无关
+        if (hiddenModules !== undefined) {
+          if (!isSelf) return json(res, 403, { error: '只能改自己的显示设置' });
+          if (!Array.isArray(hiddenModules) || hiddenModules.some((m) => !MODULES.includes(m))) {
+            return json(res, 400, { error: '模块列表不对' });
+          }
+          if (hiddenModules.length >= MODULES.length) return json(res, 400, { error: '至少要留一个模块显示' });
+          u.hiddenModules = hiddenModules;
+        }
         await saveUsers();
         announcePresence();
         const what = [];
         if (pin !== undefined) what.push(u.id === me.id ? '改了自己的 PIN' : `重置了「${u.name}」的 PIN`);
         if (name !== undefined) what.push(`改名为「${u.name}」`);
         if (admin !== undefined) what.push(`${u.name} ${u.admin ? '设为' : '取消'}管理员`);
-        audit(me, 'user.update', { detail: what });
+        if (what.length) audit(me, 'user.update', { detail: what }); // hiddenModules 是个人偏好，不进变更日志
         return json(res, 200, pubUser(u));
       }
 

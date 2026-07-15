@@ -3,6 +3,7 @@
    ═══════════════════════════════════════════════════════════ */
 const App = (() => {
   const DOCS = ['matrix', 'compare'];
+  const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports'];
   let state = { matrix: null, compare: null };
   let base = {};   // 上一次和服务器对齐的版本，合并时当共同祖先
   let revs = {};
@@ -342,9 +343,25 @@ const App = (() => {
   /* ── 视图 ───────────────────────────────────────────── */
   function moveInk() {
     const a = $('.tab.is-active'), ink = $('.tab-ink');
+    if (!a) return; // 当前 view 对应的 tab 被用户自己隐藏了，下划线先不画，go() 马上会切到别的 tab
     ink.style.left = a.offsetLeft + 12 + 'px';
     ink.style.width = a.offsetWidth - 24 + 'px';
   }
+
+  /**
+   * 每个用户自己的模块显示偏好（settings.js 管）。隐藏的模块直接不出现在
+   * 顶栏标签里——如果正好隐藏了当前正在看的模块，自动跳到第一个还显示的。
+   */
+  function refreshModuleVisibility() {
+    const hidden = new Set(me?.hiddenModules || []);
+    $$('.tab').forEach((t) => { t.hidden = hidden.has(t.dataset.view); });
+    moveInk();
+    if (hidden.has(view)) {
+      const next = MODULES.find((k) => !hidden.has(k));
+      if (next) go(next);
+    }
+  }
+
   function go(next) {
     view = next;
     $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.view === next));
@@ -469,6 +486,7 @@ const App = (() => {
         const act = b.dataset.act;
 
         if (act === 'users') Users.open();
+        if (act === 'settings') Settings.open();
         if (act === 'logs') Admin.openLogs();
         if (act === 'backups') Admin.openBackups();
 
@@ -543,6 +561,7 @@ const App = (() => {
     Report.init(api);
     Users.init(api);
     Admin.init(api);
+    Settings.init(api);
     bindTitles();
     renderAll();
     wireRails();
@@ -550,8 +569,12 @@ const App = (() => {
     $$('.tab').forEach((t) => (t.onclick = () => go(t.dataset.view)));
     $('#btn-edit').onclick = () => setEditing(!editing);
     setEditing(localStorage.getItem('wb.editing') === '1');
+    refreshModuleVisibility();
     const hash = location.hash.slice(1);
-    go(['compare', 'reviews', 'preview3d', 'reports'].includes(hash) ? hash : 'matrix');
+    const hiddenSet = new Set(me.hiddenModules || []);
+    let target = ['compare', 'reviews', 'preview3d', 'reports'].includes(hash) ? hash : 'matrix';
+    if (hiddenSet.has(target)) target = MODULES.find((k) => !hiddenSet.has(k)) || 'matrix';
+    go(target);
     window.addEventListener('resize', moveInk);
 
     $('#btn-undo').onclick = undo;
@@ -578,7 +601,7 @@ const App = (() => {
     get state() { return state; },
     get me() { return me; },
     view: () => view,
-    peek, lightbox, isEditing,
+    peek, lightbox, isEditing, refreshModuleVisibility,
     $, $$, uid, clone, toast, save, mark, trackable, bindInput, mkKill, uploadImage, renderAll, guard
   };
 
