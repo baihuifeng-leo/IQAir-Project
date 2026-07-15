@@ -617,7 +617,15 @@ const Matrix = (() => {
     head.querySelector('#matrix-export-btn')?.remove(); // 按钮现在跟标题同一行，克隆时得摘掉，不然会截进图里
     head.querySelectorAll('[contenteditable]').forEach((el) => { el.contentEditable = 'false'; });
     grid.querySelectorAll('.chip-tools, .addhere, .addrow, .addline, .kill, .mx-brand .kill').forEach((el) => el.remove());
-    grid.querySelectorAll('.chip').forEach((el) => el.classList.remove('sel', 'dragging'));
+    grid.querySelectorAll('.chip').forEach((el) => {
+      el.classList.remove('sel', 'dragging');
+      // .chip 自带一个 0.3s 的进场动画（从透明淡入），cloneNode 出来的
+      // 是全新节点，重新插入文档后浏览器会把这个动画重新播放一遍——
+      // html2canvas 如果刚好在动画播放到一半时截图，画面就会是"整体
+      // 蒙了一层"的半透明状态，这就是反馈里"灰蒙蒙像罩了层东西"的
+      // 真正原因。导出的是静态快照，不需要这个动画，直接关掉。
+      el.style.animation = 'none';
+    });
 
     const wrap = document.createElement('div');
     wrap.className = 'paper matrix-export-shot';
