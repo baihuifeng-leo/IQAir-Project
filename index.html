@@ -90,6 +90,9 @@
         <h1 contenteditable="plaintext-only" data-bind="matrix.title"></h1>
         <p contenteditable="plaintext-only" data-bind="matrix.subtitle"></p>
       </div>
+      <div class="matrix-toolbar">
+        <button class="ghost" id="matrix-export-btn">⭳ 导出 PNG（16:9）</button>
+      </div>
       <div class="matrix-scroll">
         <div class="matrix" id="matrix"></div>
       </div>
@@ -224,6 +227,7 @@
             <button data-mode="sales">气泡＝销售额</button>
             <button data-mode="qty">气泡＝销量</button>
           </div>
+          <button class="ghost" id="p3d-fullscreen" title="全屏查看，内部元素自动放大">⛶ 全屏</button>
         </div>
       </div>
       <div class="p3d-stats" id="p3d-stats"></div>
@@ -413,6 +417,7 @@
 
 <script src="/echarts.min.js"></script>
 <script src="/echarts-gl.min.js"></script>
+<script src="/html2canvas.min.js"></script>
 <script src="/core.js"></script>
 <script src="/users.js"></script>
 <script src="/admin.js"></script>

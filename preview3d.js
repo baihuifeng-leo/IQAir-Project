@@ -9,7 +9,7 @@
    气泡大小来承载，而不是硬塞成第四根轴。
    ═══════════════════════════════════════════════════════════ */
 const Preview3D = (() => {
-  let A, data = null, chart = null, ro = null, sizeMode = 'costEff', autoRotate = true;
+  let A, data = null, chart = null, ro = null, sizeMode = 'costEff', autoRotate = true, fullscreenOn = false;
   const hidden = new Set();   // 被隐藏（取消勾选）的品牌
 
   const SIZE_MODES = {
@@ -28,13 +28,13 @@ const Preview3D = (() => {
   const withCostEff = (p) => ({ ...p, costEff: p.price > 0 ? ((p.pmCadr + p.hchoCadr) / p.price) * 1000 : 0 });
 
   /* ── 图表配置 ───────────────────────────────────────── */
-  const AXIS = {
+  const axisStyle = (scale) => ({
     axisLine: { lineStyle: { color: '#33456a' } },
     splitLine: { lineStyle: { color: '#17203292' } },
-    axisLabel: { color: '#79879f', fontSize: 11 },
-    nameTextStyle: { color: '#e9eef8', fontSize: 12.5, fontWeight: 600, padding: [0, 0, 0, 0] },
+    axisLabel: { color: '#79879f', fontSize: 11 * scale },
+    nameTextStyle: { color: '#e9eef8', fontSize: 12.5 * scale, fontWeight: 600, padding: [0, 0, 0, 0] },
     axisPointer: { lineStyle: { color: '#4ee0c1' } }
-  };
+  });
 
   function buildOption() {
     const mode = SIZE_MODES[sizeMode];
@@ -42,7 +42,11 @@ const Preview3D = (() => {
     const shown = all.filter((p) => !hidden.has(p.brand));
     const vals = shown.map((p) => mode.calc(p));
     const lo = Math.min(...vals, 0), hi = Math.max(...vals, 1);
-    const size = (v) => 15 + Math.sqrt(Math.max(0, (v - lo) / ((hi - lo) || 1))) * 34;
+    // 全屏是给「看细节」用的，光靠画布变大不够——气泡本身的基础大小和标签字号
+    // 也要跟着放大一档，不然占屏比例反而变小，越看越费劲
+    const scale = fullscreenOn ? 1.5 : 1;
+    const AXIS = axisStyle(scale);
+    const size = (v) => (15 + Math.sqrt(Math.max(0, (v - lo) / ((hi - lo) || 1))) * 34) * scale;
 
     const points = shown.map((p) => ({
       name: `${p.brand} ${p.model}`,
@@ -52,8 +56,8 @@ const Preview3D = (() => {
       itemStyle: { color: p.color, opacity: 0.9 },
       symbolSize: size(mode.calc(p)),
       label: {
-        show: true, formatter: `${p.brand}\n${p.model}`, position: 'top', distance: 6, lineHeight: 14,
-        color: '#e9eef8', fontSize: 11, fontWeight: 600,
+        show: true, formatter: `${p.brand}\n${p.model}`, position: 'top', distance: 6 * scale, lineHeight: 14 * scale,
+        color: '#e9eef8', fontSize: 11 * scale, fontWeight: 600,
         textBorderColor: '#0b1220', textBorderWidth: 2.5
       }
     }));
@@ -193,6 +197,29 @@ const Preview3D = (() => {
     render();
   }
 
+  /* ── 全屏：只对 .p3d-canvas 这个元素发起，rail 天然被排除在外，
+     不用额外写 CSS 去隐藏侧栏——这是 Fullscreen API 本身的语义 ── */
+  function renderFullscreenBtn() {
+    const btn = A.$('#p3d-fullscreen');
+    if (!btn) return;
+    btn.classList.toggle('on', fullscreenOn);
+    btn.textContent = fullscreenOn ? '⛶ 退出全屏' : '⛶ 全屏';
+  }
+
+  function toggleFullscreen() {
+    if (fullscreenOn) { document.exitFullscreen?.(); return; }
+    const el = A.$('.p3d-canvas');
+    if (!el?.requestFullscreen) { A.toast('这个浏览器不支持全屏 API', 'bad'); return; }
+    el.requestFullscreen().catch(() => A.toast('浏览器拒绝了全屏请求', 'bad'));
+  }
+
+  function onFullscreenChange() {
+    fullscreenOn = document.fullscreenElement === A.$('.p3d-canvas');
+    renderFullscreenBtn();
+    render();
+    requestAnimationFrame(() => chart && chart.resize());
+  }
+
   /* ── 侧栏：导入与品牌筛选 ─────────────────────────────── */
   function renderRail() {
     const list = A.$('#p3d-brands');
@@ -275,6 +302,10 @@ const Preview3D = (() => {
 
     A.$('#p3d-autorotate').onclick = () => setAutoRotate(!autoRotate);
     renderAutoRotateBtn();
+
+    A.$('#p3d-fullscreen').onclick = toggleFullscreen;
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    renderFullscreenBtn();
   }
 
   return { init, refresh, render, onShow };

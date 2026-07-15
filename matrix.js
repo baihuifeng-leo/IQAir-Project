@@ -9,6 +9,39 @@ const Matrix = (() => {
 
   const M = () => A.state.matrix;
   const colorOf = (tag) => (tag === 'default' || !M().tags[tag] ? M().defaultColor : M().tags[tag].color);
+  const hasTag = (tag) => tag !== 'default' && !!M().tags[tag];
+  // "新品" 不是写死的分类，是用户自己在分类编辑里建的——分类名里带"新品"或"new"
+  // 字样就自动在卡片上加显眼的 New 角标，不需要每个产品再单独标一次
+  const isNewTag = (tag) => hasTag(tag) && /新品|new/i.test(M().tags[tag].label || '');
+
+  /**
+   * 卡片改整体色块填充后，分类色可能很深也可能很浅，白字/深字必须跟着算，
+   * 不能像以前那样固定用深色文字——YIQ 亮度公式，>=150 判定为浅色底用深字。
+   * 未分类的产品保持原来的白卡片 + 深色文字，不整体填色：分类色块的意义
+   * 是让"有标记的产品"跳出来，如果连未分类的大多数产品也整片上色，
+   * 矩阵会变成一片色块，反而失去了辨识度。
+   */
+  function textOn(hex) {
+    const h = String(hex || '').replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16) || 0, g = parseInt(h.slice(2, 4), 16) || 0, b = parseInt(h.slice(4, 6), 16) || 0;
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 150
+      ? { main: '#161c28', dim: '#161c28b8', btnBg: 'rgba(22,28,40,.12)' }
+      : { main: '#fff', dim: '#ffffffbf', btnBg: 'rgba(255,255,255,.16)' };
+  }
+
+  /**
+   * 把 hex 颜色和黑色按比例混合，返回 rgb() 字符串——特意不用 CSS 的
+   * color-mix()：PNG 导出用的 html2canvas（2022 年的老库）不认识这个
+   * 函数，解析样式表时碰到就直接抛错、整个截图失败，用 JS 算出最终颜色
+   * 摆在行内变量里最省事，顺便还兼容更老的浏览器。
+   */
+  const mixWithBlack = (hex, pct) => {
+    const h = String(hex || '').replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16) || 0, g = parseInt(h.slice(2, 4), 16) || 0, b = parseInt(h.slice(4, 6), 16) || 0;
+    const f = pct / 100;
+    return `rgb(${Math.round(r * f)}, ${Math.round(g * f)}, ${Math.round(b * f)})`;
+  };
 
   /* ── 选区 ───────────────────────────────────────────── */
   function setSel(ids) { sel.clear(); ids.forEach((i) => sel.add(i)); paintSel(); }
@@ -23,10 +56,27 @@ const Matrix = (() => {
   /* ── 产品卡片 ───────────────────────────────────────── */
   function chip(p) {
     const el = document.createElement('div');
-    el.className = 'chip' + (p.italic ? ' i' : '') + (p.underline ? ' u' : '') + (sel.has(p.id) ? ' sel' : '');
-    el.style.setProperty('--chip', colorOf(p.tag));
+    const tagged = hasTag(p.tag);
+    el.className = 'chip' + (p.italic ? ' i' : '') + (p.underline ? ' u' : '') + (sel.has(p.id) ? ' sel' : '') + (tagged ? ' filled' : '');
+    const chipColor = colorOf(p.tag);
+    el.style.setProperty('--chip', chipColor);
+    if (tagged) {
+      const text = textOn(chipColor);
+      el.style.setProperty('--chip-fill', chipColor);
+      el.style.setProperty('--chip-text', text.main);
+      el.style.setProperty('--chip-text-dim', text.dim);
+      el.style.setProperty('--chip-border', mixWithBlack(chipColor, 55));
+      el.style.setProperty('--chip-btn-bg', text.btnBg);
+    }
     el.draggable = A.isEditing();
     el.dataset.id = p.id;
+
+    if (isNewTag(p.tag)) {
+      const badge = document.createElement('span');
+      badge.className = 'chip-new';
+      badge.textContent = 'NEW';
+      el.appendChild(badge);
+    }
 
     const name = document.createElement('input');
     name.className = 'n'; name.placeholder = '产品名';
@@ -434,9 +484,93 @@ const Matrix = (() => {
     ].map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
   }
 
+  /* ── 导出 PNG（固定 16:9，给 PPT 用）───────────────────
+     矩阵原本的列宽是响应式的（品牌一多就变宽/触发横向滚动），直接截图
+     会得到一张比例很怪、四周留白很不均匀的图。这里的策略：
+       1. 把矩阵克隆到一个不影响当前页面的离屏容器里，去掉编辑态才有
+          意义的工具按钮（拖拽手柄、增删按钮），这些截进 PPT 里没意义。
+       2. 品牌数一多，内容天然会比 16:9 宽很多——从一个较宽的列宽开始，
+          一步步收窄，直到整体宽高比不再比 16:9 明显更宽为止（收窄是
+          有下限的，太窄产品名会被挤得没法看）。
+       3. 收窄完仍不会刚好是 16:9，剩下的差值用等比缩放 + 居中留白
+          兜底，保证最终输出一定是严格的 16:9，不会变形拉伸。
+     ═══════════════════════════════════════════════════════════ */
+  const EXPORT_W = 1920, EXPORT_H = 1080; // 16:9，PPT 常用分辨率
+  const COL_START = 220, COL_MIN = 140, COL_STEP = 12;
+
+  function buildExportClone() {
+    const head = A.$('#matrix-canvas .paper-head').cloneNode(true);
+    const grid = A.$('#matrix').cloneNode(true);
+    const legend = A.$('#legend').cloneNode(true);
+
+    head.querySelectorAll('[contenteditable]').forEach((el) => { el.contentEditable = 'false'; });
+    grid.querySelectorAll('.chip-tools, .addhere, .addrow, .addline, .kill, .mx-brand .kill').forEach((el) => el.remove());
+    grid.querySelectorAll('.chip').forEach((el) => el.classList.remove('sel', 'dragging'));
+
+    const wrap = document.createElement('div');
+    wrap.className = 'paper matrix-export-shot';
+    wrap.style.cssText = 'position:fixed; left:-99999px; top:0; width:max-content;';
+    wrap.append(head, grid, legend);
+    document.body.appendChild(wrap);
+    return { wrap, grid };
+  }
+
+  /** 返回值：是否发生了收窄（用来决定要不要在成功提示里提一句） */
+  function autoShrinkColumns(grid) {
+    const brands = M().brands.length;
+    if (!brands) return false;
+    const targetRatio = (EXPORT_W / EXPORT_H) * 1.1; // 留 10% 余量，不用死磕到刚好等于 16:9
+    let w = COL_START, shrunk = false;
+    grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`;
+    while (w > COL_MIN && grid.scrollWidth / grid.scrollHeight > targetRatio) {
+      w -= COL_STEP;
+      shrunk = true;
+      grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`;
+    }
+    return shrunk;
+  }
+
+  async function exportPNG() {
+    if (typeof html2canvas !== 'function') { A.toast('导出组件没加载成功，刷新页面再试一次', 'bad'); return; }
+    const btn = A.$('#matrix-export-btn');
+    btn.disabled = true; btn.textContent = '生成中…';
+    let clone;
+    try {
+      clone = buildExportClone();
+      const shrunk = autoShrinkColumns(clone.grid);
+
+      const shot = await html2canvas(clone.wrap, { backgroundColor: '#fdfaf3', scale: 2, useCORS: true, logging: false });
+
+      const out = document.createElement('canvas');
+      out.width = EXPORT_W; out.height = EXPORT_H;
+      const ctx = out.getContext('2d');
+      ctx.fillStyle = '#fdfaf3';
+      ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
+      const fit = Math.min(EXPORT_W / shot.width, EXPORT_H / shot.height);
+      const w = shot.width * fit, h = shot.height * fit;
+      ctx.drawImage(shot, (EXPORT_W - w) / 2, (EXPORT_H - h) / 2, w, h);
+
+      const blob = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `价格带沙盘_${new Date().toISOString().slice(0, 10)}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+
+      A.toast(shrunk ? '已导出 PNG（自动收窄了列宽以适配 16:9）' : '已导出 PNG');
+    } catch (e) {
+      A.toast('导出失败：' + e.message, 'bad');
+    } finally {
+      clone?.wrap.remove();
+      btn.disabled = false; btn.textContent = '⭳ 导出 PNG（16:9）';
+    }
+  }
+
   /* ── 初始化 ─────────────────────────────────────────── */
   function init(api) {
     A = api;
+
+    A.$('#matrix-export-btn').onclick = exportPNG;
 
     A.$('#btn-add-tag').onclick = () => {
       A.mark();
