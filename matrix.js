@@ -636,7 +636,7 @@ const Matrix = (() => {
 
     const wrap = document.createElement('div');
     wrap.className = 'paper matrix-export-shot';
-    wrap.style.cssText = 'position:fixed; left:-99999px; top:0; width:max-content; background:#fdfaf3;';
+    wrap.style.cssText = 'position:fixed; left:-99999px; top:0; width:max-content; background:#070c16;';
     wrap.append(head, grid, legend);
     document.body.appendChild(wrap);
     return { wrap, head, grid, legend };
@@ -692,14 +692,14 @@ const Matrix = (() => {
       clone = buildExportClone();
       const fit = fitScaleAndColumns(clone.wrap, clone.head, clone.grid, clone.legend);
 
-      const shot = await html2canvas(clone.wrap, { backgroundColor: '#fdfaf3', scale: 2, useCORS: true, logging: false });
+      const shot = await html2canvas(clone.wrap, { backgroundColor: '#070c16', scale: 2, useCORS: true, logging: false });
 
       const out = document.createElement('canvas');
       out.width = EXPORT_W; out.height = EXPORT_H;
       const ctx = out.getContext('2d');
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.fillStyle = '#fdfaf3';
+      ctx.fillStyle = '#070c16';
       ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
       // 等比缩放，取能让内容完整装进画布的那个缩放系数（不裁任何
       // 东西）——宁可留一点点边，也不能拉伸变形或裁掉标题/表头/
