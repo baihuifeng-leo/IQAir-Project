@@ -521,13 +521,38 @@ const Matrix = (() => {
     });
   }
 
+  /**
+   * html2canvas 渲染 <input> 的文字是出了名的不可靠——品牌名、价格带、
+   * 产品名/价格全都是 input（方便双击直接编辑），实测导出后经常整字
+   * 丢失或错位（"IQAir" 被吞成"QA ir"），这才是反馈里"数据都没了"的
+   * 真正原因，不是数据真没了，是 html2canvas 画丢了。
+   * 换个思路：导出时把这些 input 换成普通的 <div> 文字，把浏览器已经
+   * 算好的字体/颜色/间距摘出来糊成内联样式再画——html2canvas 画普通
+   * 文本节点是稳的，出问题的只有表单控件这条渲染路径。
+   * 宽度故意不摘（摘了会把改列宽之前的旧像素宽度焊死），留 100% 让
+   * 它跟着 autoFitColumns 之后的新列宽走。
+   */
+  const TEXT_STYLE_PROPS = ['fontFamily', 'fontWeight', 'fontStyle', 'fontSize', 'letterSpacing', 'lineHeight', 'textAlign', 'textDecorationLine', 'color'];
+  function textifyInputs(origRoot, cloneRoot, selector) {
+    const origEls = origRoot.querySelectorAll(selector);
+    const cloneEls = cloneRoot.querySelectorAll(selector);
+    origEls.forEach((el, i) => {
+      const cloneEl = cloneEls[i];
+      if (!cloneEl) return;
+      const cs = getComputedStyle(el);
+      const div = document.createElement('div');
+      div.className = cloneEl.className;
+      div.textContent = el.value || '';
+      TEXT_STYLE_PROPS.forEach((p) => { div.style[p] = cs[p]; });
+      div.style.cssText += 'border:0; background:none; width:100%; min-width:0; box-sizing:border-box; padding:' + cs.padding + '; border-radius:' + cs.borderRadius + '; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+      cloneEl.replaceWith(div);
+    });
+  }
+
   const HEAD_FREEZE = [{ selector: 'h1, p', props: ['color'] }];
   const GRID_FREEZE = [
     { selector: '.chip', props: ['backgroundColor', 'borderColor'] },
-    { selector: '.chip .n', props: ['color'] },
-    { selector: '.chip .p', props: ['color'] },
-    { selector: '.mx-corner, .mx-brand, .mx-band, .mx-cell', props: ['backgroundColor'] },
-    { selector: '.mx-brand input, .mx-band input', props: ['color'] }
+    { selector: '.mx-corner, .mx-brand, .mx-band, .mx-cell', props: ['backgroundColor'] }
   ];
   const LEGEND_FREEZE = [{ selector: 'span', props: ['color'] }];
 
@@ -543,6 +568,11 @@ const Matrix = (() => {
     freezeColors(origHead, head, HEAD_FREEZE);
     freezeColors(origGrid, grid, GRID_FREEZE);
     freezeColors(origLegend, legend, LEGEND_FREEZE);
+
+    textifyInputs(origGrid, grid, '.mx-brand input');
+    textifyInputs(origGrid, grid, '.mx-band input');
+    textifyInputs(origGrid, grid, '.chip .n');
+    textifyInputs(origGrid, grid, '.chip .p');
 
     head.querySelectorAll('[contenteditable]').forEach((el) => { el.contentEditable = 'false'; });
     grid.querySelectorAll('.chip-tools, .addhere, .addrow, .addline, .kill, .mx-brand .kill').forEach((el) => el.remove());
