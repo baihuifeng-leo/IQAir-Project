@@ -10,7 +10,7 @@
    噪音:正向 + 滤芯成本:负向。这才是竞品对比要看的东西。
    ═══════════════════════════════════════════════════════════ */
 const Reviews = (() => {
-  let A, data = null, activeBrand = '';
+  let A, data = null, activeBrand = '', subView = 'compare', activeProduct = '';
 
   const ASPECT_ORDER = ['净化效果', '异味处理', '噪音', '滤芯成本', '质量做工', '外观设计', '体积重量', '操作智能', '服务物流'];
 
@@ -39,7 +39,7 @@ const Reviews = (() => {
    * brandId 不传时跟着当前选中的品牌筛选（activeBrand）；热力图每个格子
    * 本来就对应固定的一行品牌，跟 activeBrand 无关，所以要显式传进来覆盖。
    */
-  function showTip(anchor, { term = '', aspect = '', polarity, label, brandId }) {
+  function showTip(anchor, { term = '', aspect = '', polarity, label, brandId, productId }) {
     clearTimeout(tipTimer);
     tipTimer = setTimeout(async () => {
       hideTip();
@@ -58,6 +58,7 @@ const Reviews = (() => {
 
       try {
         const q = new URLSearchParams({ term, aspect, polarity, brand: brandId !== undefined ? brandId : activeBrand });
+        if (productId) q.set('product', productId);
         const rows = await call('/api/reviews/keyword?' + q);
         if (!tipBox) return;
         tipBox.querySelector('.kw-tip-head span').textContent = `${rows.length} 条原文 · 按「有用」排序`;
@@ -104,6 +105,8 @@ const Reviews = (() => {
   /* ── 渲染 ───────────────────────────────────────────── */
   function render() {
     const root = A.$('#rv-board');
+    if (subView === 'product') { renderProductView(root); return; }
+
     if (!data) { root.innerHTML = '<p class="rv-empty">还没有评论数据。用左边的「导入 Excel」传第一份进来。</p>'; return; }
     if (!data.totals.reviews) { root.innerHTML = '<p class="rv-empty">评论库是空的。左边导入一份 xlsx 试试。</p>'; return; }
 
@@ -156,26 +159,25 @@ const Reviews = (() => {
     return wrap;
   }
 
-  /** 维度总览：横向条形图，每条内部按 好评/差评 分段。选中品牌后改按差评量排序——先看它哪里被吐槽最多 */
-  function aspectOverview() {
-    const brand = activeBrand && data.brands.find((b) => b.id === activeBrand);
+  /**
+   * 维度总览：横向条形图，每条内部按 好评/差评 分段——品牌对比、本品分析
+   * 两个视图共用同一套渲染逻辑，区别只是数据源和点差评段之后怎么查原文。
+   */
+  function renderAspectBars(source, { title, subtitle, sortByNeg, emptyText, tipParams }) {
     const sec = document.createElement('section');
     sec.className = 'rv-sec';
-    sec.innerHTML = brand
-      ? `<h2>维度总览 · ${brand.name}</h2><p class="rv-sub">按差评句数从多到少排——橙段是差评句、绿段是好评句。</p>`
-      : `<h2>维度总览</h2><p class="rv-sub">条越长，这个维度被提到的次数越多；绿段是好评句、橙段是差评句。</p>`;
+    sec.innerHTML = `<h2>${title}</h2><p class="rv-sub">${subtitle}</p>`;
 
-    const source = brand ? brand.aspects : data.aspects;
     const rows = ASPECT_ORDER
       .map((a) => ({ aspect: a, ...(source[a] || { pos: 0, neg: 0 }) }))
       .map((r) => ({ ...r, total: r.pos + r.neg }))
       .filter((r) => r.total > 0)
-      .sort(brand ? (a, b) => b.neg - a.neg || b.total - a.total : (a, b) => b.total - a.total);
+      .sort(sortByNeg ? (a, b) => b.neg - a.neg || b.total - a.total : (a, b) => b.total - a.total);
 
     if (!rows.length) {
       const p = document.createElement('p');
       p.className = 'kw-empty';
-      p.textContent = '这个品牌还没有能识别出维度的评论。';
+      p.textContent = emptyText;
       sec.appendChild(p);
       return sec;
     }
@@ -203,7 +205,7 @@ const Reviews = (() => {
       if (r.neg > 0) {
         const negSeg = row.querySelector('.rv-bar-seg.neg');
         negSeg.classList.add('hoverable');
-        const tip = () => showTip(negSeg, { polarity: 'neg', aspect: r.aspect, label: `${r.aspect} · 差评句` });
+        const tip = () => showTip(negSeg, { polarity: 'neg', aspect: r.aspect, ...tipParams(r.aspect) });
         negSeg.addEventListener('mouseenter', tip);
         negSeg.addEventListener('mouseleave', hideTip);
         negSeg.addEventListener('click', tip);
@@ -213,6 +215,20 @@ const Reviews = (() => {
 
     sec.appendChild(box);
     return sec;
+  }
+
+  /** 维度总览：品牌对比视图的封装——选中品牌后改按差评量排序，先看它哪里被吐槽最多 */
+  function aspectOverview() {
+    const brand = activeBrand && data.brands.find((b) => b.id === activeBrand);
+    return renderAspectBars(brand ? brand.aspects : data.aspects, {
+      title: brand ? `维度总览 · ${brand.name}` : '维度总览',
+      subtitle: brand
+        ? '按差评句数从多到少排——橙段是差评句、绿段是好评句。'
+        : '条越长，这个维度被提到的次数越多；绿段是好评句、橙段是差评句。',
+      sortByNeg: !!brand,
+      emptyText: '这个品牌还没有能识别出维度的评论。',
+      tipParams: (aspect) => ({ label: `${aspect} · 差评句` }) // 不传 brandId：走 showTip 默认的 activeBrand 逻辑
+    });
   }
 
   /** 条形图从 0 长到目标宽度——先画 0，下一帧再给真实宽度，让已有的 CSS transition 接手 */
@@ -319,18 +335,17 @@ const Reviews = (() => {
     return d;
   };
 
-  /** 关键词云：字号按出现次数，悬浮看原文。差评在前、更大，好评在后、次要——这是这个功能存在的目的 */
-  function clouds() {
+  /**
+   * 关键词云：字号按出现次数，悬浮看原文。差评在前、更大，好评在后、次要——
+   * 这是这个功能存在的目的。品牌对比、本品分析共用，区别只是数据源和溯源参数。
+   */
+  function renderClouds(source, { subtitle, negEmptyText, tipExtra }) {
     const sec = document.createElement('section');
     sec.className = 'rv-sec';
-    const brand = activeBrand && data.brands.find((b) => b.id === activeBrand);
-    sec.innerHTML = `<h2>关键词</h2><p class="rv-sub">字号代表出现次数；鼠标停上去看它在原文里怎么说的。数的是「差评句/好评句里提到这个词多少次」，不是评论篇数——一条评论可能一个词都没提到，也可能同时提到好几个词，加起来对不上评论总数是正常的${brand ? `　·　当前只看【${brand.name}】，点品牌名可取消` : ''}。</p>`;
+    sec.innerHTML = `<h2>关键词</h2><p class="rv-sub">${subtitle}</p>`;
 
     const wrap = document.createElement('div');
     wrap.className = 'rv-clouds';
-
-    // 品牌自己的高频词，不是从全站 top40 里筛出来的——不然小品牌的词基本挤不进全站排行
-    const source = brand ? data.keywordsByBrand[activeBrand] : data.keywords;
 
     [['neg', '差评关键词'], ['pos', '好评关键词']].forEach(([pol, title]) => {
       const col = document.createElement('div');
@@ -345,7 +360,7 @@ const Reviews = (() => {
       if (!list.length) {
         const p = document.createElement('p');
         p.className = 'kw-empty';
-        p.textContent = pol === 'neg' ? '这个品牌没有识别出差评关键词。' : '暂无。';
+        p.textContent = pol === 'neg' ? negEmptyText : '暂无。';
         col.appendChild(p);
       }
 
@@ -360,9 +375,10 @@ const Reviews = (() => {
         t.style.fontSize = scale.toFixed(2) + 'rem';
         t.innerHTML = `<span></span><i>${k.count}</i>`;
         t.querySelector('span').textContent = k.term;
-        t.addEventListener('mouseenter', () => showTip(t, { term: k.term, polarity: pol }));
+        const tip = () => showTip(t, { term: k.term, polarity: pol, ...tipExtra });
+        t.addEventListener('mouseenter', tip);
         t.addEventListener('mouseleave', hideTip);
-        t.addEventListener('click', () => showTip(t, { term: k.term, polarity: pol }));
+        t.addEventListener('click', tip);
         box.appendChild(t);
       });
       col.appendChild(box);
@@ -373,8 +389,152 @@ const Reviews = (() => {
     return sec;
   }
 
+  /** 关键词云：品牌对比视图的封装——品牌自己的高频词，不是从全站 top40 里筛出来的（不然小品牌的词基本挤不进全站排行） */
+  function clouds() {
+    const brand = activeBrand && data.brands.find((b) => b.id === activeBrand);
+    const source = brand ? data.keywordsByBrand[activeBrand] : data.keywords;
+    return renderClouds(source, {
+      subtitle: `字号代表出现次数；鼠标停上去看它在原文里怎么说的。数的是「差评句/好评句里提到这个词多少次」，不是评论篇数——一条评论可能一个词都没提到，也可能同时提到好几个词，加起来对不上评论总数是正常的${brand ? `　·　当前只看【${brand.name}】，点品牌名可取消` : ''}。`,
+      negEmptyText: '这个品牌没有识别出差评关键词。',
+      tipExtra: {} // 不传 brandId/productId：走 showTip 默认的 activeBrand 逻辑
+    });
+  }
+
+  /* ── 本品分析：针对 IQAir 自己某一款产品的深度清洗分析 ─── */
+  function productStatBar(product) {
+    const box = document.createElement('div');
+    box.className = 'rv-stats';
+    const tiles = [
+      [product.total.toLocaleString(), '评论数'],
+      [(product.total - product.template).toLocaleString(), '有效评论'],
+      [product.negClauses.toLocaleString(), '差评分句', 'neg'],
+      [product.posClauses.toLocaleString(), '好评分句']
+    ];
+    tiles.forEach(([v, k, mark]) => {
+      const c = document.createElement('div');
+      c.className = 'rv-stat' + (mark === 'neg' ? ' neg hoverable' : '');
+      c.innerHTML = `<b></b><span></span>`;
+      c.querySelector('b').textContent = v;
+      c.querySelector('span').textContent = k;
+      if (mark === 'neg') {
+        const tip = () => showTip(c, { polarity: 'neg', label: `${product.name} · 差评句`, brandId: '', productId: product.id });
+        c.addEventListener('mouseenter', tip);
+        c.addEventListener('mouseleave', hideTip);
+        c.addEventListener('click', tip);
+      }
+      box.appendChild(c);
+    });
+    return box;
+  }
+
+  function renderProductView(root) {
+    root.innerHTML = '';
+    const product = (data?.products || []).find((p) => p.id === activeProduct);
+
+    if (!product) {
+      root.innerHTML = '<p class="rv-empty">左边「选择 / 新建产品」新建或选一个 IQAir 产品，开始针对这一款做深度评价分析。</p>';
+      return;
+    }
+    if (!product.total) {
+      root.innerHTML = `<p class="rv-empty">「${esc(product.name)}」还没有导入评论，左边「导入这个产品的评论」传一份 xlsx 进来。</p>`;
+      return;
+    }
+
+    root.append(
+      productStatBar(product),
+      renderAspectBars(product.aspects, {
+        title: `维度总览 · ${product.name}`,
+        subtitle: '按差评句数从多到少排——橙段是差评句、绿段是好评句。',
+        sortByNeg: true,
+        emptyText: '这个产品还没有能识别出维度的评论。',
+        tipParams: (aspect) => ({ label: `${product.name} · ${aspect} · 差评句`, brandId: '', productId: product.id })
+      }),
+      renderClouds(data.keywordsByProduct[product.id] || { pos: [], neg: [] }, {
+        subtitle: `字号代表出现次数；鼠标停上去看它在原文里怎么说的——只看【${product.name}】这一款产品的评论。`,
+        negEmptyText: '这个产品没有识别出差评关键词。',
+        tipExtra: { brandId: '', productId: product.id }
+      })
+    );
+    growBars(root);
+  }
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function renderProductRail() {
+    const list = A.$('#rv-products');
+    list.innerHTML = '';
+    const products = data?.products || [];
+    if (!products.length) { list.innerHTML = '<p class="rail-hint">还没有产品，新建一个开始。</p>'; }
+
+    products.forEach((p) => {
+      const row = document.createElement('div');
+      row.className = 'rv-brow' + (activeProduct === p.id ? ' on' : '');
+      row.innerHTML = `<i></i><div><b></b><span></span></div>`;
+      row.querySelector('i').style.background = '#4ee0c1';
+      row.querySelector('b').textContent = p.name;
+      row.querySelector('span').textContent = p.total ? `${p.total} 条 · ${p.firstDate.slice(0, 7)} 起` : '还没有评论';
+      row.onclick = () => { activeProduct = activeProduct === p.id ? '' : p.id; render(); renderRail(); };
+
+      if (A.me.admin) {
+        row.appendChild(A.mkKill('删除这个产品的全部评论', async (e) => {
+          if (!confirm(`删除「${p.name}」以及它的 ${p.total} 条评论？这个操作不可撤销。`)) return;
+          try {
+            await call('/api/reviews/product/' + p.id, { method: 'DELETE' });
+            A.toast('已删除');
+            if (activeProduct === p.id) activeProduct = '';
+            refresh();
+          } catch (err) { A.toast(err.message, 'bad'); }
+        }));
+      }
+      list.appendChild(row);
+    });
+
+    const importBtn = A.$('#rv-product-import-btn'), importHint = A.$('#rv-product-import-hint');
+    const cur = products.find((p) => p.id === activeProduct);
+    importBtn.disabled = !cur;
+    importHint.textContent = cur ? `正在给「${cur.name}」导入评论。` : '先在上面选一个产品。';
+  }
+
+  async function createProduct() {
+    const input = A.$('#rv-product-new-name');
+    const name = input.value.trim();
+    if (!name) return A.toast('先填产品名称，比如「GC-Multi」', 'bad');
+    try {
+      const r = await call('/api/reviews/products', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+      });
+      A.toast(`已新建产品「${r.product.name}」`);
+      input.value = '';
+      activeProduct = r.product.id;
+      await refresh();
+    } catch (e) { A.toast('新建失败：' + e.message, 'bad'); }
+  }
+
+  async function doImportProduct(file) {
+    if (!activeProduct) return A.toast('先选一个产品', 'bad');
+    if (!/\.xlsx$/i.test(file.name)) return A.toast('只支持 .xlsx', 'bad');
+    const btn = A.$('#rv-product-import-btn');
+    btn.disabled = true; btn.textContent = '解析中…';
+    try {
+      const r = await call('/api/reviews/import?product=' + encodeURIComponent(activeProduct), {
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file
+      });
+      A.toast(`${r.product}：新增 ${r.added} 条，跳过 ${r.skipped} 条已存在`);
+      if (r.dupInFile) A.toast(`这份文件自己有 ${r.dupInFile} 行重复，已合并`, 'live');
+      await refresh();
+    } catch (e) {
+      A.toast('导入失败：' + e.message, 'bad');
+    } finally {
+      btn.disabled = false; btn.textContent = '导入 Excel';
+    }
+  }
+
   /* ── 侧栏：导入与品牌 ───────────────────────────────── */
   function renderRail() {
+    A.$('#rv-rail-compare').hidden = subView !== 'compare';
+    A.$('#rv-rail-product').hidden = subView !== 'product';
+    if (subView === 'product') { renderProductRail(); return; }
+
     const list = A.$('#rv-brands');
     list.innerHTML = '';
     if (!data?.brands.length) { list.innerHTML = '<p class="rail-hint">还没有品牌。</p>'; return; }
@@ -454,6 +614,31 @@ const Reviews = (() => {
       e.preventDefault();
       const f = e.dataTransfer.files[0];
       if (f) doImport(f, nameInput.value);
+    });
+
+    /* ── 本品分析 ───────────────────────────────────────── */
+    A.$('#rv-subview-switch').onclick = (e) => {
+      const btn = e.target.closest('button[data-sub]');
+      if (!btn || btn.dataset.sub === subView) return;
+      subView = btn.dataset.sub;
+      [...A.$('#rv-subview-switch').children].forEach((b) => b.classList.toggle('on', b === btn));
+      render(); renderRail();
+    };
+
+    A.$('#rv-product-new-btn').onclick = createProduct;
+    A.$('#rv-product-new-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') createProduct(); });
+
+    const productPick = A.$('#rv-product-file');
+    A.$('#rv-product-import-btn').onclick = () => { productPick.value = ''; productPick.click(); };
+    productPick.onchange = () => { if (productPick.files[0]) doImportProduct(productPick.files[0]); };
+
+    const productDrop = A.$('#rv-product-drop');
+    ['dragenter', 'dragover'].forEach((ev) => productDrop.addEventListener(ev, (e) => { e.preventDefault(); productDrop.classList.add('hot'); }));
+    ['dragleave', 'drop'].forEach((ev) => productDrop.addEventListener(ev, () => productDrop.classList.remove('hot')));
+    productDrop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f) doImportProduct(f);
     });
 
     window.addEventListener('scroll', hideTip, true);

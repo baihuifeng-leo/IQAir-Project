@@ -56,8 +56,11 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * 解析一个 xlsx buffer → 规范化记录数组
  * @param {Buffer} buf
  * @param {{brandId:string, brandName:string}} brand
+ * @param {{productId:string, productName:string}} [product] 「本品分析」才会传——
+ *   产品记录同时也打上 brandId，所以「品牌 × 维度」那套统计天然把它汇总进去，
+ *   不需要额外写一份汇总逻辑
  */
-function parseWorkbook(buf, brand) {
+function parseWorkbook(buf, brand, product) {
   const rows = readRecords(buf);
   if (!rows.length) throw new Error('这个 Excel 是空的');
 
@@ -83,6 +86,7 @@ function parseWorkbook(buf, brand) {
         id: fingerprint({ brandId: brand.brandId, sku, nick, date, type, text: t }),
         brandId: brand.brandId,
         brandName: brand.brandName,
+        ...(product ? { productId: product.productId, productName: product.productName } : {}),
         sku,
         nick,
         type,                       // 初评 | 追评

@@ -161,24 +161,47 @@
         <button class="rail-toggle" title="收起工作台" aria-label="收起工作台"></button>
       </div>
       <div class="rail-body">
-        <div class="rail-sec">导入评论</div>
-        <p class="rail-hint">填品牌名，选一份淘宝评论导出的 .xlsx。重复评论会自动跳过，只追加新的。</p>
-        <input type="text" id="rv-brand-name" placeholder="品牌 + 型号，如 352 Z90" spellcheck="false">
-        <div class="rv-drop" id="rv-drop">
-          <button class="solid" id="rv-import-btn">导入 Excel</button>
-          <span>或把文件拖到这里</span>
+        <div id="rv-rail-compare">
+          <div class="rail-sec">导入评论</div>
+          <p class="rail-hint">填品牌名，选一份淘宝评论导出的 .xlsx。重复评论会自动跳过，只追加新的。</p>
+          <input type="text" id="rv-brand-name" placeholder="品牌 + 型号，如 352 Z90" spellcheck="false">
+          <div class="rv-drop" id="rv-drop">
+            <button class="solid" id="rv-import-btn">导入 Excel</button>
+            <span>或把文件拖到这里</span>
+          </div>
+
+          <div class="rail-sec">品牌</div>
+          <p class="rail-hint">点品牌名可以只看它的关键词。</p>
+          <div id="rv-brands"></div>
         </div>
 
-        <div class="rail-sec">品牌</div>
-        <p class="rail-hint">点品牌名可以只看它的关键词。</p>
-        <div id="rv-brands"></div>
+        <div id="rv-rail-product" hidden>
+          <div class="rail-sec">选择 / 新建产品</div>
+          <p class="rail-hint">IQAir 自己的产品，各自独立清洗分析；数据同时会自动汇总进「IQAir」这个品牌的整体统计里。</p>
+          <div id="rv-products"></div>
+          <input type="text" id="rv-product-new-name" placeholder="新产品名称，如 GC-Multi" spellcheck="false">
+          <button class="ghost wide" id="rv-product-new-btn">新建产品</button>
+
+          <div class="rail-sec">导入这个产品的评论</div>
+          <p class="rail-hint" id="rv-product-import-hint">先在上面选一个产品。</p>
+          <div class="rv-drop" id="rv-product-drop">
+            <button class="solid" id="rv-product-import-btn" disabled>导入 Excel</button>
+            <span>或把文件拖到这里</span>
+          </div>
+        </div>
       </div>
     </aside>
 
     <div class="canvas rv-canvas">
-      <div class="rv-head">
-        <h1>评论风向标</h1>
-        <p>Voice of Customer · 竞品口碑拆解</p>
+      <div class="rv-head rpt-head">
+        <div>
+          <h1>评论风向标</h1>
+          <p>Voice of Customer · 竞品口碑拆解</p>
+        </div>
+        <div class="rpt-page-switch" id="rv-subview-switch">
+          <button class="on" data-sub="compare">竞品对比</button>
+          <button data-sub="product">本品分析</button>
+        </div>
       </div>
       <div class="rv-scroll">
         <div id="rv-board"><p class="rv-empty">读取中…</p></div>
@@ -367,6 +390,7 @@
 <input type="file" id="filepick" accept="image/png,image/jpeg,image/webp" hidden>
 <input type="file" id="jsonpick" accept="application/json,.json" hidden>
 <input type="file" id="rv-file" accept=".xlsx" hidden>
+<input type="file" id="rv-product-file" accept=".xlsx" hidden>
 <input type="file" id="p3d-file" accept=".xlsx" hidden>
 <input type="file" id="rpt-import-file" accept=".xlsx" hidden>
 

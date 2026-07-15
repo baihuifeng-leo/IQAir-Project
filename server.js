@@ -508,19 +508,21 @@ const server = http.createServer(async (req, res) => {
       const aspect = url.searchParams.get('aspect') || '';
       const polarity = url.searchParams.get('polarity') === 'neg' ? 'neg' : 'pos';
       const brandId = url.searchParams.get('brand') || '';
-      // 不给 term 就是查一整类（维度和/或品牌下的所有差评句），条数天然更多，limit 放宽一些
-      return json(res, 200, reviews.contexts({ term, aspect, polarity, brandId, limit: term ? 30 : 80 }));
+      const productId = url.searchParams.get('product') || '';
+      // 不给 term 就是查一整类（维度和/或品牌/产品下的所有差评句），条数天然更多，limit 放宽一些
+      return json(res, 200, reviews.contexts({ term, aspect, polarity, brandId, productId, limit: term ? 30 : 80 }));
     }
 
     if (p === '/api/reviews/import' && req.method === 'POST') {
       const brandName = (url.searchParams.get('brand') || '').trim();
-      if (!brandName) return json(res, 400, { error: '要先填品牌名' });
+      const productId = (url.searchParams.get('product') || '').trim();
+      if (!brandName && !productId) return json(res, 400, { error: '要先填品牌名，或者选一个产品' });
       const buf = await readBinary(req, MAX_XLSX);
       let report;
-      try { report = await reviews.import(buf, brandName); }
+      try { report = await reviews.import(buf, brandName, productId || undefined); }
       catch (e) { return json(res, 400, { error: e.message }); }
       audit(me, 'reviews.import', {
-        detail: [`${report.brand}：新增 ${report.added} 条，跳过 ${report.skipped} 条已存在，文件内重复 ${report.dupInFile} 条`]
+        detail: [`${report.brand}${report.product ? ' · ' + report.product : ''}：新增 ${report.added} 条，跳过 ${report.skipped} 条已存在，文件内重复 ${report.dupInFile} 条`]
       });
       broadcast('reviews', { by: pubUser(me) }, null);
       return json(res, 200, report);
@@ -533,6 +535,32 @@ const server = http.createServer(async (req, res) => {
       if (!b) return json(res, 404, { error: '没有这个品牌' });
       await reviews.removeBrand(id);
       audit(me, 'reviews.delete', { detail: [`删除品牌「${b.name}」的全部评论`] });
+      broadcast('reviews', { by: pubUser(me) }, null);
+      return json(res, 200, { ok: true });
+    }
+
+    /* ── 本品分析：产品是「本品分析」专属的一层，挂在 IQAir 这个品牌之下 ── */
+    if (p === '/api/reviews/products' && req.method === 'POST') {
+      const input = await body(req, 1024);
+      const name = String(input.name || '').trim();
+      if (!name) return json(res, 400, { error: '产品名称不能为空' });
+      const brand = reviews.ensureBrand('IQAir');
+      await reviews.saveBrands();
+      let product;
+      try { product = await reviews.ensureProduct(brand.id, name); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'reviews.product.create', { detail: [`新建产品「${product.name}」`] });
+      broadcast('reviews', { by: pubUser(me) }, null);
+      return json(res, 200, { product });
+    }
+
+    if (p.startsWith('/api/reviews/product/') && req.method === 'DELETE') {
+      if (!me.admin) return json(res, 403, { error: '只有管理员能删除产品数据' });
+      const id = p.slice('/api/reviews/product/'.length);
+      const prod = reviews.products.find((x) => x.id === id);
+      if (!prod) return json(res, 404, { error: '没有这个产品' });
+      await reviews.removeProduct(id);
+      audit(me, 'reviews.delete', { detail: [`删除产品「${prod.name}」的全部评论`] });
       broadcast('reviews', { by: pubUser(me) }, null);
       return json(res, 200, { ok: true });
     }

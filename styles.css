@@ -1067,11 +1067,11 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .kw-tip.neg .kw-ctx mark { background: #ef6b5e30; color: #ff9a90; }
 
 /* 侧栏 */
-#rv-brand-name {
+#rv-brand-name, #rv-product-new-name {
   width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
   padding: 9px 11px; border-radius: 8px; margin-bottom: 8px;
 }
-#rv-brand-name:focus { outline: none; border-color: var(--mint); }
+#rv-brand-name:focus, #rv-product-new-name:focus { outline: none; border-color: var(--mint); }
 .rv-drop {
   border: 1px dashed var(--line); border-radius: 10px; padding: 12px; text-align: center;
   transition: all var(--fast);
