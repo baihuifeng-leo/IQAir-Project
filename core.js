@@ -31,6 +31,26 @@ const App = (() => {
     setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, kind === 'bad' ? 4200 : 2400);
   }
 
+  /**
+   * 提示条默认贴屏幕底部，价格带沙盘的批量操作工具条（#batchbar）
+   * 弹出时也贴在同一块位置——两者会挤在一起互相遮挡。这里监听
+   * batchbar 的显隐，它一冒出来就把提示条整体往上挪让开，收起后
+   * 提示条恢复默认位置。用 MutationObserver 而不是让 matrix.js 主动
+   * 通知，是为了以后任何新的底部浮层出现都能被自动避让，不用每个
+   * 模块单独接线。（多条提示条本身已经是纵向堆叠布局，不会互相
+   * 重叠——会重叠的是提示条跟这类底部工具条撞在一起。）
+   */
+  function wireFloatingLayerAvoidance() {
+    const bar = $('#batchbar'), toaster = $('#toaster');
+    if (!bar || !toaster) return;
+    const sync = () => {
+      toaster.style.bottom = bar.hidden ? '' : (innerHeight - bar.getBoundingClientRect().top + 18) + 'px';
+    };
+    new MutationObserver(sync).observe(bar, { attributes: true, attributeFilter: ['hidden'] });
+    window.addEventListener('resize', sync);
+    sync();
+  }
+
   function flag(mode, text) {
     const f = $('#saveflag');
     f.dataset.state = mode;
@@ -581,6 +601,7 @@ const App = (() => {
     $('#btn-redo').onclick = redo;
     if (!me.admin) ['reset', 'logs', 'backups'].forEach((a) => $(`[data-act="${a}"]`)?.remove());
     wireMenu();
+    wireFloatingLayerAvoidance();
     connect();
 
     document.addEventListener('keydown', (e) => {

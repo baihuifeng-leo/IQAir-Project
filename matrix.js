@@ -196,8 +196,15 @@ const Matrix = (() => {
     });
     document.body.appendChild(m);
     const r = anchor.getBoundingClientRect();
+    // 批量工具条弹出时也贴在屏幕底部，分类菜单原来只避开视口边界，
+    // 没算工具条这块地方，两个一起出现时会叠在一起分不清——工具条
+    // 可见时把它的顶边也当成一道边界，跟视口下边界取更靠上的那个。
+    const bar = A.$('#batchbar');
+    const bottomLimit = (bar && !bar.hidden ? bar.getBoundingClientRect().top : innerHeight) - 10;
+    m.style.maxHeight = Math.max(160, bottomLimit - 10) + 'px';
+    m.style.overflowY = 'auto';
     m.style.left = Math.min(Math.max(8, r.left - 100), innerWidth - 244) + 'px';
-    m.style.top = Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 10) + 'px';
+    m.style.top = Math.min(r.bottom + 6, bottomLimit - m.offsetHeight) + 'px';
     setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }), 0);
   }
 
