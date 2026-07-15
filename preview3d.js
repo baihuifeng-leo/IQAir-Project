@@ -28,11 +28,15 @@ const Preview3D = (() => {
   const withCostEff = (p) => ({ ...p, costEff: p.price > 0 ? ((p.pmCadr + p.hchoCadr) / p.price) * 1000 : 0 });
 
   /* ── 图表配置 ───────────────────────────────────────── */
+  // 轴线本身比网格线更亮更实——网格线只是空间参照，不该跟散点抢视觉焦点
   const axisStyle = (scale) => ({
-    axisLine: { lineStyle: { color: '#33456a' } },
-    splitLine: { lineStyle: { color: '#17203292' } },
+    axisLine: { lineStyle: { color: '#4ee0c15c', width: 1.4 } },
+    splitLine: { lineStyle: { color: '#4ee0c11a', type: 'dashed' } },
     axisLabel: { color: '#79879f', fontSize: 11 * scale },
-    nameTextStyle: { color: '#e9eef8', fontSize: 12.5 * scale, fontWeight: 600, padding: [0, 0, 0, 0] },
+    nameTextStyle: {
+      color: '#e9eef8', fontSize: 12.5 * scale, fontWeight: 600, padding: [0, 0, 0, 0],
+      textShadowColor: '#4ee0c199', textShadowBlur: 10
+    },
     axisPointer: { lineStyle: { color: '#4ee0c1' } }
   });
 
@@ -53,12 +57,13 @@ const Preview3D = (() => {
       value: [p.pmCadr, p.hchoCadr, p.price],
       brand: p.brand, model: p.model, price: p.price, pmCadr: p.pmCadr, hchoCadr: p.hchoCadr,
       costEff: p.costEff, sales: p.sales || 0, qty: p.qty || 0, url: p.url,
-      itemStyle: { color: p.color, opacity: 0.9 },
+      itemStyle: { color: p.color, opacity: 0.92 },
       symbolSize: size(mode.calc(p)),
       label: {
         show: true, formatter: `${p.brand}\n${p.model}`, position: 'top', distance: 6 * scale, lineHeight: 14 * scale,
         color: '#e9eef8', fontSize: 11 * scale, fontWeight: 600,
-        textBorderColor: '#0b1220', textBorderWidth: 2.5
+        textBorderColor: '#0b1220', textBorderWidth: 2.5,
+        textShadowColor: p.color, textShadowBlur: 8 // 标签发光色跟气泡自己的品牌色呼应，不是统一一个颜色
       }
     }));
 
@@ -79,17 +84,28 @@ const Preview3D = (() => {
             ${d.url ? '<div class="p3d-tip-link">点击气泡跳转商品页 ↗</div>' : ''}
           </div>`;
         },
-        backgroundColor: '#101725f2', borderColor: '#1f2b42', borderWidth: 1, padding: 0,
-        extraCssText: 'box-shadow:0 20px 44px -18px #000;border-radius:10px;'
+        backgroundColor: '#101725cc', borderColor: '#4ee0c13d', borderWidth: 1, padding: 0,
+        extraCssText: 'box-shadow:0 20px 44px -18px #000;border-radius:10px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);'
       },
       xAxis3D: { type: 'value', name: '颗粒物 CADR', min: 0, ...AXIS },
       yAxis3D: { type: 'value', name: '甲醛 CADR', min: 0, ...AXIS },
       zAxis3D: { type: 'value', name: '价格 (¥)', min: 0, ...AXIS },
       grid3D: {
         boxWidth: 100, boxHeight: 76, boxDepth: 76,
-        environment: 'transparent',
-        axisLine: { lineStyle: { color: '#33456a' } },
-        splitLine: { show: true, lineStyle: { color: '#17203292' } },
+        // 纯黑背景在全屏下容易显得压抑；换成中间稍亮、四周暗下去的深蓝紫径向渐变，
+        // 视线会自然被带到画面中央的散点上，跟外层 CSS 渐变呼应但不完全依赖它——
+        // 场景本身自带层次，全屏、非全屏都一样好看
+        environment: {
+          type: 'radial', x: 0.5, y: 0.45, r: 0.85,
+          colorStops: [
+            { offset: 0, color: '#182444' },
+            { offset: 0.55, color: '#0b1224' },
+            { offset: 1, color: '#04060c' }
+          ],
+          global: false
+        },
+        axisLine: { lineStyle: { color: '#4ee0c15c', width: 1.4 } },
+        splitLine: { show: true, lineStyle: { color: '#4ee0c11a', type: 'dashed' } },
         viewControl: {
           autoRotate, autoRotateSpeed: 5, autoRotateAfterStill: 2.5,
           distance: 215, alpha: 20, beta: 30, damping: 0.86,
@@ -99,14 +115,21 @@ const Preview3D = (() => {
           main: { intensity: 1.15, shadow: false, alpha: 30, beta: 20 },
           ambient: { intensity: 0.45 }
         },
-        postEffect: { enable: true, SSAO: { enable: true, radius: 4, intensity: 1.1 } },
+        postEffect: {
+          enable: true,
+          SSAO: { enable: true, radius: 4, intensity: 1.1 },
+          // 低强度 bloom：只让本来就亮的气泡边缘微微泛光，不是把整个画面拉白拉糊
+          bloom: { enable: true, bloomIntensity: 0.12 },
+          colorCorrection: { enable: true, exposure: 0.06, saturation: 1.05 }
+        },
         temporalSuperSampling: { enable: true }
       },
       series: [{
         type: 'scatter3D',
         data: points,
         symbol: 'circle',
-        emphasis: { itemStyle: { opacity: 1, borderWidth: 1.5, borderColor: '#fff' } }
+        // hover 时描边更亮更宽——配合 bloom，被选中的气泡会有明显的发光反馈
+        emphasis: { itemStyle: { opacity: 1, borderWidth: 2.5, borderColor: '#fff' } }
       }]
     };
   }
