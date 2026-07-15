@@ -625,6 +625,17 @@ select#own-brand {
 .st-row:last-child { border-bottom: 0; }
 .st-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--mint); cursor: pointer; }
 
+/* ── 竞品3D预览：坐标轴设置 ───────────────────────────── */
+.p3d-axis-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.p3d-axis-row { display: grid; grid-template-columns: 108px 1fr 1fr; align-items: center; gap: 8px; }
+.p3d-axis-row b { font-size: 12px; color: var(--dim); font-weight: 600; }
+.p3d-axis-row select, .p3d-axis-row input {
+  width: 100%; background: #060a12; border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 7px 9px; font-size: 12.5px; transition: border-color var(--fast);
+}
+.p3d-axis-row select:focus, .p3d-axis-row input:focus { outline: none; border-color: var(--mint); }
+#p3d-axis-reset { margin-top: 16px; }
+
 input.pin {
   width: 96px; background: #060a12; border: 1px solid var(--line); color: var(--text);
   padding: 6px 9px; border-radius: 7px; font-family: var(--f-mono); letter-spacing: 3px;
