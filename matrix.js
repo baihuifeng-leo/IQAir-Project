@@ -498,7 +498,10 @@ const Matrix = (() => {
           渲染，全屏投影也不会糊。
      ═══════════════════════════════════════════════════════════ */
   const EXPORT_W = 3840, EXPORT_H = 2160; // 16:9，4K，投影全屏也够清晰
-  const COL_START = 220, COL_MIN = 140, COL_MAX = 340, COL_STEP = 12;
+  const COL_START = 220, COL_MIN = 108, COL_MAX = 340, COL_STEP = 12;
+  // 字号从这几档里挑：先试最大的，配合把列宽压到 COL_MIN 腾地方，
+  // 还是装不下才降一档——放映用的图，字尽量大比排版工整更重要。
+  const FONT_SCALE_MAX = 2, FONT_SCALE_MIN = 1, FONT_SCALE_STEP = 0.1;
 
   /**
    * html2canvas（2022 年的老库）解析不了 var(--a, var(--b)) 这种嵌套
@@ -533,6 +536,22 @@ const Matrix = (() => {
    * 它跟着 autoFitColumns 之后的新列宽走。
    */
   const TEXT_STYLE_PROPS = ['fontFamily', 'fontWeight', 'fontStyle', 'fontSize', 'letterSpacing', 'lineHeight', 'textAlign', 'textDecorationLine', 'color'];
+  /**
+   * 记下这个元素在 1× 字号下的基准 font-size / line-height，后面
+   * applyFontScale() 按倍数重新算，不是在上一次结果上累乘——
+   * 不然反复试挡位的时候会越滚越大，数字会飘。
+   */
+  function markScalable(el, baseFs, baseLh) {
+    el.dataset.baseFs = baseFs;
+    el.dataset.baseLh = baseLh || baseFs * 1.3;
+  }
+  function applyFontScale(root, scale) {
+    root.querySelectorAll('[data-base-fs]').forEach((el) => {
+      el.style.fontSize = (parseFloat(el.dataset.baseFs) * scale).toFixed(2) + 'px';
+      el.style.lineHeight = (parseFloat(el.dataset.baseLh) * scale).toFixed(2) + 'px';
+    });
+  }
+
   function textifyInputs(origRoot, cloneRoot, selector) {
     const origEls = origRoot.querySelectorAll(selector);
     const cloneEls = cloneRoot.querySelectorAll(selector);
@@ -544,7 +563,10 @@ const Matrix = (() => {
       div.className = cloneEl.className;
       div.textContent = el.value || '';
       TEXT_STYLE_PROPS.forEach((p) => { div.style[p] = cs[p]; });
-      div.style.cssText += 'border:0; background:none; width:100%; min-width:0; box-sizing:border-box; padding:' + cs.padding + '; border-radius:' + cs.borderRadius + '; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+      // 装不下不再用省略号截断——数据不能丢，装不下就换行让格子变高，
+      // 反正后面 fitScaleAndColumns 会先尽量把列宽/字号调到能装下大部分内容。
+      div.style.cssText += 'border:0; background:none; width:100%; min-width:0; box-sizing:border-box; padding:' + cs.padding + '; border-radius:' + cs.borderRadius + '; white-space:normal; overflow-wrap:break-word;';
+      markScalable(div, parseFloat(cs.fontSize) || 14, parseFloat(cs.lineHeight));
       cloneEl.replaceWith(div);
     });
   }
@@ -555,6 +577,18 @@ const Matrix = (() => {
     { selector: '.mx-corner, .mx-brand, .mx-band, .mx-cell', props: ['backgroundColor'] }
   ];
   const LEGEND_FREEZE = [{ selector: 'span', props: ['color'] }];
+
+  /** h1/副标题、图例文字也要跟着放大——不止表格里的内容 */
+  function markScalableGroup(origRoot, cloneRoot, selector) {
+    const origEls = origRoot.querySelectorAll(selector);
+    const cloneEls = cloneRoot.querySelectorAll(selector);
+    origEls.forEach((el, i) => {
+      const target = cloneEls[i];
+      if (!target) return;
+      const cs = getComputedStyle(el);
+      markScalable(target, parseFloat(cs.fontSize) || 14, parseFloat(cs.lineHeight));
+    });
+  }
 
   function buildExportClone() {
     const origHead = A.$('#matrix-canvas .paper-head');
@@ -573,6 +607,8 @@ const Matrix = (() => {
     textifyInputs(origGrid, grid, '.mx-band input');
     textifyInputs(origGrid, grid, '.chip .n');
     textifyInputs(origGrid, grid, '.chip .p');
+    markScalableGroup(origHead, head, 'h1, p');
+    markScalableGroup(origLegend, legend, 'span');
 
     head.querySelectorAll('[contenteditable]').forEach((el) => { el.contentEditable = 'false'; });
     grid.querySelectorAll('.chip-tools, .addhere, .addrow, .addline, .kill, .mx-brand .kill').forEach((el) => el.remove());
@@ -586,25 +622,41 @@ const Matrix = (() => {
     return { wrap, grid };
   }
 
-  /** 双向调整列宽，让内容原始比例尽量贴近 16:9；返回值只用来决定提示文案 */
-  function autoFitColumns(grid) {
+  /**
+   * 先挑字号、再调列宽，两个旋钮一起找一个能塞进 16:9 的方案：
+   *   1. 从最大字号挡位试起，每挡字号下都用列宽收窄去够比例——
+   *      字号不变时收窄列宽是唯一能让内容变"瘦"的办法。
+   *   2. 收到 COL_MIN 还是比 16:9 宽，说明这挡字号放不下，降一挡重试。
+   *   3. 找到能装下的字号后，如果内容反而比 16:9 更瘦高（品牌少、
+   *      价格带多），再把列宽放宽一点，让图更"扁"，减少留白。
+   * 返回值只用来决定导出后的提示文案。
+   */
+  function fitScaleAndColumns(wrap, grid) {
     const brands = M().brands.length;
-    if (!brands) return false;
+    if (!brands) return { adjusted: false, scale: 1 };
     const target = EXPORT_W / EXPORT_H;
-    let w = COL_START, changed = false;
-    grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`;
+    const setCols = (w) => { grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`; };
+    const aspect = () => grid.scrollWidth / grid.scrollHeight;
 
-    // 品牌太多，内容比 16:9 更宽 → 收窄列宽
-    while (w > COL_MIN && grid.scrollWidth / grid.scrollHeight > target * 1.08) {
-      w -= COL_STEP; changed = true;
-      grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`;
+    // 字号一放大，价格带里堆叠的产品卡片会让整块内容变得又高又窄——
+    // 光靠"太宽就收窄列宽"应付不了这种情况，收窄反而会让换行更多、
+    // 更高，越收越糟。所以这一档字号站不站得住，得看收窄/放宽列宽
+    // 两头都试过之后宽高比能不能落回 16:9 附近（放宽到 ±15%——最后
+    // 拉伸铺满这点残差基本看不出来，换来字号能明显更大是值得的），
+    // 两头都够不着就说明这挡字号太大，退一档再试；scale=1 兜底，
+    // 退回到跟原来一样能稳定工作的效果。
+    let scale = FONT_SCALE_MAX, w = COL_START;
+    for (;;) {
+      applyFontScale(wrap, scale);
+      w = COL_START;
+      setCols(w);
+      while (w > COL_MIN && aspect() > target * 1.08) { w -= COL_STEP; setCols(w); }
+      while (w < COL_MAX && aspect() < target * 0.92) { w += COL_STEP; setCols(w); }
+      if ((aspect() >= target * 0.85 && aspect() <= target * 1.15) || scale <= FONT_SCALE_MIN + 1e-9) break;
+      scale = +(scale - FONT_SCALE_STEP).toFixed(2);
     }
-    // 品牌太少、价格带太多，内容比 16:9 更瘦高 → 放宽列宽，图更"扁"，减少留白
-    while (w < COL_MAX && grid.scrollWidth / grid.scrollHeight < target * 0.92) {
-      w += COL_STEP; changed = true;
-      grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`;
-    }
-    return changed;
+
+    return { adjusted: w !== COL_START || scale !== FONT_SCALE_MAX, scale };
   }
 
   async function exportPNG() {
@@ -614,7 +666,7 @@ const Matrix = (() => {
     let clone;
     try {
       clone = buildExportClone();
-      const adjusted = autoFitColumns(clone.grid);
+      const fit = fitScaleAndColumns(clone.wrap, clone.grid);
 
       const shot = await html2canvas(clone.wrap, { backgroundColor: '#fdfaf3', scale: 2, useCORS: true, logging: false });
 
@@ -636,7 +688,10 @@ const Matrix = (() => {
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 
-      A.toast(adjusted ? '已导出 PNG（自动调整了列宽以适配 16:9）' : '已导出 PNG');
+      const notes = [];
+      if (fit.scale > 1) notes.push(`字号放大到 ${fit.scale.toFixed(1)}×`);
+      if (fit.adjusted) notes.push('自动调整了列宽以适配 16:9');
+      A.toast(notes.length ? `已导出 PNG（${notes.join('，')}）` : '已导出 PNG');
     } catch (e) {
       A.toast('导出失败：' + e.message, 'bad');
     } finally {
