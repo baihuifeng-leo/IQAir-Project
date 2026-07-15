@@ -489,19 +489,60 @@ const Matrix = (() => {
      会得到一张比例很怪、四周留白很不均匀的图。这里的策略：
        1. 把矩阵克隆到一个不影响当前页面的离屏容器里，去掉编辑态才有
           意义的工具按钮（拖拽手柄、增删按钮），这些截进 PPT 里没意义。
-       2. 品牌数一多，内容天然会比 16:9 宽很多——从一个较宽的列宽开始，
-          一步步收窄，直到整体宽高比不再比 16:9 明显更宽为止（收窄是
-          有下限的，太窄产品名会被挤得没法看）。
-       3. 收窄完仍不会刚好是 16:9，剩下的差值用等比缩放 + 居中留白
-          兜底，保证最终输出一定是严格的 16:9，不会变形拉伸。
+       2. 列宽双向调整：品牌多就收窄、品牌少价格带多（内容偏瘦高）就
+          放宽，尽量让内容本身的宽高比先贴近 16:9，而不是事后硬凑。
+       3. 贴到足够近之后，剩下的一点点比例差用轻微的非等比拉伸铺满
+          画布，不再留白——这一步的形变幅度很小，肉眼基本看不出来，
+          前提是第 2 步已经把比例带到很接近了。
+       4. 最终画布是 4K（3840×2160），配合 html2canvas 2 倍像素密度
+          渲染，全屏投影也不会糊。
      ═══════════════════════════════════════════════════════════ */
-  const EXPORT_W = 1920, EXPORT_H = 1080; // 16:9，PPT 常用分辨率
-  const COL_START = 220, COL_MIN = 140, COL_STEP = 12;
+  const EXPORT_W = 3840, EXPORT_H = 2160; // 16:9，4K，投影全屏也够清晰
+  const COL_START = 220, COL_MIN = 140, COL_MAX = 340, COL_STEP = 12;
+
+  /**
+   * html2canvas（2022 年的老库）解析不了 var(--a, var(--b)) 这种嵌套
+   * fallback 的 CSS 变量——「未分类」卡片的颜色刚好全走这条链路
+   * （--chip-fill 没设置时 fallback 到 --paper-card），解析失败后
+   * 颜色直接崩成灰蒙蒙的，就是反馈里"前景色不清晰"的真正原因。
+   * 这里在导出前把浏览器已经算好的最终颜色摘出来，糊成克隆节点的
+   * 内联样式，html2canvas 就不用自己再解析一遍变量链路了。
+   */
+  function freezeColors(origRoot, cloneRoot, targets) {
+    targets.forEach(({ selector, props }) => {
+      const origEls = origRoot.querySelectorAll(selector);
+      const cloneEls = cloneRoot.querySelectorAll(selector);
+      origEls.forEach((el, i) => {
+        const target = cloneEls[i];
+        if (!target) return;
+        const cs = getComputedStyle(el);
+        props.forEach((p) => { target.style[p] = cs[p]; });
+      });
+    });
+  }
+
+  const HEAD_FREEZE = [{ selector: 'h1, p', props: ['color'] }];
+  const GRID_FREEZE = [
+    { selector: '.chip', props: ['backgroundColor', 'borderColor'] },
+    { selector: '.chip .n', props: ['color'] },
+    { selector: '.chip .p', props: ['color'] },
+    { selector: '.mx-corner, .mx-brand, .mx-band, .mx-cell', props: ['backgroundColor'] },
+    { selector: '.mx-brand input, .mx-band input', props: ['color'] }
+  ];
+  const LEGEND_FREEZE = [{ selector: 'span', props: ['color'] }];
 
   function buildExportClone() {
-    const head = A.$('#matrix-canvas .paper-head').cloneNode(true);
-    const grid = A.$('#matrix').cloneNode(true);
-    const legend = A.$('#legend').cloneNode(true);
+    const origHead = A.$('#matrix-canvas .paper-head');
+    const origGrid = A.$('#matrix');
+    const origLegend = A.$('#legend');
+
+    const head = origHead.cloneNode(true);
+    const grid = origGrid.cloneNode(true);
+    const legend = origLegend.cloneNode(true);
+
+    freezeColors(origHead, head, HEAD_FREEZE);
+    freezeColors(origGrid, grid, GRID_FREEZE);
+    freezeColors(origLegend, legend, LEGEND_FREEZE);
 
     head.querySelectorAll('[contenteditable]').forEach((el) => { el.contentEditable = 'false'; });
     grid.querySelectorAll('.chip-tools, .addhere, .addrow, .addline, .kill, .mx-brand .kill').forEach((el) => el.remove());
@@ -509,25 +550,31 @@ const Matrix = (() => {
 
     const wrap = document.createElement('div');
     wrap.className = 'paper matrix-export-shot';
-    wrap.style.cssText = 'position:fixed; left:-99999px; top:0; width:max-content;';
+    wrap.style.cssText = 'position:fixed; left:-99999px; top:0; width:max-content; background:#fdfaf3;';
     wrap.append(head, grid, legend);
     document.body.appendChild(wrap);
     return { wrap, grid };
   }
 
-  /** 返回值：是否发生了收窄（用来决定要不要在成功提示里提一句） */
-  function autoShrinkColumns(grid) {
+  /** 双向调整列宽，让内容原始比例尽量贴近 16:9；返回值只用来决定提示文案 */
+  function autoFitColumns(grid) {
     const brands = M().brands.length;
     if (!brands) return false;
-    const targetRatio = (EXPORT_W / EXPORT_H) * 1.1; // 留 10% 余量，不用死磕到刚好等于 16:9
-    let w = COL_START, shrunk = false;
+    const target = EXPORT_W / EXPORT_H;
+    let w = COL_START, changed = false;
     grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`;
-    while (w > COL_MIN && grid.scrollWidth / grid.scrollHeight > targetRatio) {
-      w -= COL_STEP;
-      shrunk = true;
+
+    // 品牌太多，内容比 16:9 更宽 → 收窄列宽
+    while (w > COL_MIN && grid.scrollWidth / grid.scrollHeight > target * 1.08) {
+      w -= COL_STEP; changed = true;
       grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`;
     }
-    return shrunk;
+    // 品牌太少、价格带太多，内容比 16:9 更瘦高 → 放宽列宽，图更"扁"，减少留白
+    while (w < COL_MAX && grid.scrollWidth / grid.scrollHeight < target * 0.92) {
+      w += COL_STEP; changed = true;
+      grid.style.gridTemplateColumns = `130px repeat(${brands}, ${w}px)`;
+    }
+    return changed;
   }
 
   async function exportPNG() {
@@ -537,18 +584,20 @@ const Matrix = (() => {
     let clone;
     try {
       clone = buildExportClone();
-      const shrunk = autoShrinkColumns(clone.grid);
+      const adjusted = autoFitColumns(clone.grid);
 
       const shot = await html2canvas(clone.wrap, { backgroundColor: '#fdfaf3', scale: 2, useCORS: true, logging: false });
 
       const out = document.createElement('canvas');
       out.width = EXPORT_W; out.height = EXPORT_H;
       const ctx = out.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.fillStyle = '#fdfaf3';
       ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
-      const fit = Math.min(EXPORT_W / shot.width, EXPORT_H / shot.height);
-      const w = shot.width * fit, h = shot.height * fit;
-      ctx.drawImage(shot, (EXPORT_W - w) / 2, (EXPORT_H - h) / 2, w, h);
+      // 第一步已经把内容比例带到很接近 16:9 了，这里直接拉伸铺满画布，
+      // 不再等比缩放+居中留白——剩下的形变幅度很小，肉眼基本看不出来
+      ctx.drawImage(shot, 0, 0, shot.width, shot.height, 0, 0, EXPORT_W, EXPORT_H);
 
       const blob = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
       const a = document.createElement('a');
@@ -557,7 +606,7 @@ const Matrix = (() => {
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 
-      A.toast(shrunk ? '已导出 PNG（自动收窄了列宽以适配 16:9）' : '已导出 PNG');
+      A.toast(adjusted ? '已导出 PNG（自动调整了列宽以适配 16:9）' : '已导出 PNG');
     } catch (e) {
       A.toast('导出失败：' + e.message, 'bad');
     } finally {
