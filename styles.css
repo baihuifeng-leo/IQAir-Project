@@ -298,6 +298,50 @@ select#own-brand {
 }
 .rail-zone--stats .rail-sec { margin-top: 0; }
 
+/* ═══════════════════════════════════════════════════════════
+   深色 · 极光玻璃（Aurora Glass）
+   浅色态没有这层装饰——[data-theme="light"] 直接隐藏，视觉上走
+   Task 7 的商务瓷白路线。
+   ═══════════════════════════════════════════════════════════ */
+@keyframes aurora-drift-1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(22px, 14px) scale(1.06); } }
+@keyframes aurora-drift-2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-18px, 10px) scale(1.04); } }
+@media (prefers-reduced-motion: reduce) {
+  .topbar-aurora i, .rail--glass-aurora i { animation: none !important; }
+}
+
+.topbar-aurora, .rail--glass-aurora {
+  position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0;
+}
+[data-theme="light"] .topbar-aurora, [data-theme="light"] .rail--glass-aurora { display: none; }
+
+.topbar-aurora i { position: absolute; width: 140px; height: 140px; border-radius: 50%; filter: blur(34px); opacity: 0.3; }
+.topbar-aurora i:nth-child(1) { background: var(--aurora-1); top: -70px; left: 8%; animation: aurora-drift-1 12s ease-in-out infinite; }
+.topbar-aurora i:nth-child(2) { background: var(--aurora-2); top: -70px; left: 46%; animation: aurora-drift-2 14s ease-in-out infinite; }
+
+.rail--glass-aurora i { position: absolute; width: 220px; height: 220px; border-radius: 50%; filter: blur(46px); opacity: 0.4; }
+.rail--glass-aurora i:nth-child(1) { background: var(--aurora-1); top: -60px; left: -60px; animation: aurora-drift-1 12s ease-in-out infinite; }
+.rail--glass-aurora i:nth-child(2) { background: var(--aurora-2); bottom: -70px; right: -50px; animation: aurora-drift-2 14s ease-in-out infinite; }
+
+.topbar { overflow: hidden; }
+.topbar > *:not(.topbar-aurora) { position: relative; z-index: 1; }
+.rail--glass { position: relative; overflow: hidden; }
+.rail--glass > *:not(.rail--glass-aurora) { position: relative; z-index: 1; }
+
+[data-theme="dark"] .topbar,
+:root:not([data-theme]) .topbar {
+  background: rgba(16, 12, 28, 0.55);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+[data-theme="dark"] .rail--glass,
+:root:not([data-theme]) .rail--glass {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px) saturate(160%);
+}
+[data-theme="dark"] .menu,
+:root:not([data-theme]) .menu {
+  backdrop-filter: blur(14px) saturate(160%);
+}
+
 /* ── 纸面画布 ─────────────────────────────────────────── */
 .canvas {
   flex: 1; min-width: 0; height: 100%; overflow: hidden;
