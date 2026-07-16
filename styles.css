@@ -204,6 +204,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .menu button:hover { background: var(--overlay-strong); color: var(--text); }
 .menu button.danger:hover { background: #3a1616; color: #ff9a9a; }
+.menu-group + .menu-group { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.menu-group-label {
+  padding: 4px 11px 6px; font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--dimmer); font-weight: 700;
+}
+.menu-group--admin { position: relative; }
+.menu-group--admin::before {
+  content: ""; position: absolute; left: -6px; top: 0; bottom: 0; width: 2px;
+  background: var(--dis); opacity: 0.5; border-radius: 2px;
+}
+.menu-group--danger button.danger {
+  border: 1px solid transparent; transition: all var(--fast);
+}
+.menu-group--danger button.danger:hover { border-color: var(--dis); }
 
 /* ── 工作区 ───────────────────────────────────────────── */
 #workspace { height: calc(100% - 58px); position: relative; }

@@ -637,7 +637,10 @@ const App = (() => {
 
     $('#btn-undo').onclick = undo;
     $('#btn-redo').onclick = redo;
-    if (!me.admin) ['reset', 'logs', 'backups'].forEach((a) => $(`[data-act="${a}"]`)?.remove());
+    if (!me.admin) {
+      $('.menu-group--admin')?.remove(); // logs/backups 都是管理员专区独有的，组一起删，不留空标题、也不用再逐个按钮找
+      $('[data-act="reset"]')?.closest('.menu-group')?.remove(); // 危险操作是单独一组，同样整组删
+    }
     wireMenu();
     wireFloatingLayerAvoidance();
     connect();

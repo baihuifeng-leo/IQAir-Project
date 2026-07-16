@@ -47,17 +47,31 @@
     <div class="menu-wrap">
       <button class="ghost" id="btn-more" aria-haspopup="true">⋯</button>
       <div class="menu" id="more-menu" hidden>
-        <button data-act="export">导出 JSON 备份</button>
-        <button data-act="import">从 JSON 恢复</button>
-        <button data-act="print">打印 / 导出 PDF</button>
-        <div class="menu-sep"></div>
-        <button data-act="logs">变更日志</button>
-        <button data-act="backups">备份与恢复</button>
-        <button data-act="users">用户管理</button>
-        <button data-act="settings">功能显示设置</button>
-        <div class="menu-sep"></div>
-        <button data-act="reset" class="danger">恢复出厂数据</button>
-        <button data-act="logout" id="btn-logout">退出登录 · <span id="whoami"></span></button>
+        <div class="menu-group">
+          <div class="menu-group-label">个人偏好</div>
+          <button data-act="settings">功能显示设置</button>
+        </div>
+        <div class="menu-group">
+          <div class="menu-group-label">账号</div>
+          <button data-act="users">用户管理</button>
+        </div>
+        <div class="menu-group">
+          <div class="menu-group-label">数据治理</div>
+          <button data-act="export">导出 JSON 备份</button>
+          <button data-act="import">从 JSON 恢复</button>
+          <button data-act="print">打印 / 导出 PDF</button>
+        </div>
+        <div class="menu-group menu-group--admin">
+          <div class="menu-group-label">管理员专区</div>
+          <button data-act="logs">变更日志</button>
+          <button data-act="backups">备份与恢复</button>
+        </div>
+        <div class="menu-group menu-group--danger">
+          <button data-act="reset" class="danger">恢复出厂数据</button>
+        </div>
+        <div class="menu-group">
+          <button data-act="logout" id="btn-logout">退出登录 · <span id="whoami"></span></button>
+        </div>
       </div>
     </div>
   </div>
