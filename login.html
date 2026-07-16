@@ -152,42 +152,6 @@
     .feats { display: none; } /* 手机上直奔登录,少滚一屏 */
   }
 
-  /* ── 悬浮玻璃信息卡：漂在 3D 背景里，承载核心辐射节点没有文字的那部分信息 ── */
-  .float-card {
-    position: fixed; z-index: 3; width: 200px; padding: 15px 17px;
-    background: linear-gradient(180deg, #0f1728cc, #0a111fcc);
-    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--line); border-radius: 16px;
-    box-shadow: 0 30px 70px -30px #000, inset 0 1px 0 #ffffff0d;
-    pointer-events: none; opacity: 0; animation: fc-in 1s var(--ease) 0.5s forwards;
-    transition: transform 0.35s var(--ease);
-    will-change: transform;
-  }
-  @keyframes fc-in { to { opacity: 1; } }
-  .float-card .fc-eyebrow {
-    display: flex; align-items: center; gap: 7px; margin: 0 0 10px;
-    font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase; font-weight: 700; color: var(--mint);
-  }
-  .float-card .fc-eyebrow i { width: 5px; height: 5px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 8px var(--mint); flex: none; }
-  .float-card .fc-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-  .float-card .fc-tags span {
-    font-size: 11px; padding: 4px 9px; border-radius: 20px; border: 1px solid var(--line-soft); color: var(--dim); background: #ffffff05;
-  }
-  .float-card .fc-body { margin: 0; font-size: 12px; line-height: 1.75; color: var(--dim); }
-  .float-card-inner { animation: fc-bob 7.5s ease-in-out infinite; }
-  @keyframes fc-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
-  .float-card.fc-a { top: 10%; right: 3vw; }
-  .float-card.fc-b { bottom: 11%; left: 3vw; }
-  .float-card.fc-b .float-card-inner { animation-delay: -3.6s; }
-
-  /* 窄屏 / 矮屏都可能跟登录卡撞在一起,索性藏起来,登录本身才是主角 */
-  @media (max-width: 1500px), (max-height: 760px) {
-    .float-card { display: none; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .float-card-inner { animation: none; }
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .aurora { animation: none; }
   }
@@ -202,21 +166,6 @@
 </div>
 <canvas id="bg-webgl" aria-hidden="true"></canvas>
 <div class="bg-glow" id="bg-glow" aria-hidden="true"></div>
-
-<div class="float-card fc-a" data-depth="14" aria-hidden="true">
-  <div class="float-card-inner">
-    <p class="fc-eyebrow"><i></i>五大功能模块</p>
-    <div class="fc-tags">
-      <span>价格带沙盘</span><span>竞品对位</span><span>评论风向标</span><span>竞品3D预览</span><span>报告管理</span>
-    </div>
-  </div>
-</div>
-<div class="float-card fc-b" data-depth="10" aria-hidden="true">
-  <div class="float-card-inner">
-    <p class="fc-eyebrow"><i></i>协同 · 留痕</p>
-    <p class="fc-body">多人实时编辑，冲突自动合并；每一次改动都有迹可循。</p>
-  </div>
-</div>
 
 <main class="stage">
   <section class="intro">
@@ -342,19 +291,6 @@
     gate.addEventListener('pointerleave', () => {
       gate.style.setProperty('--tiltx', '0deg');
       gate.style.setProperty('--tilty', '0deg');
-    });
-  }
-
-  // ── 悬浮玻璃卡片：随光标做轻微视差位移，配合各自的呼吸浮动，做出"飘在场景里"的进深感 ──
-  const floatCards = document.querySelectorAll('.float-card');
-  if (floatCards.length && !reduceMotion && matchMedia('(hover: hover)').matches) {
-    window.addEventListener('pointermove', (e) => {
-      const nx = (e.clientX / innerWidth - 0.5) * 2;
-      const ny = (e.clientY / innerHeight - 0.5) * 2;
-      floatCards.forEach((el) => {
-        const depth = parseFloat(el.dataset.depth || '10');
-        el.style.transform = `translate3d(${(nx * depth).toFixed(1)}px, ${(ny * depth).toFixed(1)}px, 0)`;
-      });
     });
   }
 

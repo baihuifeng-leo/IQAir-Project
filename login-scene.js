@@ -1,10 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
    login-scene.js — 登录页 3D 背景（Three.js）
-   一个缓慢自转的数据核心（双层线框多面体），向外辐射 5 条分支连线，
-   对应产品的五大功能模块——连线是"有意义的结构"，不是随机连的星座；
-   背后铺一层星域粒子做纵深，叠加 Bloom 后处理做真实发光，
-   颜色贴合品牌色（薄荷绿 / 蓝）。分支节点本身不带文字，功能文字
-   由页面上的悬浮玻璃卡片（.float-card）承载。
+   一个缓慢自转的数据核心（双层线框多面体）+ 星域粒子 + 星座连线，
+   叠加 Bloom 后处理做真实发光，颜色贴合品牌色（薄荷绿 / 蓝）。
    纯装饰层：canvas 透明、铺在 body 的渐变背景之上，加载失败或
    reduced-motion 时优雅退化为已有的 CSS 渐变背景，不影响登录。
    ═══════════════════════════════════════════════════════════ */
@@ -78,8 +75,36 @@ import { OutputPass } from './three-outputpass.js';
   });
   const stars = new THREE.Points(starGeo, starMat);
 
+  /* ── 星座连线：整组做刚体旋转，粒子间相对距离不变，
+     邻近关系只需在初始化时算一次，帧循环里零开销 ── */
+  const linePos = [];
+  const lineCol = [];
+  const maxLinks = 620;
+  outer:
+  for (let i = 0; i < STAR_N; i++) {
+    let links = 0;
+    for (let j = i + 1; j < STAR_N; j++) {
+      const dx = starPos[i * 3] - starPos[j * 3];
+      const dy = starPos[i * 3 + 1] - starPos[j * 3 + 1];
+      const dz = starPos[i * 3 + 2] - starPos[j * 3 + 2];
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < 17 * 17) {
+        linePos.push(starPos[i * 3], starPos[i * 3 + 1], starPos[i * 3 + 2], starPos[j * 3], starPos[j * 3 + 1], starPos[j * 3 + 2]);
+        lineCol.push(starCol[i * 3], starCol[i * 3 + 1], starCol[i * 3 + 2], starCol[j * 3], starCol[j * 3 + 1], starCol[j * 3 + 2]);
+        links++;
+        if (linePos.length / 6 > maxLinks) break outer;
+        if (links > 3) break;
+      }
+    }
+  }
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(linePos), 3));
+  lineGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(lineCol), 3));
+  const lineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false });
+  const constellation = new THREE.LineSegments(lineGeo, lineMat);
+
   const field = new THREE.Group();
-  field.add(stars);
+  field.add(stars, constellation);
   field.rotation.set(0.18, 0.4, 0);
   scene.add(field);
 
@@ -100,57 +125,6 @@ import { OutputPass } from './three-outputpass.js';
     new THREE.MeshBasicMaterial({ color: MINT, transparent: true, opacity: 0.09, blending: THREE.AdditiveBlending, depthWrite: false })
   );
   core.add(shellOuter, shellInner, glowOrb);
-
-  /* ── 5 条辐射分支：对应五大功能模块。连线本身不带文字——
-     那五个模块名由 login.html 里的悬浮玻璃卡片承载，这里只负责
-     "核心向外辐射出结构"的视觉——是真实产品信息架构的抽象，
-     不是随手连的星座线。 ── */
-  const BRANCH_N = 5;
-  const branches = new THREE.Group();
-  const branchLinePos = [];
-  const branchLineCol = [];
-  for (let i = 0; i < BRANCH_N; i++) {
-    const angle = (i / BRANCH_N) * Math.PI * 2 + 0.3;
-    const radius = 30 + (i % 2) * 9;
-    const bx = Math.cos(angle) * radius;
-    const by = Math.sin(angle) * radius * 0.5 + 3;
-    const bz = ((i % 3) - 1) * 9;
-    const bc = i % 2 === 0 ? MINT : BLUE;
-
-    branchLinePos.push(0, 0, 0, bx, by, bz);
-    branchLineCol.push(MINT.r, MINT.g, MINT.b, bc.r, bc.g, bc.b);
-
-    const node = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.3, 0),
-      new THREE.MeshBasicMaterial({ color: bc, transparent: true, opacity: 0.92 })
-    );
-    node.position.set(bx, by, bz);
-    const nodeGlow = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(3.8, 1),
-      new THREE.MeshBasicMaterial({ color: bc, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending, depthWrite: false })
-    );
-    nodeGlow.position.copy(node.position);
-    branches.add(node, nodeGlow);
-
-    // 分支外侧的细碎子节点：纯纹理装饰，呼应参考视频里节点继续分叉的质感
-    for (let k = 0; k < 4; k++) {
-      const t = 1.15 + Math.random() * 0.55;
-      const jitter = () => (Math.random() - 0.5) * 6;
-      const dot = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.35, 0),
-        new THREE.MeshBasicMaterial({ color: bc, transparent: true, opacity: 0.4 })
-      );
-      dot.position.set(bx * t + jitter(), by * t + jitter(), bz * t + jitter());
-      branches.add(dot);
-    }
-  }
-  const branchLineGeo = new THREE.BufferGeometry();
-  branchLineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(branchLinePos), 3));
-  branchLineGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(branchLineCol), 3));
-  const branchLineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.38, blending: THREE.AdditiveBlending, depthWrite: false });
-  const branchLines = new THREE.LineSegments(branchLineGeo, branchLineMat);
-
-  core.add(branchLines, branches);
   scene.add(core);
 
   /* ── Bloom：真实发光，替代之前 CSS 模糊圆斑的"糊色块"效果 ── */
