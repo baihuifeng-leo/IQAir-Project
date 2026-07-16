@@ -808,6 +808,11 @@ EOF
 }
 
 .topbar-aurora, .rail--glass-aurora {
+  /* overflow:hidden 加在这一层自己身上就够了——它会裁掉自己的子元素（光斑），
+     不需要也不能在 .topbar 本身上再加一次 overflow:hidden，那样会把 #more-menu
+     下拉菜单（.topbar 的后代，靠 position:absolute 撑到 topbar 高度之外）一起裁掉，
+     导致菜单打不开。.rail--glass 同理不需要额外裁一层——.tagmenu 之类的浮层
+     是 appendChild 到 document.body 的，不在 .rail 的 DOM 子树里，不受影响。 */
   position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0;
 }
 [data-theme="light"] .topbar-aurora, [data-theme="light"] .rail--glass-aurora { display: none; }
@@ -820,7 +825,6 @@ EOF
 .rail--glass-aurora i:nth-child(1) { background: var(--aurora-1); top: -60px; left: -60px; animation: aurora-drift-1 12s ease-in-out infinite; }
 .rail--glass-aurora i:nth-child(2) { background: var(--aurora-2); bottom: -70px; right: -50px; animation: aurora-drift-2 14s ease-in-out infinite; }
 
-.topbar { overflow: hidden; }
 .topbar > *:not(.topbar-aurora) { position: relative; z-index: 1; }
 .rail--glass { position: relative; overflow: hidden; }
 .rail--glass > *:not(.rail--glass-aurora) { position: relative; z-index: 1; }
