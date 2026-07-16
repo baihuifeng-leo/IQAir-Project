@@ -94,6 +94,29 @@
   --menu-shadow: 0 24px 50px -18px #000;
 }
 
+/* .sheet-mask（变更日志/备份与恢复/用户管理/功能显示设置这几个浮层）
+   同样是未迁移内容，但它们由 admin.js/users.js/settings.js 直接
+   document.body.appendChild()，不是任何 .view 的子元素，上面这层
+   [data-theme-ready="false"] 兜底覆盖不到它们——浅色偏好下会意外
+   变浅（变更日志的 .log-act.* 徽标颜色是硬编码深色值，变浅后直接
+   花掉）。这里补一份同样的深色令牌兜底，覆盖到这几个浮层。等阶段二
+   正式迁移这几个功能后，跟其他视图一样去掉即可。 */
+.sheet-mask {
+  --bg: #080c14;
+  --surface: #101725;
+  --surface-2: #0c1220;
+  --line: #1f2b42;
+  --line-soft: #17203292;
+  --text: #e9eef8;
+  --dim: #79879f;
+  --dimmer: #4d5a72;
+  --mint: #4ee0c1;
+  --mint-dim: rgba(78, 224, 193, 0.14);
+  --blue: #5b8cff;
+  --overlay-weak: #ffffff08;
+  --overlay-strong: #ffffff12;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -203,7 +226,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: all var(--fast);
 }
 .menu button:hover { background: var(--overlay-strong); color: var(--text); }
-.menu button.danger:hover { background: #3a1616; color: #ff9a9a; }
+.menu button.danger:hover { background: var(--overlay-strong); color: #ff9a9a; }
 .menu-group + .menu-group { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .menu-group-label {
   padding: 4px 11px 6px; font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase;
@@ -734,7 +757,6 @@ select#own-brand {
 }
 
 /* ── 登录态 ───────────────────────────────────────────── */
-.menu-sep { height: 1px; margin: 5px 4px; background: var(--line); }
 #btn-logout { color: var(--dim); }
 #btn-logout::before { content: "→"; margin-right: 8px; color: var(--dimmer); }
 
@@ -903,8 +925,8 @@ input.pin::placeholder { letter-spacing: 0; font-family: var(--f-body); font-siz
   padding: 7px 13px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
   transition: all var(--fast);
 }
-.batchbar button:hover { color: var(--text); background: #ffffff14; border-color: #33456a; }
-.batchbar button.danger:hover { background: #3a1616; color: #ff9a9a; border-color: #6b2129; }
+.batchbar button:hover { color: var(--text); background: var(--overlay-strong); border-color: #33456a; }
+.batchbar button.danger:hover { background: var(--overlay-strong); color: #ff9a9a; border-color: #6b2129; }
 .batchbar button.quiet { border-color: transparent; color: var(--dimmer); }
 .batchbar button.quiet:hover { color: var(--text); background: none; }
 
