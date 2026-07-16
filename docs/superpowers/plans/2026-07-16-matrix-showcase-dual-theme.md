@@ -320,11 +320,11 @@ EOF
 - `.menu button:hover { background: #ffffff0e; color: var(--text); }` → `background: var(--overlay-strong);`
 - `.menu { ...; box-shadow: 0 24px 50px -18px #000; ... }` → `box-shadow: var(--menu-shadow);`
 
-验证没漏改：
+验证没漏改——只核对上面列出的这 8 处选择器，不是整个文件：
 ```bash
-grep -n '#ffffff0[0-9a-f]\b' styles.css
+grep -nE '\.(ghost(:hover)?|editbtn|tab:hover|stat|tag-row \.sq|menu( button:hover)?) *\{' styles.css | grep '#ffffff0'
 ```
-Expected: 无输出（这几处半透明白色硬编码全部改成了令牌引用；其余非本任务范围的 `#ffffff0x` 用法——如果有——保持不动，本任务只改上面列出的这几条选择器）。
+Expected: 无输出（这 8 处硬编码全部改成了令牌引用）。注意：`--overlay-weak: #ffffff08;` 这两行令牌定义（`:root` 和 `:root[data-theme="light"]` 里）本身就应该保留字面量——那是令牌的取值，不是要改的"用法"。文件里其余非本任务范围的 `#ffffff0x` 用法（评论看板、用户管理面板等还没迁移的模块样式）保持不动，本任务只改上面列出的这几条共享外壳选择器；一个不加限定的 `grep -n '#ffffff0[0-9a-f]\b' styles.css` 会连同这些未改动的、以及两行令牌定义一起匹配出来，不能作为"漏改"的判断依据。
 
 - [ ] **Step 3: index.html——`<head>` 加 FOUC 防闪烁脚本**
 
