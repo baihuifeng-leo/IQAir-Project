@@ -401,6 +401,17 @@ select#own-brand {
   box-shadow: 0 6px 18px -8px rgba(31, 158, 133, 0.45);
 }
 
+/* .menu 是全站共享外壳，#batchbar 是沙盘页专属但结构上是全局元素（不在任何
+   .view 里面，兜底层管不到也不需要管——目前只有沙盘页会显示它）。危险态
+   hover 文字色 #ff9a9a 是为深色背景挑的，在浅色态的 hover 背景（接近白色）
+   上对比度不够（约 1.8:1，远低于 WCAG AA 的 4.5:1）；换成 --dis 在浅色态
+   对比度约 4.5:1，但反过来 --dis 放到深色态背景上只有约 3.1:1，所以不能
+   统一成一个颜色，两态分别指定。 */
+[data-theme="light"] .menu button.danger:hover,
+[data-theme="light"] .batchbar button.danger:hover {
+  color: var(--dis);
+}
+
 /* ── 纸面画布 ─────────────────────────────────────────── */
 .canvas {
   flex: 1; min-width: 0; height: 100%; overflow: hidden;
