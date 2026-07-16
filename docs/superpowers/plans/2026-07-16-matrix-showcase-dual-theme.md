@@ -916,12 +916,18 @@ EOF
   backdrop-filter: none;
 }
 
-[data-theme="light"] .rail-zone--info,
-[data-theme="light"] .stat {
+/* .rail-zone--info/.stat/.solid 都是通用类名，在还没迁移的视图里也用（比如
+   评论风向标/竞品3D预览/报告管理的"导入 Excel"按钮也是 .solid）。这几条覆写
+   必须限定在 .view[data-theme-ready="true"] 范围内，不然全局切到浅色态时，
+   未迁移视图里这几个类名的阴影颜色会跟着跳变——Task 3 的兜底层只重新声明了
+   自定义属性（--bg/--mint 等），没有也不该覆盖这种不经过自定义属性、直接写
+   死颜色值的 box-shadow，所以这里必须自己限定作用域，不能指望兜底层兜底。 */
+[data-theme="light"] .view[data-theme-ready="true"] .rail-zone--info,
+[data-theme="light"] .view[data-theme-ready="true"] .stat {
   box-shadow: 0 6px 16px -10px rgba(30, 50, 110, 0.18);
 }
 
-[data-theme="light"] .solid {
+[data-theme="light"] .view[data-theme-ready="true"] .solid {
   box-shadow: 0 6px 18px -8px rgba(31, 158, 133, 0.45);
 }
 ```
