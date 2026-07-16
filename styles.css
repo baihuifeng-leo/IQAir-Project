@@ -342,16 +342,24 @@ select#own-brand {
 .chip-tools button:hover { background: var(--ink); color: #fff; }
 .chip-tools .dot { border-radius: 50%; background: var(--chip, var(--ink)); box-shadow: 0 0 0 1.5px var(--chip-text, #fff), 0 0 0 2.5px var(--hair-strong); }
 .chip-tools .dot:hover { background: var(--chip, var(--ink)); filter: brightness(1.2); }
+/* 新品标记开关跟其它工具按钮共享外观，打开时用跟 .chip-new 角标同一套红粉配色，
+   一眼就能看出这张卡片当前是不是新品，不用先看角标 */
+.chip-tools .nw.on { background: linear-gradient(135deg, #ff5f7a, #ff2f6b); color: #fff; }
+.chip-tools .nw.on:hover { filter: brightness(1.1); }
 
-/* “新品”分类的卡片自动挂一个显眼角标——固定配色（红粉），不跟随分类色，
-   这样不管这批新品被打了什么颜色，New 角标永远一眼可见、风格统一 */
+/* 新品角标现在由产品自己的 isNew 字段控制（不再靠分类名推断），挪到卡片
+   右上角——跟左侧的分类色块方向错开，视觉上也更贴近同样在右上角的工具栏。
+   固定配色（红粉），不跟随分类色，这样不管产品被打了什么分类颜色，
+   New 角标永远一眼可见、风格统一。 */
 .chip-new {
-  position: absolute; top: -7px; left: -7px; z-index: 3; pointer-events: none;
+  position: absolute; top: -7px; right: -7px; z-index: 3; pointer-events: none;
   background: linear-gradient(135deg, #ff5f7a, #ff2f6b); color: #fff;
   font-family: var(--f-mono); font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
   padding: 2px 6px 2px 7px; border-radius: 999px; line-height: 1.35;
   box-shadow: 0 3px 9px -2px #ff2f6b70, 0 0 0 2px var(--paper-card);
 }
+/* 角标跟工具栏挤在同一个角落，工具栏悬停展开时往下让一让，别叠在角标上 */
+.chip.new .chip-tools { top: 13px; }
 
 .tagmenu {
   position: fixed; z-index: 90; width: 232px; padding: 5px;

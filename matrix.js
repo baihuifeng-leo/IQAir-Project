@@ -10,9 +10,6 @@ const Matrix = (() => {
   const M = () => A.state.matrix;
   const colorOf = (tag) => (tag === 'default' || !M().tags[tag] ? M().defaultColor : M().tags[tag].color);
   const hasTag = (tag) => tag !== 'default' && !!M().tags[tag];
-  // "新品" 不是写死的分类，是用户自己在分类编辑里建的——分类名里带"新品"或"new"
-  // 字样就自动在卡片上加显眼的 New 角标，不需要每个产品再单独标一次
-  const isNewTag = (tag) => hasTag(tag) && /新品|new/i.test(M().tags[tag].label || '');
 
   /**
    * 卡片改整体色块填充后，分类色可能很深也可能很浅，白字/深字必须跟着算，
@@ -57,7 +54,7 @@ const Matrix = (() => {
   function chip(p) {
     const el = document.createElement('div');
     const tagged = hasTag(p.tag);
-    el.className = 'chip' + (p.italic ? ' i' : '') + (p.underline ? ' u' : '') + (sel.has(p.id) ? ' sel' : '') + (tagged ? ' filled' : '');
+    el.className = 'chip' + (p.italic ? ' i' : '') + (p.underline ? ' u' : '') + (sel.has(p.id) ? ' sel' : '') + (tagged ? ' filled' : '') + (p.isNew ? ' new' : '');
     const chipColor = colorOf(p.tag);
     el.style.setProperty('--chip', chipColor);
     if (tagged) {
@@ -71,7 +68,7 @@ const Matrix = (() => {
     el.draggable = A.isEditing();
     el.dataset.id = p.id;
 
-    if (isNewTag(p.tag)) {
+    if (p.isNew) {
       const badge = document.createElement('span');
       badge.className = 'chip-new';
       badge.textContent = 'NEW';
@@ -113,6 +110,10 @@ const Matrix = (() => {
     // 的那张变了色，其余选中的都没变，很容易被当成"批量改分类坏了"。
     dot.onclick = (e) => { e.stopPropagation(); openTagMenu(e.currentTarget, idsInFlight(p.id)); };
 
+    const nw = document.createElement('button');
+    nw.textContent = 'N'; nw.title = '新品标记，不受分类限制'; nw.className = 'nw' + (p.isNew ? ' on' : '');
+    nw.onclick = (e) => { e.stopPropagation(); toggleNew(idsInFlight(p.id)); };
+
     const it = document.createElement('button');
     it.textContent = 'I'; it.title = '斜体'; it.style.fontStyle = 'italic';
     it.onclick = () => { A.mark(); p.italic = !p.italic; A.save('matrix'); render(); };
@@ -130,7 +131,7 @@ const Matrix = (() => {
       A.save('matrix'); render();
     };
 
-    tools.append(dot, it, un, rm);
+    tools.append(nw, dot, it, un, rm);
 
     el.addEventListener('dragstart', (e) => {
       if (!sel.has(p.id)) clearSel();
@@ -160,6 +161,17 @@ const Matrix = (() => {
 
   /** 拖的是选区里的一张 → 整批跟着走；否则只动这一张 */
   const idsInFlight = (id) => (sel.has(id) && sel.size > 1 ? [...sel] : [id]);
+
+  /** 单张卡片的 N 按钮和批量栏的"标记新品"共用同一套开关逻辑：
+   *  选中的产品里如果已经全部是 New，再点一次就是取消，否则就是打上 —— 跟
+   *  批量斜体/下划线一个道理，避免"选中的产品新旧混杂时点一下结果各不相同"。 */
+  function toggleNew(ids) {
+    A.mark();
+    const idSet = new Set(ids);
+    const on = M().products.filter((p) => idSet.has(p.id)).every((p) => p.isNew);
+    M().products.forEach((p) => { if (idSet.has(p.id)) p.isNew = !on; });
+    A.save('matrix'); render();
+  }
 
   function moveMany(ids, brandId, bandId, anchorId, after) {
     const list = M().products;
@@ -260,6 +272,7 @@ const Matrix = (() => {
 
   function wireBatchBar() {
     A.$('#batch-tag').onclick = (e) => openTagMenu(e.currentTarget, [...sel]);
+    A.$('#batch-new').onclick = () => toggleNew([...sel]);
     A.$('#batch-italic').onclick = () => {
       A.mark();
       const on = M().products.filter((p) => sel.has(p.id)).every((p) => p.italic);

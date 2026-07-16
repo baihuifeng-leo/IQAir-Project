@@ -132,7 +132,21 @@ async function loadDb() {
   db.revs = db.revs || {};
   DOCS.forEach((d) => (db.revs[d] = db.revs[d] || 1));
   if (await migrateEnglish()) console.log('[init] 已为竞品对位补齐英文字段');
+  if (migrateNewTag()) console.log('[init] 已为沙盘图迁移新品标记');
   await persist();
+}
+
+/** 新品角标改成产品自己的 isNew 字段、不再靠分类名推断：把老数据里因为
+ *  分类名带"新品/new"而在显示角标的产品，一次性写实成 isNew=true，
+ *  避免升级的瞬间这些产品的角标全部消失。只跑一次，用 _newTagMigrated
+ *  标记过的沙盘图文档不会被重复处理。 */
+function migrateNewTag() {
+  const m = db.matrix;
+  if (!m || m._newTagMigrated) return false;
+  const isNewCategory = (tag) => tag && tag !== 'default' && m.tags?.[tag] && /新品|new/i.test(m.tags[tag].label || '');
+  (m.products || []).forEach((p) => { if (p.isNew === undefined) p.isNew = isNewCategory(p.tag); });
+  m._newTagMigrated = true;
+  return true;
 }
 
 /** 老数据没有英文字段：按中文原文去种子里查一遍，查不到的留空（界面会标"待更新"） */
