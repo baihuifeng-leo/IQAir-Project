@@ -100,7 +100,7 @@ async function loadUsers() {
   }
 }
 const saveUsers = () => writeAtomic(USERS_FILE, JSON.stringify(users, null, 1));
-const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [] });
+const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [], theme: u.theme === 'light' ? 'light' : 'dark' });
 const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports'];
 
 /* ═══ 文档：每份独立 rev，冲突走三方合并 ═════════════════ */
@@ -366,7 +366,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'PATCH') {
         const isSelf = u.id === me.id;
         if (!isSelf && !me.admin) return json(res, 403, { error: '只能改自己的 PIN' });
-        const { pin, name, admin, hiddenModules } = await body(req, 4096);
+        const { pin, name, admin, hiddenModules, theme } = await body(req, 4096);
         if (pin !== undefined) {
           if (!validPin(pin)) return json(res, 400, { error: 'PIN 必须是 6 位数字' });
           u.pin = hashPin(pin);
@@ -390,6 +390,12 @@ const server = http.createServer(async (req, res) => {
           }
           if (hiddenModules.length >= MODULES.length) return json(res, 400, { error: '至少要留一个模块显示' });
           u.hiddenModules = hiddenModules;
+        }
+        // 主题偏好，跟 hiddenModules 一样只能改自己的——管理员也不能替别人切主题
+        if (theme !== undefined) {
+          if (!isSelf) return json(res, 403, { error: '只能改自己的主题偏好' });
+          if (theme !== 'dark' && theme !== 'light') return json(res, 400, { error: '主题只能是 dark 或 light' });
+          u.theme = theme;
         }
         await saveUsers();
         announcePresence();
