@@ -341,6 +341,37 @@ select#own-brand {
   backdrop-filter: blur(14px) saturate(160%);
 }
 
+/* ═══════════════════════════════════════════════════════════
+   浅色 · 商务瓷白
+   不用极光/玻璃这套语言——纯净留白 + 软彩色阴影替代灰阴影，
+   定位是"日常摸数据"场景下的低疲劳度界面，克制但有质感。
+   ═══════════════════════════════════════════════════════════ */
+[data-theme="light"] .topbar {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(20, 30, 60, 0.05);
+  backdrop-filter: none;
+}
+[data-theme="light"] .topbar::after { display: none; } /* 顶栏描边漂移动效是深色态专属的"高光时刻"，浅色态不用 */
+
+[data-theme="light"] .rail--glass {
+  background: #ffffff;
+  backdrop-filter: none;
+}
+
+[data-theme="light"] .menu {
+  background: #ffffff;
+  backdrop-filter: none;
+}
+
+[data-theme="light"] .rail-zone--info,
+[data-theme="light"] .stat {
+  box-shadow: 0 6px 16px -10px rgba(30, 50, 110, 0.18);
+}
+
+[data-theme="light"] .solid {
+  box-shadow: 0 6px 18px -8px rgba(31, 158, 133, 0.45);
+}
+
 /* ── 纸面画布 ─────────────────────────────────────────── */
 .canvas {
   flex: 1; min-width: 0; height: 100%; overflow: hidden;
