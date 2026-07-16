@@ -322,7 +322,6 @@ select#own-brand {
 .rail--glass-aurora i:nth-child(1) { background: var(--aurora-1); top: -60px; left: -60px; animation: aurora-drift-1 12s ease-in-out infinite; }
 .rail--glass-aurora i:nth-child(2) { background: var(--aurora-2); bottom: -70px; right: -50px; animation: aurora-drift-2 14s ease-in-out infinite; }
 
-.topbar { overflow: hidden; }
 .topbar > *:not(.topbar-aurora) { position: relative; z-index: 1; }
 .rail--glass { position: relative; overflow: hidden; }
 .rail--glass > *:not(.rail--glass-aurora) { position: relative; z-index: 1; }
