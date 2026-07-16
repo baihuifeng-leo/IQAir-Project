@@ -382,6 +382,42 @@ const App = (() => {
     }
   }
 
+  /* ── 主题 ───────────────────────────────────────────── */
+  /**
+   * 只管本地生效（属性 + localStorage 缓存 + 按钮文案），不碰网络。
+   * localStorage 只是同一台设备下次打开页面时避免闪烁的缓存，不是
+   * 偏好的存储来源——存储来源是服务端的 users.json（见 setTheme）。
+   */
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('wb.theme', t);
+    const b = $('#btn-theme');
+    if (b) {
+      b.textContent = t === 'light' ? '切到深色' : '切到浅色';
+      b.classList.toggle('is-on', t === 'light');
+    }
+  }
+
+  /** 切主题：本地立刻生效，同时同步到账号；同步失败就把本地状态退回去，跟 settings.js 的 toggle() 是一个套路。 */
+  async function setTheme(t) {
+    const prev = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(t);
+    if (me) me.theme = t;
+    try {
+      const r = guard(await fetch('/api/users/' + me.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: t })
+      }));
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || '保存失败');
+    } catch (e) {
+      if (e.expired) return;
+      applyTheme(prev);
+      if (me) me.theme = prev;
+      toast('主题偏好没能同步到账号，换设备可能会看到旧主题：' + e.message, 'bad');
+    }
+  }
+
   function go(next) {
     view = next;
     $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.view === next));
@@ -589,6 +625,8 @@ const App = (() => {
     $$('.tab').forEach((t) => (t.onclick = () => go(t.dataset.view)));
     $('#btn-edit').onclick = () => setEditing(!editing);
     setEditing(localStorage.getItem('wb.editing') === '1');
+    applyTheme(me.theme || 'dark');
+    $('#btn-theme').onclick = () => setTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
     refreshModuleVisibility();
     const hash = location.hash.slice(1);
     const hiddenSet = new Set(me.hiddenModules || []);

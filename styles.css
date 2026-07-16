@@ -15,6 +15,11 @@
   --mint: #4ee0c1;
   --mint-dim: rgba(78, 224, 193, 0.14);
   --blue: #5b8cff;
+  --overlay-weak: #ffffff08;
+  --overlay-strong: #ffffff12;
+  --menu-shadow: 0 24px 50px -18px #000;
+  --aurora-1: #8b5cf6;
+  --aurora-2: #4ee0c1;
 
   --paper: #f5f3ed;
   --paper-card: #fffefb;
@@ -36,6 +41,57 @@
   --f-display: "Bahnschrift", "DIN Alternate", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --f-body: -apple-system, "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Segoe UI", sans-serif;
   --f-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   双主题：浅色覆写 + 未迁移页面的深色兜底
+   深色是 :root 的默认值（现状不变）。浅色态覆写下面这些令牌。
+   阶段一只有共享外壳 + 沙盘页做了双主题适配，其余视图还是旧的纯深色
+   实现——:root[data-theme="light"] 会把这些令牌全站覆写成浅色值，
+   所以未适配的视图需要在自己的 [data-theme-ready="false"] 作用域里
+   把令牌重新声明回深色值，防止浅色态下出现"半新半旧"的视觉断层。
+   等阶段二哪个视图做完适配，把它的 data-theme-ready 改成 "true"，
+   这层兜底会自动失效，不用再改 CSS。
+   ═══════════════════════════════════════════════════════════ */
+:root[data-theme="light"] {
+  --bg: #eef1f7;
+  --surface: #ffffff;
+  --surface-2: #f8f9fc;
+  --line: #e6e9f0;
+  --line-soft: #edf0f5;
+  --text: #1b2740;
+  --dim: #5b6a8c;
+  --dimmer: #97a3bd;
+
+  --mint: #1f9e85;
+  --mint-dim: rgba(31, 158, 133, 0.14);
+  --blue: #3358c9;
+
+  --overlay-weak: rgba(20, 30, 60, 0.045);
+  --overlay-strong: rgba(20, 30, 60, 0.08);
+  --menu-shadow: 0 24px 50px -18px rgba(30, 50, 110, 0.18);
+
+  --aurora-1: #c4b5fd;
+  --aurora-2: #99f0dd;
+}
+
+.view[data-theme-ready="false"] {
+  --bg: #080c14;
+  --surface: #101725;
+  --surface-2: #0c1220;
+  --line: #1f2b42;
+  --line-soft: #17203292;
+  --text: #e9eef8;
+  --dim: #79879f;
+  --dimmer: #4d5a72;
+
+  --mint: #4ee0c1;
+  --mint-dim: rgba(78, 224, 193, 0.14);
+  --blue: #5b8cff;
+
+  --overlay-weak: #ffffff08;
+  --overlay-strong: #ffffff12;
+  --menu-shadow: 0 24px 50px -18px #000;
 }
 
 * { box-sizing: border-box; }
@@ -90,7 +146,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--dim); font-weight: 600; letter-spacing: 0.4px;
   transition: color var(--fast), background var(--fast);
 }
-.tab:hover { color: var(--text); background: #ffffff08; }
+.tab:hover { color: var(--text); background: var(--overlay-weak); }
 .tab.is-active { color: var(--text); }
 .tab-ink {
   position: absolute; bottom: -5px; height: 2px; border-radius: 2px;
@@ -115,11 +171,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @keyframes pulse { 50% { opacity: 0.25; transform: scale(0.7); } }
 
 .ghost {
-  background: #ffffff08; border: 1px solid var(--line); color: var(--dim);
+  background: var(--overlay-weak); border: 1px solid var(--line); color: var(--dim);
   padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13.5px; font-weight: 600;
   transition: all var(--fast);
 }
-.ghost:hover { color: var(--text); border-color: #33456a; background: #ffffff12; }
+.ghost:hover { color: var(--text); border-color: #33456a; background: var(--overlay-strong); }
 .ghost:active { transform: translateY(1px); }
 .ghost.wide { width: 100%; margin-bottom: 7px; text-align: left; }
 .ghost.wide::before { content: "+"; margin-right: 8px; color: var(--mint); font-weight: 700; }
@@ -137,7 +193,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .menu {
   position: absolute; right: 0; top: calc(100% + 8px); width: 190px; padding: 6px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 11px;
-  box-shadow: 0 24px 50px -18px #000; z-index: 60;
+  box-shadow: var(--menu-shadow); z-index: 60;
   animation: pop 0.18s var(--ease);
 }
 @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(0.97); } }
@@ -146,7 +202,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 9px 11px; border-radius: 7px; color: var(--dim); font-size: 14px;
   transition: all var(--fast);
 }
-.menu button:hover { background: #ffffff0e; color: var(--text); }
+.menu button:hover { background: var(--overlay-strong); color: var(--text); }
 .menu button.danger:hover { background: #3a1616; color: #ff9a9a; }
 
 /* ── 工作区 ───────────────────────────────────────────── */
@@ -175,7 +231,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--dim); border-left: 2px solid var(--mint); padding-left: 8px; font-weight: 700;
 }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.stat { background: #ffffff07; border: 1px solid var(--line-soft); border-radius: 9px; padding: 9px 10px; }
+.stat { background: var(--overlay-weak); border: 1px solid var(--line-soft); border-radius: 9px; padding: 9px 10px; }
 .stat b { display: block; font-family: var(--f-mono); font-size: 18px; color: var(--mint); }
 .stat span { font-size: 11.5px; color: var(--dimmer); }
 
@@ -193,7 +249,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tag-row input[type="text"]:focus { border-color: var(--mint); outline: none; }
 .tag-row .sq {
   flex: 0 0 24px; width: 24px; height: 24px; border-radius: 6px; cursor: pointer;
-  background: #ffffff0a; border: 1px solid var(--line); color: var(--dimmer);
+  background: var(--overlay-weak); border: 1px solid var(--line); color: var(--dimmer);
   display: grid; place-items: center; font-size: 12px; transition: all var(--fast);
 }
 .tag-row .sq.on { background: var(--mint); color: #04231e; border-color: var(--mint); }
@@ -829,7 +885,7 @@ kbd {
    用一个根 class 统一拦截交互。
    ═══════════════════════════════════════════════════════════ */
 .editbtn {
-  background: #ffffff08; border: 1px solid var(--line); color: var(--dim);
+  background: var(--overlay-weak); border: 1px solid var(--line); color: var(--dim);
   padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 700;
   transition: all var(--fast);
 }
@@ -838,6 +894,7 @@ kbd {
   background: linear-gradient(135deg, #17b79c, #0e8f9e); color: #eafffb; border-color: transparent;
   box-shadow: 0 0 0 3px var(--mint-dim);
 }
+#btn-theme.is-on { border-color: var(--mint); color: var(--mint); background: var(--mint-dim); }
 
 body.readonly .chip { cursor: default; }
 body.readonly .chip input,

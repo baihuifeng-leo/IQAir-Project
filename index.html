@@ -6,6 +6,14 @@
 <title>电商工作台 · E-commerce Workbench</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a0e17'/><path d='M6 20h7M6 14h13M6 26h4' stroke='%234ee0c1' stroke-width='2.6' stroke-linecap='round'/><circle cx='24' cy='11' r='3' fill='%235b8cff'/></svg>">
 <link rel="stylesheet" href="/styles.css">
+<script>
+  // 页面渲染前先按本机缓存的主题设值，避免先闪一下默认深色再跳成浅色。
+  // 真正的账号偏好在 core.js 的 boot() 里从 /api/me 拿到后会再校正一次。
+  (function () {
+    var t = localStorage.getItem('wb.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 </head>
 <body>
 
@@ -28,6 +36,7 @@
   </nav>
 
   <div class="topbar-right">
+    <button class="ghost" id="btn-theme" title="切换深浅主题">切到浅色</button>
     <button class="editbtn" id="btn-edit" title="默认只读，防止浏览时误改">开启编辑</button>
     <div class="presence" id="presence" title="在线成员"></div>
     <div class="saveflag" id="saveflag" data-state="idle">
@@ -57,7 +66,7 @@
 <main id="workspace">
 
   <!-- ══════════════ 视图一：价格带沙盘 ══════════════ -->
-  <section class="view" id="view-matrix" data-view="matrix">
+  <section class="view" id="view-matrix" data-view="matrix" data-theme-ready="true">
     <aside class="rail">
       <div class="rail-head">
         <span>图例与分类</span>
@@ -102,7 +111,7 @@
   </section>
 
   <!-- ══════════════ 视图二：竞品对位 ══════════════ -->
-  <section class="view" id="view-compare" data-view="compare" hidden>
+  <section class="view" id="view-compare" data-view="compare" data-theme-ready="false" hidden>
     <aside class="rail">
       <div class="rail-head">
         <span>对位设置</span>
@@ -155,7 +164,7 @@
   </section>
 
   <!-- ══════════════ 视图三：评论风向标 ══════════════ -->
-  <section class="view view-rv" id="view-reviews" data-view="reviews" hidden>
+  <section class="view view-rv" id="view-reviews" data-view="reviews" data-theme-ready="false" hidden>
     <aside class="rail">
       <div class="rail-head">
         <span>数据源</span>
@@ -211,7 +220,7 @@
   </section>
 
   <!-- ══════════════ 视图四：竞品3D预览 ══════════════ -->
-  <section class="view" id="view-preview3d" data-view="preview3d" hidden>
+  <section class="view" id="view-preview3d" data-view="preview3d" data-theme-ready="false" hidden>
     <aside class="rail">
       <div class="rail-head">
         <span>数据源</span>
@@ -264,7 +273,7 @@
   </section>
 
   <!-- ══════════════ 视图五：报告管理 ══════════════ -->
-  <section class="view" id="view-reports" data-view="reports" hidden>
+  <section class="view" id="view-reports" data-view="reports" data-theme-ready="false" hidden>
     <aside class="rail">
       <div class="rail-head">
         <span>报告管理</span>
