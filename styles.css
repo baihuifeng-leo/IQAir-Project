@@ -284,6 +284,20 @@ select#own-brand {
 .chip-mark.good { border-left-color: var(--adv); color: #a9c3ff; }
 .chip-mark.bad { border-left-color: var(--dis); color: #ffa9a3; }
 
+.rail-zone--info {
+  padding: 10px 12px; margin-bottom: 18px; border-radius: 10px;
+  background: var(--overlay-weak); border: 1px solid var(--line-soft);
+}
+.rail-zone--info .rail-hint { margin: 0 0 8px; font-size: 12px; opacity: 0.85; }
+.rail-zone--info .rail-hint:last-child { margin-bottom: 0; }
+
+.rail-zone--action .rail-sec:first-child { margin-top: 0; }
+
+.rail-zone--stats {
+  margin-top: 22px; padding-top: 16px; border-top: 1px dashed var(--line-soft);
+}
+.rail-zone--stats .rail-sec { margin-top: 0; }
+
 /* ── 纸面画布 ─────────────────────────────────────────── */
 .canvas {
   flex: 1; min-width: 0; height: 100%; overflow: hidden;
