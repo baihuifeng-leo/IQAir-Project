@@ -24,9 +24,16 @@ cp server.js xlsx-lite.js reviews-nlp.js reviews-ingest.js \
    "$WORK/competitive-workbench/"
 
 cp index.html login.html core.js matrix.js compare.js reviews.js preview3d.js \
-   report.js admin.js users.js settings.js styles.css \
-   echarts.min.js echarts-gl.min.js html2canvas.min.js \
+   preview3d-scene.js report.js admin.js users.js settings.js styles.css \
+   echarts.min.js html2canvas.min.js \
+   three.module.min.js three-orbitcontrols.js three-effectcomposer.js \
+   three-renderpass.js three-unrealbloompass.js three-outputpass.js \
+   three-copyshader.js three-luminosityhighpassshader.js three-maskpass.js \
+   three-pass.js three-shaderpass.js three-outputshader.js three-css2drenderer.js \
    "$WORK/competitive-workbench/public/"
+
+# 竞品3D预览已从 ECharts-GL 迁到 Three.js，旧库从包里移除（echarts.min.js 保留，评论页在用）
+rm -f "$WORK/competitive-workbench/public/echarts-gl.min.js"
 
 tar czf competitive-workbench.tar.gz -C "$WORK" competitive-workbench
 echo "已重新打包 competitive-workbench.tar.gz"

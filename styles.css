@@ -1342,8 +1342,32 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .p3d-stat span { font-size: 11px; color: var(--dim); letter-spacing: 0.4px; }
 
 .p3d-chart-wrap { flex: 1; min-height: 0; position: relative; padding: 10px 20px 20px; }
-.p3d-chart { width: 100%; height: 100%; }
+/* 深空场景固定观感（比稿定稿），不引用主题令牌、不随全局深浅主题翻转；
+   position:relative 是 CSS2D 标签层和 tooltip 绝对定位的锚 */
+.p3d-chart { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: 12px; background: #030612; }
+.p3d-chart canvas { display: block; }
 .p3d-chart-wrap .rv-empty { padding-top: 120px; }
+
+/* ── Three.js 场景里的 CSS2D 文字（轴名/刻度/产品标签）—— 深空底固定配色 ── */
+.p3d-axis-name { font-size: 15px; font-weight: 600; letter-spacing: 3px; color: #8ef0d8; white-space: nowrap;
+                 text-shadow: 0 0 14px #56e6c6b3, 0 1px 3px #000c; }
+.p3d-axis-tick { font-size: 13px; color: #9fb0d0; white-space: nowrap; font-variant-numeric: tabular-nums;
+                 text-shadow: 0 1px 3px #000c; }
+.p3d-pt-label { font-size: 12px; letter-spacing: 0.5px; white-space: nowrap; color: var(--c, #e9eef8);
+                text-shadow: 0 1px 4px #000e, 0 0 10px #0009; pointer-events: none; }
+.p3d-pt-label b { font-weight: 600; }
+.p3d-pt-label em { font-style: normal; font-weight: 500; font-size: 11px; opacity: 0.82; margin-left: 4px; }
+
+/* 场景引擎自己的 tooltip 容器（原来这层壳是 echarts 的 option 配的） */
+.p3d-tooltip { position: absolute; z-index: 5; pointer-events: none;
+               background: #101725f2; border: 1px solid #1f2b42; border-radius: 10px;
+               box-shadow: 0 20px 44px -18px #000; }
+
+/* 全屏「看细节」：标签/轴文字跟着放大一档（气泡半径的放大在 preview3d.js 里） */
+.p3d-canvas:fullscreen .p3d-pt-label { font-size: 17px; }
+.p3d-canvas:fullscreen .p3d-pt-label em { font-size: 15px; }
+.p3d-canvas:fullscreen .p3d-axis-name { font-size: 20px; }
+.p3d-canvas:fullscreen .p3d-axis-tick { font-size: 17px; }
 
 .p3d-brow.off { opacity: 0.38; filter: grayscale(0.5); }
 .p3d-brow.off i { box-shadow: none; }
@@ -1354,16 +1378,15 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 #p3d-fullscreen.on { color: #5b8cff; border-color: #5b8cff; background: #5b8cff22; }
 
 /* 全屏只对 .p3d-canvas 这一个元素发起，浏览器会自动把它撑满整个屏幕；
-   这里让统计卡片让位给图表本身，气泡/字号放大在 preview3d.js 的 buildOption 里处理 */
+   这里让统计卡片让位给图表本身，气泡/字号放大在 preview3d.js 的 buildSceneData 里处理 */
 .p3d-canvas:fullscreen { padding: 0; }
 .p3d-canvas:fullscreen .p3d-stats { display: none; }
 .p3d-canvas:fullscreen .p3d-chart-wrap { padding: 16px 40px 40px; }
 
-/* echarts 3D label 常显品牌名——外层容器不做特殊处理，样式由 option 里的 textStyle 直接控制 */
 .p3d-tip-row.cur { color: var(--mint); }
 .p3d-tip-row.cur b { color: var(--mint); }
 
-/* echarts tooltip 的内容——外层 backgroundColor/border 由 option 里配置，这里只管排版 */
+/* tooltip 的内容排版——外层壳是上面的 .p3d-tooltip */
 .p3d-tip { padding: 11px 13px; min-width: 190px; font-size: 12.5px; }
 .p3d-tip-head { font-size: 14px; font-weight: 700; }
 .p3d-tip-model { font-size: 11.5px; color: var(--dim); margin-top: 1px; }

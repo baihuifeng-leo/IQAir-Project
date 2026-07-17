@@ -24,10 +24,12 @@ public/
   settings.js        个人功能显示设置面板
   admin.js           变更日志 / 备份恢复面板
   reviews.js         功能三：评论风向标
-  preview3d.js        功能四：竞品3D预览
+  preview3d.js        功能四：竞品3D预览（UI/数据层）
+  preview3d-scene.js  功能四的 Three.js 场景引擎（深空辉光视觉，全站唯一 ES module）
   report.js           功能五：报告管理（个人报告）
-  echarts.min.js      第三方：ECharts（本地打包，不依赖 CDN）
-  echarts-gl.min.js   第三方：ECharts GL（3D 散点图）
+  echarts.min.js      第三方：ECharts（本地打包，不依赖 CDN，评论风向标在用）
+  three.module.min.js 第三方：Three.js r160（3D 散点场景）
+  three-*.js          第三方：Three.js 附件（轨道控制/辉光后处理/CSS2D 标签，共 12 个）
   html2canvas.min.js  第三方：html2canvas（DOM 转图片，价格带沙盘导出 PNG 用）
   styles.css         设计令牌与全部样式
   core.js            状态、自动保存、撤销栈、图片压缩
@@ -297,9 +299,9 @@ docker compose logs -f
 
 ## 功能四：竞品3D预览
 
-**价格、颗粒物CADR、甲醛CADR** 三个维度摆成一张可交互的 3D 散点图（ECharts GL），默认价格在竖直方向（纵轴）、水平面两个方向是颗粒物CADR、甲醛CADR——哪个维度摆在哪个方向、每个方向显示什么文字，都可以在「⚙ 坐标轴」里自定义。滚轮缩放，颜色按品牌区分，气泡上方常显**品牌名 + 型号**两行文字，颜色跟着气泡自己的品牌色走。鼠标停在气泡上看详细参数，点一下直接跳转商品链接。
+**价格、颗粒物CADR、甲醛CADR** 三个维度摆成一张可交互的 3D 散点场景（Three.js，「深空辉光」视觉：深空底色、缎面质感球体、品牌色光晕、落地光柱、星野背景），默认价格在竖直方向（纵轴）、水平面两个方向是颗粒物CADR、甲醛CADR——哪个维度摆在哪个方向、每个方向显示什么文字，都可以在「⚙ 坐标轴」里自定义。滚轮缩放，颜色按品牌区分，气泡上方常显**品牌名 + 型号**，颜色跟着气泡自己的品牌色走（深色品牌色会自动提亮保证可读）。鼠标停在气泡上看详细参数，点一下直接跳转商品链接。
 
-> 技术细节：ECharts-GL 的 3D 坐标系里，视觉上"竖起来"的那根轴其实是 `zAxis3D`，`xAxis3D`/`yAxis3D` 才是水平面的两个方向——容易被技术轴名带偏，默认把「价格」配置给 `zAxis3D`，但这只是默认值，不是技术轴名本身决定的，用户随时可以在坐标轴设置里改。
+> 技术细节：渲染分两层——`preview3d.js`（经典脚本）管数据、坐标轴量程/刻度计算和全部 UI 交互；`preview3d-scene.js`（全站唯一 ES module，Three.js vendor 是 ESM）是纯渲染引擎，经 `window.P3DScene` 衔接。坐标轴的 x/y 是水平面两个方向、z 是竖直方向，跟旧版 ECharts-GL 的语义保持一致，用户的坐标轴设置习惯不变。系统开启「减弱动态效果」（prefers-reduced-motion）时自动旋转默认关闭。
 
 ### 坐标轴设置
 

@@ -1,25 +1,21 @@
 /* ═══════════════════════════════════════════════════════════
    preview3d.js — 竞品 3D 预览
+   渲染层是 Three.js 场景引擎（preview3d-scene.js，深空辉光·缎面版，
+   替代了原来的 ECharts-GL）；本文件只管数据/交互/侧栏 UI，把要画的
+   点和坐标轴描述喂给引擎。
    三个轴分别显示颗粒物CADR、甲醛CADR、价格哪个维度，以及每个轴
-   显示的文字，都可以在「⚙ 坐标轴」里自定义——默认是价格摆在竖直
-   方向（视觉纵轴），水平面两个方向是颗粒物CADR、甲醛CADR，跟这个
-   项目一直以来的习惯一致，但不再是写死的。
-   注意 ECharts-GL 的 3D 坐标系里，视觉上"竖起来"的那根轴技术上
-   其实是 zAxis3D，xAxis3D/yAxis3D 才是水平面的两个方向——axisMap
-   里的 x/y/z 对应的正是这三个技术轴，不要被"z 是竖的"这个直觉
-   误导（在这里 z 确实是竖的，但那是因为默认把价格分给了 z，不是
-   技术轴名本身决定的）。
+   显示的文字，都可以在「⚙ 坐标轴」里自定义——默认价格在竖直方向
+   （axisMap.z），水平面两个方向是颗粒物CADR、甲醛CADR。坐标轴量程
+   和刻度按当前显示的数据现算，任何维度分到任何轴都成立。
    气泡大小可以在「性价比 / 5-6月销售额 / 5-6月销量」三种口径
    之间切换：三个轴的空间已经占满了，销售表现这两项新数据改用
    气泡大小来承载，而不是硬塞成第四根轴。
    ═══════════════════════════════════════════════════════════ */
 const Preview3D = (() => {
-  let A, data = null, chart = null, ro = null, sizeMode = 'costEff', autoRotate = true, fullscreenOn = false;
+  // prefers-reduced-motion 下自动旋转默认关（装饰性动效约束）；用户仍可手动打开
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let A, data = null, scene = null, ro = null, sizeMode = 'costEff', autoRotate = !REDUCED, fullscreenOn = false;
   const hidden = new Set();   // 被隐藏（取消勾选）的品牌
-
-  // ECharts 的 label.fontFamily 走 Canvas 2D 的 font 属性，不认 CSS 的
-  // var(--f-mono)，这里把 styles.css 里同一个等宽字体栈抄一份过来。
-  const FONT_MONO = 'ui-monospace, "JetBrains Mono", "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
 
   /* ── 坐标轴：三个数据维度可以自由分配到 x/y/z 三个轴，每个轴
      显示的文字也能自定义——跟 sizeMode/autoRotate 一样是纯前端的
@@ -64,120 +60,102 @@ const Preview3D = (() => {
     return `rgb(${nr}, ${ng}, ${nb})`;
   }
 
-  /* ── 图表配置 ───────────────────────────────────────── */
-  const axisStyle = (scale) => ({
-    axisLine: { lineStyle: { color: '#33456a' } },
-    splitLine: { lineStyle: { color: '#17203292' } },
-    axisLabel: { color: '#79879f', fontSize: 11 * scale },
-    nameTextStyle: { color: '#e9eef8', fontSize: 12.5 * scale, fontWeight: 600, padding: [0, 0, 0, 0] },
-    axisPointer: { lineStyle: { color: '#4ee0c1' } }
-  });
+  /* ── 场景数据构建 ───────────────────────────────────── */
+  // 刻度：挑一个让轴上落 3~5 个刻度的"整数"步长（1/2/2.5/5 ×10^n），
+  // 量程取到步长的整数倍——三个轴可以被分配任意维度，必须现算
+  function niceAxis(maxV) {
+    const raw = Math.max(maxV, 1) * 1.06;
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    let step = pow * 10;
+    for (const m of [0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5]) {
+      if (Math.ceil(raw / (m * pow)) <= 5) { step = m * pow; break; }
+    }
+    const max = Math.ceil(raw / step) * step;
+    const ticks = [];
+    for (let v = step; v <= max + 1e-9; v += step) ticks.push(+v.toFixed(6));
+    return { max, ticks };
+  }
 
-  function buildOption() {
+  // 刻度文字：价格轴用 ¥Xk 缩写（16000 一长串数字会挤成一堆），CADR 轴直接给数
+  const DIM_FMT = {
+    price: (v) => (v >= 1000 ? `¥${+(v / 1000).toFixed(1)}k` : `¥${v}`),
+    pmCadr: (v) => String(v),
+    hchoCadr: (v) => String(v)
+  };
+
+  function tipHTML(d) {
+    return `<div class="p3d-tip">
+      <div class="p3d-tip-head" style="color:${d.color}">${esc(d.brand)}</div>
+      <div class="p3d-tip-model">${esc(d.model)}</div>
+      <div class="p3d-tip-row"><span>颗粒物 CADR</span><b>${d.pmCadr.toLocaleString()}</b></div>
+      <div class="p3d-tip-row"><span>甲醛 CADR</span><b>${d.hchoCadr.toLocaleString()}</b></div>
+      <div class="p3d-tip-row"><span>价格</span><b>¥${d.price.toLocaleString()}</b></div>
+      <div class="p3d-tip-row${sizeMode === 'costEff' ? ' cur' : ''}"><span>性价比指数${sizeMode === 'costEff' ? ' ●' : ''}</span><b>${d.costEff.toFixed(1)}</b></div>
+      <div class="p3d-tip-row${sizeMode === 'sales' ? ' cur' : ''}"><span>5-6月销售额${sizeMode === 'sales' ? ' ●' : ''}</span><b>¥${Math.round(d.sales || 0).toLocaleString()}</b></div>
+      <div class="p3d-tip-row${sizeMode === 'qty' ? ' cur' : ''}"><span>5-6月销量${sizeMode === 'qty' ? ' ●' : ''}</span><b>${Math.round(d.qty || 0).toLocaleString()}</b></div>
+      ${d.url ? '<div class="p3d-tip-link">点击气泡跳转商品页 ↗</div>' : ''}
+    </div>`;
+  }
+
+  function buildSceneData() {
     const mode = SIZE_MODES[sizeMode];
     const all = data.products.filter((p) => p.price > 0).map(withCostEff);
     const shown = all.filter((p) => !hidden.has(p.brand));
-    const vals = shown.map((p) => mode.calc(p));
+    const vals = shown.map((p) => Math.sqrt(Math.max(0, mode.calc(p))));
     const lo = Math.min(...vals, 0), hi = Math.max(...vals, 1);
-    // 全屏是给「看细节」用的，光靠画布变大不够——气泡本身的基础大小和标签字号
+    // 全屏是给「看细节」用的，光靠画布变大不够——气泡本身的基础大小
     // 也要跟着放大一档，不然占屏比例反而变小，越看越费劲
     const scale = fullscreenOn ? 1.5 : 1;
-    const AXIS = axisStyle(scale);
-    const size = (v) => (15 + Math.sqrt(Math.max(0, (v - lo) / ((hi - lo) || 1))) * 34) * scale;
+    const radius = (p) => (1.7 + ((Math.sqrt(Math.max(0, mode.calc(p))) - lo) / ((hi - lo) || 1)) * 3.4) * scale;
+
+    const axes = {};
+    for (const axis of ['x', 'y', 'z']) {
+      const dim = axisMap[axis];
+      const { max, ticks } = niceAxis(Math.max(...shown.map((p) => p[dim]), 1));
+      axes[axis] = { name: axisLabels[dim] || DIMS[dim].label, max, ticks, fmt: DIM_FMT[dim] || String };
+    }
 
     const points = shown.map((p) => ({
-      name: `${p.brand} ${p.model}`,
-      value: [p[axisMap.x], p[axisMap.y], p[axisMap.z]],
-      brand: p.brand, model: p.model, price: p.price, pmCadr: p.pmCadr, hchoCadr: p.hchoCadr,
-      costEff: p.costEff, sales: p.sales || 0, qty: p.qty || 0, url: p.url,
-      itemStyle: { color: p.color, opacity: 0.9 },
-      symbolSize: size(mode.calc(p)),
-      // 标题颜色跟着气泡自己的品牌色走，不再统一用一个灰白色——
-      // 之前气泡五颜六色、标题却都是一个色，看着是两张皮；换成
-      // 等宽字体 + 品牌色，标题和气泡才像一个整体。
-      // 试过再加 textShadowBlur 做"发光"，Canvas 2D 画多行文字时
-      // 阴影会跟粗描边糊成一整块实心矩形，跟 tooltip 那种 CSS 阴影
-      // 完全是两个效果（CSS 是精细的发光描边，Canvas 的 shadowBlur
-      // 是对整个绘制路径做模糊扩散）——这条路走不通，去掉了。
-      label: {
-        show: true, formatter: `${p.brand}\n${p.model}`, position: 'top', distance: 7 * scale, lineHeight: 15 * scale,
-        color: labelColor(p.color), fontFamily: FONT_MONO, fontSize: 11.5 * scale, fontWeight: 600,
-        textBorderColor: '#0b1220', textBorderWidth: 2.5
-      }
+      ax: p[axisMap.x], ay: p[axisMap.y], az: p[axisMap.z],
+      radius: radius(p),
+      brand: p.brand, model: p.model, color: p.color,
+      labelColor: labelColor(p.color),
+      url: p.url,
+      tipHTML: tipHTML(p)
     }));
 
-    return {
-      backgroundColor: 'transparent',
-      tooltip: {
-        formatter: (pr) => {
-          const d = pr.data;
-          return `<div class="p3d-tip">
-            <div class="p3d-tip-head" style="color:${d.itemStyle.color}">${esc(d.brand)}</div>
-            <div class="p3d-tip-model">${esc(d.model)}</div>
-            <div class="p3d-tip-row"><span>颗粒物 CADR</span><b>${d.pmCadr.toLocaleString()}</b></div>
-            <div class="p3d-tip-row"><span>甲醛 CADR</span><b>${d.hchoCadr.toLocaleString()}</b></div>
-            <div class="p3d-tip-row"><span>价格</span><b>¥${d.price.toLocaleString()}</b></div>
-            <div class="p3d-tip-row${sizeMode === 'costEff' ? ' cur' : ''}"><span>性价比指数${sizeMode === 'costEff' ? ' ●' : ''}</span><b>${d.costEff.toFixed(1)}</b></div>
-            <div class="p3d-tip-row${sizeMode === 'sales' ? ' cur' : ''}"><span>5-6月销售额${sizeMode === 'sales' ? ' ●' : ''}</span><b>¥${Math.round(d.sales).toLocaleString()}</b></div>
-            <div class="p3d-tip-row${sizeMode === 'qty' ? ' cur' : ''}"><span>5-6月销量${sizeMode === 'qty' ? ' ●' : ''}</span><b>${Math.round(d.qty).toLocaleString()}</b></div>
-            ${d.url ? '<div class="p3d-tip-link">点击气泡跳转商品页 ↗</div>' : ''}
-          </div>`;
-        },
-        backgroundColor: '#101725f2', borderColor: '#1f2b42', borderWidth: 1, padding: 0,
-        extraCssText: 'box-shadow:0 20px 44px -18px #000;border-radius:10px;'
-      },
-      xAxis3D: { type: 'value', name: axisLabels[axisMap.x] || DIMS[axisMap.x].label, min: 0, ...AXIS },
-      yAxis3D: { type: 'value', name: axisLabels[axisMap.y] || DIMS[axisMap.y].label, min: 0, ...AXIS },
-      zAxis3D: { type: 'value', name: axisLabels[axisMap.z] || DIMS[axisMap.z].label, min: 0, ...AXIS },
-      grid3D: {
-        boxWidth: 100, boxHeight: 76, boxDepth: 76,
-        environment: 'transparent',
-        axisLine: { lineStyle: { color: '#33456a' } },
-        splitLine: { show: true, lineStyle: { color: '#17203292' } },
-        viewControl: {
-          autoRotate, autoRotateSpeed: 5, autoRotateAfterStill: 2.5,
-          distance: 215, alpha: 20, beta: 30, damping: 0.86,
-          panSensitivity: 0.8, zoomSensitivity: 0.9
-        },
-        light: {
-          main: { intensity: 1.15, shadow: false, alpha: 30, beta: 20 },
-          ambient: { intensity: 0.45 }
-        },
-        postEffect: { enable: true, SSAO: { enable: true, radius: 4, intensity: 1.1 } },
-        temporalSuperSampling: { enable: true }
-      },
-      series: [{
-        type: 'scatter3D',
-        data: points,
-        symbol: 'circle',
-        emphasis: { itemStyle: { opacity: 1, borderWidth: 1.5, borderColor: '#fff' } }
-      }]
-    };
+    return { points, axes };
   }
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   /* ── 渲染 ───────────────────────────────────────────── */
-  function ensureChart() {
-    if (chart) return chart;
+  let sceneFailed = false;
+
+  function ensureScene() {
+    if (scene || sceneFailed) return scene;
     const box = A.$('#p3d-chart');
-    chart = echarts.init(box, null, { renderer: 'canvas' });
-    chart.on('click', (params) => {
-      if (params.data && params.data.url) window.open(params.data.url, '_blank', 'noopener');
-    });
+    scene = window.P3DScene.create(box);
+    if (!scene) {
+      // WebGL 起不来（远程桌面/老浏览器）——给出解释而不是白屏
+      sceneFailed = true;
+      A.toast('这个浏览器无法创建 3D 画面（WebGL 不可用）', 'bad');
+      return null;
+    }
+    scene.setAutoRotate(autoRotate);
     if (!ro) {
       // 折叠/展开左侧工作台是 CSS transition（420ms）连续变宽度，容器尺寸
-      // 每一帧都在变，ResizeObserver 也就每一帧都触发一次——2D 图表 resize
-      // 很便宜感觉不出来，但这是 WebGL + SSAO 后处理 + 超采样的 3D 图，
-      // 420ms 里被这么高频重绘就会看着卡。等尺寸稳定了再重绘一次就够了。
+      // 每一帧都在变，ResizeObserver 也就每一帧都触发一次——高频触发 WebGL
+      // resize（重建 framebuffer）会看着卡，等尺寸稳定了再调一次就够了。
       let resizeTimer = null;
       ro = new ResizeObserver(() => {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => chart && chart.resize(), 120);
+        resizeTimer = setTimeout(() => scene && scene.resize(), 120);
       });
       ro.observe(box);
     }
-    return chart;
+    scene.resize();
+    return scene;
   }
 
   function render() {
@@ -188,9 +166,18 @@ const Preview3D = (() => {
       box.hidden = true;
       return;
     }
+    // 场景引擎是 ES module（deferred），比经典脚本晚就绪——首次渲染
+    // 如果引擎还没挂上来，等它的 ready 事件再补一次渲染
+    if (!window.P3DScene) {
+      document.addEventListener('p3dscene-ready', () => render(), { once: true });
+      return;
+    }
     empty.hidden = true;
     box.hidden = false;
-    ensureChart().setOption(buildOption(), true);
+    const s = ensureScene();
+    if (!s) { empty.hidden = false; box.hidden = true; return; }
+    const { points, axes } = buildSceneData();
+    s.setData(points, axes);
     renderStats();
   }
 
@@ -259,7 +246,7 @@ const Preview3D = (() => {
     autoRotate = v;
     renderAutoRotateBtn();
     renderSizeMode();
-    render();
+    if (scene) scene.setAutoRotate(v);
   }
 
   /* ── 坐标轴设置：三个数据维度自由分配到 x/y/z，文字也能自定义 ── */
@@ -371,7 +358,7 @@ const Preview3D = (() => {
     fullscreenOn = document.fullscreenElement === A.$('.p3d-canvas');
     renderFullscreenBtn();
     render();
-    requestAnimationFrame(() => chart && chart.resize());
+    requestAnimationFrame(() => scene && scene.resize());
   }
 
   /* ── 侧栏：导入与品牌筛选 ─────────────────────────────── */
@@ -423,10 +410,10 @@ const Preview3D = (() => {
     renderRail();
   }
 
-  /** 切到这个 tab 时才第一次真正渲染——之前是 hidden，容器宽高是 0，echarts 会算错尺寸 */
+  /** 切到这个 tab 时才第一次真正渲染——之前是 hidden，容器宽高是 0，画布会算错尺寸 */
   function onShow() {
     if (!data) return refresh();
-    if (chart) requestAnimationFrame(() => chart.resize());
+    if (scene) requestAnimationFrame(() => { scene.resize(); });
     else render();
   }
 
@@ -462,6 +449,13 @@ const Preview3D = (() => {
     A.$('#p3d-fullscreen').onclick = toggleFullscreen;
     document.addEventListener('fullscreenchange', onFullscreenChange);
     renderFullscreenBtn();
+
+    // 切走这个 tab 时（.view 被加 hidden）暂停渲染循环，切回来再恢复——
+    // 不然离开页面后 WebGL 还在后台整帧渲染白烧 GPU
+    const view = document.getElementById('view-preview3d');
+    if (view) new MutationObserver(() => {
+      if (scene) scene.setActive(!view.hidden);
+    }).observe(view, { attributes: true, attributeFilter: ['hidden'] });
   }
 
   return { init, refresh, render, onShow };

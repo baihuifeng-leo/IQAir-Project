@@ -473,8 +473,10 @@
 <button class="rpt-exit-present" id="rpt-exit-present" hidden>✕ 退出放映</button>
 
 <script src="/echarts.min.js"></script>
-<script src="/echarts-gl.min.js"></script>
 <script src="/html2canvas.min.js"></script>
+<!-- 竞品3D预览的场景引擎：全站唯一的 ES module（Three.js vendor 是 ESM），
+     module 天然 defer，preview3d.js 通过 window.P3DScene + p3dscene-ready 衔接 -->
+<script type="module" src="/preview3d-scene.js"></script>
 <script src="/core.js"></script>
 <script src="/users.js"></script>
 <script src="/settings.js"></script>
