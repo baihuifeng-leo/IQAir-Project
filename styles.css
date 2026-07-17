@@ -356,10 +356,13 @@ select#own-brand {
    不用极光/玻璃这套语言——纯净留白 + 软彩色阴影替代灰阴影，
    定位是"日常摸数据"场景下的低疲劳度界面，克制但有质感。
    ═══════════════════════════════════════════════════════════ */
+/* 浅色的"高级感"来源改为毛玻璃（用户拍板）：悬浮在内容上方的层
+   （顶栏/下拉/弹层/页内工具条）用半透明白 + backdrop blur，下层内容
+   微微透上来。侧栏不悬浮在内容上，保持实底瓷白。 */
 [data-theme="light"] .topbar {
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(20, 30, 60, 0.05);
-  backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px) saturate(180%);
+  box-shadow: 0 1px 3px rgba(20, 30, 60, 0.05), inset 0 -1px 0 rgba(255, 255, 255, 0.55);
 }
 [data-theme="light"] .topbar::after { display: none; } /* 顶栏描边漂移动效是深色态专属的"高光时刻"，浅色态不用 */
 
@@ -369,8 +372,8 @@ select#own-brand {
 }
 
 [data-theme="light"] .menu {
-  background: #ffffff;
-  backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px) saturate(180%);
 }
 
 /* .rail-zone--info/.stat/.solid 都是通用类名，在还没迁移的视图里也用（比如
@@ -1738,3 +1741,47 @@ body.rpt-presenting .rpt-wm-weekbar { display: none; }
 [data-theme="light"] .kw-tip { box-shadow: 0 34px 70px -24px rgba(30, 50, 110, 0.3); }
 [data-theme="light"] .batchbar { box-shadow: 0 26px 56px -20px rgba(30, 50, 110, 0.3); }
 
+/* ═══════════════════════════════════════════════════════════
+   浅色 · 毛玻璃悬浮层 + 按钮 hover 浮起（用户拍板的范围）
+   只做浅色：深色的极光玻璃是另一套已定稿的质感体系。
+   遵守既有约束：backdrop-filter 不进画布/板面内部（html2canvas
+   导出兼容），这里的目标全部是悬浮层或页头工具条。
+   ═══════════════════════════════════════════════════════════ */
+[data-theme="light"] .sheet {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(24px) saturate(180%);
+}
+[data-theme="light"] .kw-tip {
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+[data-theme="light"] .batchbar {
+  background: rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(18px) saturate(180%);
+}
+[data-theme="light"] .rpt-page-switch,
+[data-theme="light"] .rpt-seg,
+[data-theme="light"] .lang-switch {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(14px) saturate(170%);
+  border-color: rgba(160, 175, 205, 0.45);
+  box-shadow: 0 4px 14px -10px rgba(30, 50, 110, 0.3);
+}
+[data-theme="light"] .rpt-exit-present { backdrop-filter: blur(16px) saturate(180%); }
+
+/* 普通按钮不做玻璃（实底上看不出效果只会发灰）——hover 给浮起 + 顶部高光 */
+[data-theme="light"] .ghost:hover,
+[data-theme="light"] .editbtn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 16px -8px rgba(30, 50, 110, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+[data-theme="light"] .solid:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px -10px rgba(31, 158, 133, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="light"] .ghost:hover,
+  [data-theme="light"] .editbtn:hover,
+  [data-theme="light"] .solid:hover { transform: none; }
+}
