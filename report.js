@@ -156,7 +156,11 @@ const Report = (() => {
       e.pageviews += r.shopPageviews;
     });
     const buckets = [...bucketSet].sort();
-    const pvColor = '#4ee0c1', vvColor = '#5b8cff';
+    // 图表颜色现读设计令牌——canvas 不吃 CSS 级联，主题切换靠 wb-themechange 重绘
+    const css = getComputedStyle(document.documentElement);
+    const tk = (name, fb) => (css.getPropertyValue(name) || fb).trim();
+    const pvColor = tk('--mint', '#4ee0c1'), vvColor = tk('--blue', '#5b8cff');
+    const axisText = tk('--dim', '#79879f'), lineCol = tk('--line', '#1f2b42'), splitCol = tk('--line-soft', '#17203292');
 
     const series = [
       {
@@ -176,24 +180,24 @@ const Report = (() => {
       backgroundColor: 'transparent',
       grid: { left: 52, right: 20, top: 30, bottom: 34 },
       legend: {
-        top: 0, textStyle: { color: '#79879f', fontSize: 11.5 }, icon: 'roundRect', itemWidth: 10, itemHeight: 10,
+        top: 0, textStyle: { color: axisText, fontSize: 11.5 }, icon: 'roundRect', itemWidth: 10, itemHeight: 10,
         data: series.map((s) => s.name)
       },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: '#101725f2', borderColor: '#1f2b42', borderWidth: 1,
-        textStyle: { color: '#e9eef8', fontSize: 12.5 },
-        extraCssText: 'border-radius:10px;box-shadow:0 20px 44px -18px #000;'
+        backgroundColor: tk('--surface', '#101725') + 'f2', borderColor: lineCol, borderWidth: 1,
+        textStyle: { color: tk('--text', '#e9eef8'), fontSize: 12.5 },
+        extraCssText: 'border-radius:10px;box-shadow:0 20px 44px -18px #0006;'
       },
       xAxis: {
         type: 'category', data: buckets.map((k) => bucketLabel(k, granularity)), boundaryGap: false,
-        axisLine: { lineStyle: { color: '#33456a' } }, axisLabel: { color: '#79879f', fontSize: 11 },
+        axisLine: { lineStyle: { color: lineCol } }, axisLabel: { color: axisText, fontSize: 11 },
         splitLine: { show: false }
       },
       yAxis: {
         type: 'value',
-        axisLine: { show: false }, axisLabel: { color: '#79879f', fontSize: 11 },
-        splitLine: { lineStyle: { color: '#17203292' } }
+        axisLine: { show: false }, axisLabel: { color: axisText, fontSize: 11 },
+        splitLine: { lineStyle: { color: splitCol } }
       },
       series
     };
@@ -595,6 +599,9 @@ const Report = (() => {
     A.$('#rpt-wm-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-wm-mask') closeWeimengForm(); });
     A.$('#rpt-wm-save').onclick = saveWeimeng;
     A.$('#wm-weekStart').onchange = (e) => { const m = isoWeekToMonday(e.target.value); if (m) loadWeekIntoForm(m); };
+
+    // 主题切换时趋势图重读令牌重绘（图表画在 canvas 里，CSS 变量管不到它）
+    document.addEventListener('wb-themechange', () => { if (chart && data) renderTrend(); });
 
     A.$$('#rpt-page-switch button').forEach((b) => (b.onclick = () => switchPage(Number(b.dataset.page))));
     A.$('#rpt-present-btn').onclick = togglePresent;

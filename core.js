@@ -396,6 +396,8 @@ const App = (() => {
       b.textContent = t === 'light' ? '切到深色' : '切到浅色';
       b.classList.toggle('is-on', t === 'light');
     }
+    // 画布类组件（报告页 ECharts）拿不到 CSS 级联，靠这个事件重读令牌重绘
+    document.dispatchEvent(new CustomEvent('wb-themechange', { detail: { theme: t } }));
   }
 
   /** 切主题：本地立刻生效，同时同步到账号；同步失败就把本地状态退回去，跟 settings.js 的 toggle() 是一个套路。 */
