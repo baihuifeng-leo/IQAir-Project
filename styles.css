@@ -1378,10 +1378,30 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 #p3d-fullscreen.on { color: #5b8cff; border-color: #5b8cff; background: #5b8cff22; }
 
 /* 全屏只对 .p3d-canvas 这一个元素发起，浏览器会自动把它撑满整个屏幕；
-   这里让统计卡片让位给图表本身，气泡/字号放大在 preview3d.js 的 buildSceneData 里处理 */
-.p3d-canvas:fullscreen { padding: 0; }
+   这里让统计卡片让位给图表本身，气泡/字号放大在 preview3d.js 的 buildSceneData 里处理。
+   背景统一成场景同款深黑：不然图表圆角矩形是 #030612、四周露出的是
+   卡片/主题背景色，中间一块黑四周一圈亮。顺带把令牌钉回深色值——全屏里
+   只有深空场景，顶部标题/工具条无论全局主题是深是浅都必须按深色渲染 */
+.p3d-canvas:fullscreen {
+  padding: 0;
+  background: #030612;
+  --bg: #080c14;
+  --surface: #101725;
+  --surface-2: #0c1220;
+  --line: #1f2b42;
+  --line-soft: #17203292;
+  --text: #e9eef8;
+  --dim: #79879f;
+  --dimmer: #4d5a72;
+  --mint: #4ee0c1;
+  --mint-dim: rgba(78, 224, 193, 0.14);
+  --blue: #5b8cff;
+  --overlay-weak: #ffffff08;
+  --overlay-strong: #ffffff12;
+}
 .p3d-canvas:fullscreen .p3d-stats { display: none; }
 .p3d-canvas:fullscreen .p3d-chart-wrap { padding: 16px 40px 40px; }
+.p3d-canvas:fullscreen .p3d-chart { border-radius: 0; }
 
 .p3d-tip-row.cur { color: var(--mint); }
 .p3d-tip-row.cur b { color: var(--mint); }

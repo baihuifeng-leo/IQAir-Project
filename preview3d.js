@@ -106,7 +106,8 @@ const Preview3D = (() => {
     // 全屏是给「看细节」用的，光靠画布变大不够——气泡本身的基础大小
     // 也要跟着放大一档，不然占屏比例反而变小，越看越费劲
     const scale = fullscreenOn ? 1.5 : 1;
-    const radius = (p) => (1.7 + ((Math.sqrt(Math.max(0, mode.calc(p))) - lo) / ((hi - lo) || 1)) * 3.4) * scale;
+    // 基数/增量是首版 1.7/3.4 的 ×0.75——首版实测视觉密度偏高（大球互相叠、显乱）
+    const radius = (p) => (1.28 + ((Math.sqrt(Math.max(0, mode.calc(p))) - lo) / ((hi - lo) || 1)) * 2.55) * scale;
 
     const axes = {};
     for (const axis of ['x', 'y', 'z']) {
@@ -131,6 +132,7 @@ const Preview3D = (() => {
 
   /* ── 渲染 ───────────────────────────────────────────── */
   let sceneFailed = false;
+  let firstBuild = true;
 
   function ensureScene() {
     if (scene || sceneFailed) return scene;
@@ -177,7 +179,9 @@ const Preview3D = (() => {
     const s = ensureScene();
     if (!s) { empty.hidden = false; box.hidden = true; return; }
     const { points, axes } = buildSceneData();
-    s.setData(points, axes);
+    // 首次建场景播完整下落；之后的重建（换轴/口径/品牌筛选/导入）只做短就位
+    s.setData(points, axes, firstBuild ? 'drop' : 'pop');
+    firstBuild = false;
     renderStats();
   }
 
@@ -413,7 +417,8 @@ const Preview3D = (() => {
   /** 切到这个 tab 时才第一次真正渲染——之前是 hidden，容器宽高是 0，画布会算错尺寸 */
   function onShow() {
     if (!data) return refresh();
-    if (scene) requestAnimationFrame(() => { scene.resize(); });
+    // 场景已存在 = 不是首次进入——重播一遍完整下落（拍板：每次切进 tab 都播）
+    if (scene) requestAnimationFrame(() => { scene.resize(); scene.playEntry('drop'); });
     else render();
   }
 

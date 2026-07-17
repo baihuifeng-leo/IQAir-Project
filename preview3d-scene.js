@@ -24,6 +24,11 @@ import { CSS2DRenderer, CSS2DObject } from './three-css2drenderer.js';
 // 世界尺寸：x/z 是水平面两个方向的全宽，y 是竖直全高
 const WORLD = { x: 110, z: 90, y: 70 };
 
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// 数据点装饰件的基准透明度——进入动画要从 0 渐入到这些值
+const HALO_OP = 0.15, STEM_OP = 0.28, DOT_OP = 0.5;
+
 function haloTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
@@ -172,7 +177,7 @@ function create(container) {
   function buildFrame(axes) {
     disposeGroup(frameGroup);
 
-    const grid = new THREE.GridHelper(Math.max(WORLD.x, WORLD.z) * 1.15, 22, 0x1b2a4a, 0x111d36);
+    const grid = new THREE.GridHelper(Math.max(WORLD.x, WORLD.z) * 1.15, 22, 0x3a5a94, 0x22355e);
     frameGroup.add(grid);
 
     const glowMat = new THREE.LineBasicMaterial({ color: 0x56e6c6, transparent: true, opacity: 0.95 });
@@ -200,10 +205,12 @@ function create(container) {
 
   /* ── 数据点：缎面球 + 品牌光晕 + 落地光柱 + 产品标签 ── */
   const pickables = [];
+  const pointRecs = []; // 每个点的部件引用——进入动画要逐帧操纵它们
 
   function buildPoints(points, axes) {
     disposeGroup(pointsGroup);
     pickables.length = 0;
+    pointRecs.length = 0;
 
     for (const p of points) {
       const color = new THREE.Color(p.color);
@@ -235,11 +242,12 @@ function create(container) {
       const stemG = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(px, 0, pz), new THREE.Vector3(px, Math.max(py - p.radius, 0), pz)
       ]);
-      pointsGroup.add(new THREE.Line(stemG, new THREE.LineBasicMaterial({
-        color, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending
-      })));
+      const stem = new THREE.Line(stemG, new THREE.LineBasicMaterial({
+        color, transparent: true, opacity: STEM_OP, blending: THREE.AdditiveBlending
+      }));
+      pointsGroup.add(stem);
       const dot = new THREE.Mesh(new THREE.CircleGeometry(0.9, 24),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: DOT_OP, blending: THREE.AdditiveBlending, depthWrite: false }));
       dot.rotation.x = -Math.PI / 2;
       dot.position.set(px, 0.05, pz);
       pointsGroup.add(dot);
@@ -253,7 +261,83 @@ function create(container) {
       frag.append(b, em);
       const lab = makeLabel(frag, 'p3d-pt-label', mesh, 0, p.radius + 2.2, 0);
       lab.element.style.setProperty('--c', p.labelColor);
+
+      pointRecs.push({ mesh, halo, stem, dot, labelEl: lab.element, targetY: py, brand: p.brand, fromY: 0 });
     }
+  }
+
+  /* ── 进入动画 ──
+     drop：切进 tab 时的完整下落——球从坐标框上方落到各自位置，光柱随
+           落点长出来，光晕/底盘/标签渐入；按品牌错峰，总时长约 1s
+     pop： 场景内操作（换轴/口径/品牌筛选）重建后的短就位——只做球体
+           0.28s 的缩放渐入，不重播下落（反复等 1 秒会烦）
+     reduced-motion 下两种都直接就位。 */
+  let anims = [];
+
+  function settle(rec) {
+    rec.mesh.position.y = rec.targetY;
+    rec.mesh.scale.setScalar(1);
+    rec.halo.position.y = rec.targetY;
+    rec.halo.material.opacity = HALO_OP;
+    rec.stem.scale.y = 1;
+    rec.dot.material.opacity = DOT_OP;
+    rec.labelEl.style.opacity = '';
+  }
+
+  function playEntry(kind = 'drop') {
+    anims = [];
+    if (!pointRecs.length) return;
+    if (REDUCED) { pointRecs.forEach(settle); return; }
+
+    if (kind === 'pop') {
+      pointRecs.forEach((rec, i) => {
+        settle(rec);
+        rec.mesh.scale.setScalar(0.55);
+        anims.push({ rec, kind, delay: i * 12, dur: 280, t0: null });
+      });
+      return;
+    }
+
+    const brandIdx = new Map();
+    pointRecs.forEach((rec) => { if (!brandIdx.has(rec.brand)) brandIdx.set(rec.brand, brandIdx.size); });
+    const per = Math.min(90, 640 / Math.max(brandIdx.size, 1));
+    pointRecs.forEach((rec, i) => {
+      rec.fromY = rec.targetY + WORLD.y * 0.75 + 18;
+      rec.mesh.position.y = rec.fromY;
+      rec.mesh.scale.setScalar(1);
+      rec.halo.position.y = rec.fromY;
+      rec.halo.material.opacity = 0;
+      rec.stem.scale.y = 0;      // 光柱几何以地面 y=0 为原点，scale.y 就是"从地里长出来"
+      rec.dot.material.opacity = 0;
+      rec.labelEl.style.opacity = '0';
+      anims.push({ rec, kind: 'drop', delay: brandIdx.get(rec.brand) * per + (i % 3) * 45, dur: 620, t0: null });
+    });
+  }
+
+  function stepAnims(now) {
+    if (!anims.length) return;
+    const keep = [];
+    for (const a of anims) {
+      a.t0 ??= now;
+      const t = (now - a.t0 - a.delay) / a.dur;
+      if (t < 0) { keep.push(a); continue; }
+      const k = Math.min(t, 1);
+      const e = 1 - Math.pow(1 - k, 3); // easeOutCubic：快速抵达、缓缓收住，贴合缎面的克制气质
+      const rec = a.rec;
+      if (a.kind === 'drop') {
+        rec.mesh.position.y = rec.fromY + (rec.targetY - rec.fromY) * e;
+        rec.halo.position.y = rec.mesh.position.y;
+        rec.halo.material.opacity = HALO_OP * e;
+        rec.stem.scale.y = e;
+        rec.dot.material.opacity = DOT_OP * e;
+        rec.labelEl.style.opacity = String(Math.max(0, (k - 0.55) / 0.45)); // 标签等球快落定再浮现
+      } else {
+        rec.mesh.scale.setScalar(0.55 + 0.45 * e);
+      }
+      if (k < 1) keep.push(a);
+      else settle(rec);
+    }
+    anims = keep;
   }
 
   /* ── 悬停 / 点击拾取 ── */
@@ -316,7 +400,8 @@ function create(container) {
 
   /* ── 渲染循环：视图隐藏时停掉，不白烧 GPU ── */
   let active = true;
-  function loop() {
+  function loop(time) {
+    stepAnims(time);
     controls.update();
     composer.render();
     labelRenderer.render(scene, camera);
@@ -324,11 +409,15 @@ function create(container) {
   renderer.setAnimationLoop(loop);
 
   return {
-    /** points: [{ax,ay,az,radius,brand,model,color,labelColor,url,tipHTML}]；axes: {x,y,z:{name,max,ticks,fmt}} */
-    setData(points, axes) {
+    /** points: [{ax,ay,az,radius,brand,model,color,labelColor,url,tipHTML}]；axes: {x,y,z:{name,max,ticks,fmt}}；
+        entry: 'drop'（完整下落）| 'pop'（短就位）| 省略则直接就位 */
+    setData(points, axes, entry) {
       buildFrame(axes);
       buildPoints(points, axes);
+      if (entry) playEntry(entry);
     },
+    /** 单独重播进入动画（切回 tab 时用，不重建数据） */
+    playEntry,
     setAutoRotate(v) {
       wantRotate = !!v;
       controls.autoRotate = wantRotate;
