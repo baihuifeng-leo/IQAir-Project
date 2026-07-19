@@ -647,9 +647,13 @@ const Matrix = (() => {
       el.style.animation = 'none';
     });
 
+    // 导出底色跟随当前主题的纸面色（纸面已双主题化，不再固定米白）——
+    // 冻结的格子/文字色都取自当前主题，底色不跟着走会拼出阴阳图
+    const paperBg = (getComputedStyle(A.$('#matrix-canvas')).getPropertyValue('--paper') || '').trim() || '#fdfaf3';
     const wrap = document.createElement('div');
     wrap.className = 'paper matrix-export-shot';
-    wrap.style.cssText = 'position:fixed; left:-99999px; top:0; width:max-content; background:#fdfaf3;';
+    wrap.style.cssText = 'position:fixed; left:-99999px; top:0; width:max-content; background:' + paperBg + ';';
+    wrap.dataset.exportBg = paperBg;
     wrap.append(head, grid, legend);
     document.body.appendChild(wrap);
     return { wrap, head, grid, legend };
@@ -705,14 +709,14 @@ const Matrix = (() => {
       clone = buildExportClone();
       const fit = fitScaleAndColumns(clone.wrap, clone.head, clone.grid, clone.legend);
 
-      const shot = await html2canvas(clone.wrap, { backgroundColor: '#fdfaf3', scale: 2, useCORS: true, logging: false });
+      const shot = await html2canvas(clone.wrap, { backgroundColor: clone.wrap.dataset.exportBg, scale: 2, useCORS: true, logging: false });
 
       const out = document.createElement('canvas');
       out.width = EXPORT_W; out.height = EXPORT_H;
       const ctx = out.getContext('2d');
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.fillStyle = '#fdfaf3';
+      ctx.fillStyle = clone.wrap.dataset.exportBg;
       ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
       // 等比缩放，取能让内容完整装进画布的那个缩放系数（不裁任何
       // 东西）——宁可留一点点边，也不能拉伸变形或裁掉标题/表头/
