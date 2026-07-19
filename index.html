@@ -56,12 +56,6 @@
           <div class="menu-group-label">账号</div>
           <button data-act="users">用户管理</button>
         </div>
-        <div class="menu-group">
-          <div class="menu-group-label">数据治理</div>
-          <button data-act="export">导出 JSON 备份</button>
-          <button data-act="import">从 JSON 恢复</button>
-          <button data-act="print">打印 / 导出 PDF</button>
-        </div>
         <div class="menu-group menu-group--admin">
           <div class="menu-group-label">管理员专区</div>
           <button data-act="logs">变更日志</button>
@@ -259,7 +253,7 @@
         </div>
 
         <div class="rail-sec">怎么看这张图</div>
-        <p class="rail-hint" id="p3d-sizehint">纵轴（竖直方向）是价格，水平面两个方向分别是颗粒物CADR、甲醛CADR；气泡越大，性价比（两项CADR之和 / 价格）越高。滚轮缩放，点气泡跳转商品页，拖动可临时接管视角。</p>
+        <p class="rail-hint" id="p3d-sizehint">纵轴（竖直方向）是价格，水平面两个方向分别是颗粒物CADR、甲醛CADR；气泡越大，5-6月销量越高。滚轮缩放，点气泡跳转商品页，拖动可临时接管视角。</p>
         <p class="rail-hint">气泡上方是品牌名和型号，视角旋转时相近的点可能会互相遮挡，鼠标停留看具体产品更准确。</p>
 
         <div class="rail-sec">
@@ -280,9 +274,9 @@
         <div class="p3d-head-controls">
           <button class="ghost on" id="p3d-autorotate" title="关闭后改为手动拖拽控制视角">⟲ 自动旋转：开</button>
           <div class="rpt-page-switch" id="p3d-sizemode">
-            <button class="on" data-mode="costEff">气泡＝性价比</button>
+            <button data-mode="costEff">气泡＝性价比</button>
             <button data-mode="sales">气泡＝销售额</button>
-            <button data-mode="qty">气泡＝销量</button>
+            <button class="on" data-mode="qty">气泡＝销量</button>
           </div>
           <button class="ghost" id="p3d-axis-btn" title="自定义每个轴显示哪个数据维度、显示什么文字">⚙ 坐标轴</button>
           <button class="ghost" id="p3d-fullscreen" title="全屏查看，内部元素自动放大">⛶ 全屏</button>
@@ -425,7 +419,6 @@
 
 <div class="toaster" id="toaster"></div>
 <input type="file" id="filepick" accept="image/png,image/jpeg,image/webp" hidden>
-<input type="file" id="jsonpick" accept="application/json,.json" hidden>
 <input type="file" id="rv-file" accept=".xlsx" hidden>
 <input type="file" id="rv-product-file" accept=".xlsx" hidden>
 <input type="file" id="p3d-file" accept=".xlsx" hidden>

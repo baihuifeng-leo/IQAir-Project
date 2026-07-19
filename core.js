@@ -548,32 +548,6 @@ const App = (() => {
         if (act === 'logs') Admin.openLogs();
         if (act === 'backups') Admin.openBackups();
 
-        if (act === 'export') {
-          const blob = new Blob([JSON.stringify({ matrix: state.matrix, compare: state.compare }, null, 1)], { type: 'application/json' });
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = `workbench-${new Date().toISOString().slice(0, 10)}.json`;
-          a.click();
-          toast('备份已下载');
-        }
-        if (act === 'import') {
-          const inp = $('#jsonpick');
-          inp.value = '';
-          inp.onchange = async () => {
-            const f = inp.files[0]; if (!f) return;
-            try {
-              const o = JSON.parse(await f.text());
-              if (!o.matrix || !o.compare) throw new Error('这个文件里没有 matrix / compare');
-              if (!confirm('这会覆盖所有人当前看到的内容。确定吗？')) return;
-              mark();
-              state.matrix = o.matrix; state.compare = o.compare;
-              renderAll(); save('both');
-              toast('已从备份恢复。不对劲就按 Ctrl+Z');
-            } catch (e) { toast('恢复失败：' + e.message, 'bad'); }
-          };
-          inp.click();
-        }
-        if (act === 'print') window.print();
         if (act === 'logout') {
           if (anyDirty() && !confirm('还有改动没同步完，现在退出可能会丢。确定退出吗？')) return;
           await fetch('/api/logout', { method: 'POST' }).catch(() => {});

@@ -64,6 +64,18 @@
   --heat-base: #131a29;     /* 评论热力图 0% 端的中性底 */
   --scrim: #04070d9e;       /* 浮层遮罩 */
 
+  /* 竞品3D预览场景调色板——canvas 不吃 CSS 级联，JS 用 getComputedStyle 现读
+     （跟报告趋势图的 ECharts 同一套办法）；深空辉光配方是默认值 */
+  --p3d-bg: #030612;
+  --p3d-grid-a: #3a5a94;
+  --p3d-grid-b: #22355e;
+  --p3d-frame-glow: #56e6c6;
+  --p3d-frame-main: #2f5f8f;
+  --p3d-frame-weak: #1b2a4a;
+  --p3d-star: #8fa8d8;
+  --p3d-star-op: 0.5;
+  --p3d-bloom: 0.22;
+
   --rail-w: 264px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --fast: 0.16s var(--ease);
@@ -136,6 +148,20 @@
   --dis: #cf372c;
   --dis-bg: #ffeceb;
   --dis-dim: #b8564c;
+
+  /* 3D预览浅色配方：深空→晴日纸面，克制光效同款脾气（缎面哑光=高级），
+     只是把整套色相从"深夜"挪到"白日"——网格/边框收暗一档保证在白底上够看，
+     bloom 阈值高的白背景很容易被辉光洗成一片白雾，这里把强度降到几乎只提亮
+     球体高光本身 */
+  --p3d-bg: #eef1f5;
+  --p3d-grid-a: #9fb2d6;
+  --p3d-grid-b: #d9e0ee;
+  --p3d-frame-glow: #148269;
+  --p3d-frame-main: #3358c9;
+  --p3d-frame-weak: #c3ccdd;
+  --p3d-star: #b9c6e0;
+  --p3d-star-op: 0.35;
+  --p3d-bloom: 0.06;
 }
 
 /* 原生控件（滚动条/日期选择器等）跟随主题 */
@@ -1384,13 +1410,17 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .p3d-stat span { font-size: 11px; color: var(--dim); letter-spacing: 0.4px; }
 
 .p3d-chart-wrap { flex: 1; min-height: 0; position: relative; padding: 10px 20px 20px; }
-/* 深空场景固定观感（比稿定稿），不引用主题令牌、不随全局深浅主题翻转；
+/* 场景观感（深空辉光/晴日纸面）随 --p3d-* 令牌走，令牌在 JS 里用
+   getComputedStyle 现读去配 Three.js 材质（canvas 不吃 CSS 级联，
+   跟报告趋势图的 ECharts 同一套办法）；
    position:relative 是 CSS2D 标签层和 tooltip 绝对定位的锚 */
-.p3d-chart { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: 12px; background: #030612; }
+.p3d-chart { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: 12px; background: var(--p3d-bg); }
 .p3d-chart canvas { display: block; }
 .p3d-chart-wrap .rv-empty { padding-top: 120px; }
 
-/* ── Three.js 场景里的 CSS2D 文字（轴名/刻度/产品标签）—— 深空底固定配色 ── */
+/* ── Three.js 场景里的 CSS2D 文字（轴名/刻度/产品标签）—— 深空底默认配色，
+   浅色配方见下方 [data-theme="light"] 覆写（气泡文字色由 JS 按当前主题
+   算过对比度，这里只调文字阴影方向：深底用黑晕托底、浅底用白晕托底） ── */
 .p3d-axis-name { font-size: 15px; font-weight: 600; letter-spacing: 3px; color: #8ef0d8; white-space: nowrap;
                  text-shadow: 0 0 14px #56e6c6b3, 0 1px 3px #000c; }
 .p3d-axis-tick { font-size: 13px; color: #9fb0d0; white-space: nowrap; font-variant-numeric: tabular-nums;
@@ -1400,10 +1430,21 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .p3d-pt-label b { font-weight: 600; }
 .p3d-pt-label em { font-style: normal; font-weight: 500; font-size: 11px; opacity: 0.82; margin-left: 4px; }
 
-/* 场景引擎自己的 tooltip 容器（原来这层壳是 echarts 的 option 配的） */
+[data-theme="light"] .p3d-canvas:not(:fullscreen) .p3d-axis-name {
+  color: #0f7a63; text-shadow: 0 0 10px rgba(31, 158, 133, 0.22), 0 1px 2px rgba(255, 255, 255, 0.75);
+}
+[data-theme="light"] .p3d-canvas:not(:fullscreen) .p3d-axis-tick {
+  color: #46557a; text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+[data-theme="light"] .p3d-canvas:not(:fullscreen) .p3d-pt-label {
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.9), 0 0 6px rgba(255, 255, 255, 0.6);
+}
+
+/* 场景引擎自己的 tooltip 容器（原来这层壳是 echarts 的 option 配的）——
+   跟着主题令牌走，深色态数值跟原来一样，浅色态换成白底卡片 */
 .p3d-tooltip { position: absolute; z-index: 5; pointer-events: none;
-               background: #101725f2; border: 1px solid #1f2b42; border-radius: 10px;
-               box-shadow: 0 20px 44px -18px #000; }
+               background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+               box-shadow: 0 20px 44px -18px #0006; }
 
 /* 全屏「看细节」：标签/轴文字跟着放大一档（气泡半径的放大在 preview3d.js 里） */
 .p3d-canvas:fullscreen .p3d-pt-label { font-size: 17px; }
@@ -1444,10 +1485,38 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
   --field-bg: #060a12;
   --scrim: #04070d9e;
   color-scheme: dark;
+  --p3d-bg: #030612;
+  --p3d-grid-a: #3a5a94;
+  --p3d-grid-b: #22355e;
+  --p3d-frame-glow: #56e6c6;
+  --p3d-frame-main: #2f5f8f;
+  --p3d-frame-weak: #1b2a4a;
+  --p3d-star: #8fa8d8;
+  --p3d-star-op: 0.5;
+  --p3d-bloom: 0.22;
 }
 .p3d-canvas:fullscreen .p3d-stats { display: none; }
 .p3d-canvas:fullscreen .p3d-chart-wrap { padding: 16px 40px 40px; }
 .p3d-canvas:fullscreen .p3d-chart { border-radius: 0; }
+
+/* 气泡口径切换标签（.rpt-page-switch）在浅色主题下会被下面的浅色毛玻璃
+   规则（rgba(255,255,255,.55) 实底 + 未选中文字 var(--dim)）抢先命中——
+   全屏里这层令牌已经钉回深色，浅色玻璃底配深色调 --dim 文字对比度不够，
+   看起来就是灰底糊字。用 .p3d-fs（进入/退出全屏时 preview3d.js 直接切的
+   class，见 onFullscreenChange）而不是 :fullscreen 伪类来抓这个覆写——
+   实测浏览器在 fullscreenchange 这个时机，:fullscreen 触发的样式重算
+   对 var() 引用偶发滞后（自定义属性本身查询是对的，实际 color 却还是
+   进入全屏前的主题态值），JS 直接切 class 触发的重算没有这层不确定性，
+   文字色也直接写死数值，不再绕一层 var(--dim/--mint)。 */
+.p3d-canvas.p3d-fs .rpt-page-switch {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: none;
+  border-color: #1f2b42;
+  box-shadow: none;
+}
+.p3d-canvas.p3d-fs .rpt-page-switch button { color: #79879f; }
+.p3d-canvas.p3d-fs .rpt-page-switch button:not(.on):hover { color: #e9eef8; }
+.p3d-canvas.p3d-fs .rpt-page-switch button.on { color: #4ee0c1; background: rgba(78, 224, 193, 0.14); }
 
 .p3d-tip-row.cur { color: var(--mint); }
 .p3d-tip-row.cur b { color: var(--mint); }

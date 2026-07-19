@@ -29,6 +29,26 @@ const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // 数据点装饰件的基准透明度——进入动画要从 0 渐入到这些值
 const HALO_OP = 0.15, STEM_OP = 0.28, DOT_OP = 0.5;
 
+/** 场景调色板现读 --p3d-* 令牌（canvas 不吃 CSS 级联，Three.js 材质只能
+ *  用 getComputedStyle 现读——跟报告趋势图的 ECharts 同一套办法）。
+ *  非全屏下跟全局深浅主题走；全屏态 CSS 已把这些令牌钉回深空配方，
+ *  这里读到的自然就是"全屏永远深空"。 */
+function readPalette(container) {
+  const css = getComputedStyle(container);
+  const tk = (name, fb) => (css.getPropertyValue(name) || fb).trim();
+  return {
+    bg: tk('--p3d-bg', '#030612'),
+    gridA: tk('--p3d-grid-a', '#3a5a94'),
+    gridB: tk('--p3d-grid-b', '#22355e'),
+    frameGlow: tk('--p3d-frame-glow', '#56e6c6'),
+    frameMain: tk('--p3d-frame-main', '#2f5f8f'),
+    frameWeak: tk('--p3d-frame-weak', '#1b2a4a'),
+    star: tk('--p3d-star', '#8fa8d8'),
+    starOp: parseFloat(tk('--p3d-star-op', '0.5')) || 0.5,
+    bloom: parseFloat(tk('--p3d-bloom', '0.22')) || 0.22
+  };
+}
+
 function haloTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
@@ -75,8 +95,10 @@ function create(container) {
     return null; // 调用方降级到空态提示
   }
 
+  let palette = readPalette(container);
+
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#030612');
+  scene.background = new THREE.Color(palette.bg);
 
   const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 2000);
   camera.position.set(96, 62, 118);
@@ -99,13 +121,13 @@ function create(container) {
   controls.maxDistance = 420;
 
   // 自动旋转的三层状态：用户开关（wantRotate）、交互临时接管（拖动/悬停）、
-  // 静置 4 秒恢复——恢复的前提永远是用户开关是开的
+  // 静置 3 秒恢复——恢复的前提永远是用户开关是开的
   let wantRotate = false;
   let idleTimer = null;
   const pauseRotate = () => { controls.autoRotate = false; clearTimeout(idleTimer); };
   const resumeSoon = () => {
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => { controls.autoRotate = wantRotate; }, 4000);
+    idleTimer = setTimeout(() => { controls.autoRotate = wantRotate; }, 3000);
   };
   controls.addEventListener('start', pauseRotate);
   controls.addEventListener('end', resumeSoon);
@@ -142,7 +164,8 @@ function create(container) {
     disposeGroup(env);
   }
 
-  /* ── 星野（静态装饰，不动画） ── */
+  /* ── 星野（静态装饰，不动画）——深空态是星野，浅色纸面态调淡当薄雾尘埃 ── */
+  let starPoints;
   {
     const N = 1600, pos = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) {
@@ -153,7 +176,10 @@ function create(container) {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x8fa8d8, size: 0.9, sizeAttenuation: true, transparent: true, opacity: 0.5 })));
+    starPoints = new THREE.Points(g, new THREE.PointsMaterial({
+      color: palette.star, size: 0.9, sizeAttenuation: true, transparent: true, opacity: palette.starOp
+    }));
+    scene.add(starPoints);
   }
 
   const HALO = haloTexture();
@@ -161,10 +187,12 @@ function create(container) {
   const pointsGroup = new THREE.Group(); // 数据点——随数据重建
   scene.add(frameGroup, pointsGroup);
 
-  /* ── 辉光合成 ── */
+  /* ── 辉光合成——强度跟 --p3d-bloom 走：浅色纸面底很亮，bloom 阈值
+     一不小心就会把整个背景洗成白雾，浅色配方把它降到只提亮球体高光 ── */
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(2, 2), 0.22, 0.35, 0.68));
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(2, 2), palette.bloom, 0.35, 0.68);
+  composer.addPass(bloomPass);
   composer.addPass(new OutputPass());
 
   /* ── 坐标框 + 轴标注（axes: {x,y,z} 每项 {name, max, ticks, fmt}；
@@ -177,12 +205,12 @@ function create(container) {
   function buildFrame(axes) {
     disposeGroup(frameGroup);
 
-    const grid = new THREE.GridHelper(Math.max(WORLD.x, WORLD.z) * 1.15, 22, 0x3a5a94, 0x22355e);
+    const grid = new THREE.GridHelper(Math.max(WORLD.x, WORLD.z) * 1.15, 22, palette.gridA, palette.gridB);
     frameGroup.add(grid);
 
-    const glowMat = new THREE.LineBasicMaterial({ color: 0x56e6c6, transparent: true, opacity: 0.95 });
-    const frameMat = new THREE.LineBasicMaterial({ color: 0x2f5f8f, transparent: true, opacity: 0.9 });
-    const weakMat = new THREE.LineBasicMaterial({ color: 0x1b2a4a, transparent: true, opacity: 0.6 });
+    const glowMat = new THREE.LineBasicMaterial({ color: palette.frameGlow, transparent: true, opacity: 0.95 });
+    const frameMat = new THREE.LineBasicMaterial({ color: palette.frameMain, transparent: true, opacity: 0.9 });
+    const weakMat = new THREE.LineBasicMaterial({ color: palette.frameWeak, transparent: true, opacity: 0.6 });
     const seg = (a, b, mat) => {
       const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]);
       frameGroup.add(new THREE.Line(g, mat));
@@ -219,11 +247,14 @@ function create(container) {
       const mesh = new THREE.Mesh(
         new THREE.SphereGeometry(p.radius, 40, 28),
         new THREE.MeshPhysicalMaterial({
+          // 缎面哑光基调不变，clearcoat/envMap 提一档给一点光泽——
+          // clearcoatRoughness 收紧让高光更聚焦而不是糊成一片，
+          // 用户之前否掉过 clearcoat=1 的"珠光过度"，这里只加半档
           color, emissive: color, emissiveIntensity: 0.1,
-          roughness: 0.58, metalness: 0.06,
-          clearcoat: 0.25, clearcoatRoughness: 0.5,
-          envMapIntensity: 0.6,
-          sheen: 0.4, sheenRoughness: 0.6, sheenColor: 0xffffff
+          roughness: 0.52, metalness: 0.06,
+          clearcoat: 0.42, clearcoatRoughness: 0.28,
+          envMapIntensity: 0.82,
+          sheen: 0.45, sheenRoughness: 0.5, sheenColor: 0xffffff
         })
       );
       mesh.position.set(px, py, pz);
@@ -418,6 +449,16 @@ function create(container) {
     },
     /** 单独重播进入动画（切回 tab 时用，不重建数据） */
     playEntry,
+    /** 主题/全屏状态变化时调用：重读 --p3d-* 令牌，刷新背景/星野/辉光强度；
+     *  网格与坐标框的调色板会在调用方紧接着的 setData() 里一并生效
+     *  （气泡本身不跟场景调色板走，只有网格/星野/背景需要在这里手动刷新） */
+    setTheme() {
+      palette = readPalette(container);
+      scene.background = new THREE.Color(palette.bg);
+      starPoints.material.color = new THREE.Color(palette.star);
+      starPoints.material.opacity = palette.starOp;
+      bloomPass.strength = palette.bloom;
+    },
     setAutoRotate(v) {
       wantRotate = !!v;
       controls.autoRotate = wantRotate;

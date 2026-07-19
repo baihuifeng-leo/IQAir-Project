@@ -14,7 +14,7 @@
 const Preview3D = (() => {
   // prefers-reduced-motion 下自动旋转默认关（装饰性动效约束）；用户仍可手动打开
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let A, data = null, scene = null, ro = null, sizeMode = 'costEff', autoRotate = !REDUCED, fullscreenOn = false;
+  let A, data = null, scene = null, ro = null, sizeMode = 'qty', autoRotate = !REDUCED, fullscreenOn = false;
   const hidden = new Set();   // 被隐藏（取消勾选）的品牌
 
   /* ── 坐标轴：三个数据维度可以自由分配到 x/y/z 三个轴，每个轴
@@ -44,16 +44,27 @@ const Preview3D = (() => {
 
   const withCostEff = (p) => ({ ...p, costEff: p.price > 0 ? ((p.pmCadr + p.hchoCadr) / p.price) * 1000 : 0 });
 
+  // 场景背景是深是浅：全屏永远深空（跟场景引擎的 --p3d-* 令牌钉死逻辑一致），
+  // 非全屏跟全局深浅主题走
+  let theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const effectiveTheme = () => (fullscreenOn ? 'dark' : theme);
+
   /**
-   * 标题颜色跟气泡色走，但深色背景 + 深色品牌色（比如深棕、深灰）
-   * 直接拿来做文字会糊、看不清——跟白色按亮度差值混一部分提亮，
-   * 亮的品牌色（比如青色、黄色）本来就清楚，不用动；只在暗的时候
-   * 补亮，色相还是那个品牌色，不会变成大家都一个颜色。
+   * 标题颜色跟气泡色走，但背景是深色时深色品牌色（比如深棕、深灰）、
+   * 背景是浅色时浅色品牌色（比如浅黄、浅粉）直接拿来做文字都会糊、
+   * 看不清——深底往白混、浅底往黑混，对比度已经够的颜色不用动，
+   * 色相还是那个品牌色，不会变成大家都一个颜色。
    */
-  function labelColor(hex) {
+  function labelColor(hex, bg) {
     const h = String(hex || '').replace('#', '');
     const r = parseInt(h.slice(0, 2), 16) || 0, g = parseInt(h.slice(2, 4), 16) || 0, b = parseInt(h.slice(4, 6), 16) || 0;
     const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    if (bg === 'light') {
+      if (yiq <= 130) return hex;
+      const mix = 0.65 - ((255 - yiq) / 125) * 0.35; // 越亮混得越多，最亮混 65%，刚好够 130 门槛的混 30%
+      const nr = Math.round(r * (1 - mix)), ng = Math.round(g * (1 - mix)), nb = Math.round(b * (1 - mix));
+      return `rgb(${nr}, ${ng}, ${nb})`;
+    }
     if (yiq >= 150) return hex;
     const mix = 0.65 - (yiq / 150) * 0.35; // 越暗混得越多，最暗混 65%，刚好够 150 门槛的混 30%
     const nr = Math.round(r + (255 - r) * mix), ng = Math.round(g + (255 - g) * mix), nb = Math.round(b + (255 - b) * mix);
@@ -116,11 +127,12 @@ const Preview3D = (() => {
       axes[axis] = { name: axisLabels[dim] || DIMS[dim].label, max, ticks, fmt: DIM_FMT[dim] || String };
     }
 
+    const bg = effectiveTheme();
     const points = shown.map((p) => ({
       ax: p[axisMap.x], ay: p[axisMap.y], az: p[axisMap.z],
       radius: radius(p),
       brand: p.brand, model: p.model, color: p.color,
-      labelColor: labelColor(p.color),
+      labelColor: labelColor(p.color, bg),
       url: p.url,
       tipHTML: tipHTML(p)
     }));
@@ -361,8 +373,21 @@ const Preview3D = (() => {
   function onFullscreenChange() {
     fullscreenOn = document.fullscreenElement === A.$('.p3d-canvas');
     renderFullscreenBtn();
+    // 用 JS 直接切 class，不完全依赖 :fullscreen 伪类的样式重算——实测浏览器
+    // 进入/退出全屏这个时机，:fullscreen 触发的 var()/自定义属性重算偶发滞后
+    // （气泡口径切换标签就踩过这个坑），class 切换的重算没有这层不确定性
+    A.$('.p3d-canvas').classList.toggle('p3d-fs', fullscreenOn);
+    if (scene) scene.setTheme(); // 全屏钉死深空，退出全屏跟着当前主题走
     render();
     requestAnimationFrame(() => scene && scene.resize());
+  }
+
+  // 主题切换时场景背景/星野/网格跟着重读 --p3d-* 令牌；气泡文字的可读性
+  // 混色也要按新背景重算，所以还要走一遍 render() 重建数据点
+  function onThemeChange() {
+    theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    if (scene) scene.setTheme();
+    render();
   }
 
   /* ── 侧栏：导入与品牌筛选 ─────────────────────────────── */
@@ -454,6 +479,8 @@ const Preview3D = (() => {
     A.$('#p3d-fullscreen').onclick = toggleFullscreen;
     document.addEventListener('fullscreenchange', onFullscreenChange);
     renderFullscreenBtn();
+
+    document.addEventListener('wb-themechange', onThemeChange);
 
     // 切走这个 tab 时（.view 被加 hidden）暂停渲染循环，切回来再恢复——
     // 不然离开页面后 WebGL 还在后台整帧渲染白烧 GPU
