@@ -302,11 +302,14 @@ const Matrix = (() => {
   }
 
   /* ── 主网格 ─────────────────────────────────────────── */
+  let dragBandId = null;
+
   function render() {
     const g = A.$('#matrix');
     const m = M();
     g.innerHTML = '';
-    g.style.gridTemplateColumns = `130px repeat(${m.brands.length}, minmax(170px, 1fr))`;
+    // 最后一列固定窄宽度，专门给"新增品牌列"的加号按钮用
+    g.style.gridTemplateColumns = `130px repeat(${m.brands.length}, minmax(170px, 1fr)) 44px`;
 
     // 已经不存在的产品从选区里剔掉
     [...sel].forEach((id) => { if (!m.products.some((p) => p.id === id)) sel.delete(id); });
@@ -330,13 +333,36 @@ const Matrix = (() => {
       g.appendChild(h);
     });
 
+    const addBrand = document.createElement('button');
+    addBrand.type = 'button';
+    addBrand.className = 'mx-add-brand';
+    addBrand.title = '新增品牌列';
+    addBrand.textContent = '+';
+    addBrand.onclick = () => {
+      A.mark();
+      M().brands.push({ id: A.uid('b_'), name: '新品牌' });
+      A.save('matrix'); render();
+      A.$$('.mx-brand input').pop()?.select();
+    };
+    g.appendChild(addBrand);
+
     m.bands.forEach((band) => {
       const lab = document.createElement('div');
       lab.className = 'mx-band';
+      lab.dataset.id = band.id;
+      lab.draggable = A.isEditing();
+
+      const handle = document.createElement('span');
+      handle.className = 'mx-band-handle';
+      handle.title = '按住拖动调整价格带顺序';
+
       const inp = document.createElement('input');
       inp.spellcheck = false;
       A.bindInput(inp, band, 'name', null, 'matrix');
-      lab.append(inp, A.mkKill('删除这条价格带及其产品', () => {
+      inp.addEventListener('mousedown', (e) => { e.stopPropagation(); lab.draggable = false; });
+      inp.addEventListener('blur', () => { lab.draggable = A.isEditing(); });
+
+      lab.append(handle, inp, A.mkKill('删除这条价格带及其产品', () => {
         if (!confirm(`删除价格带「${band.name}」以及里面的所有产品？`)) return;
         A.mark();
         const mm = M();
@@ -344,6 +370,30 @@ const Matrix = (() => {
         mm.products = mm.products.filter((x) => x.bandId !== band.id);
         A.save('matrix'); render();
       }));
+
+      lab.addEventListener('dragstart', (e) => {
+        dragBandId = band.id;
+        lab.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', band.id);
+      });
+      lab.addEventListener('dragend', () => {
+        dragBandId = null;
+        A.$$('.mx-band.dragging').forEach((el) => el.classList.remove('dragging'));
+      });
+      lab.addEventListener('dragover', (e) => {
+        if (!dragBandId || dragBandId === band.id) return;
+        e.preventDefault();
+        lab.classList.add('drop-hot');
+      });
+      lab.addEventListener('dragleave', () => lab.classList.remove('drop-hot'));
+      lab.addEventListener('drop', (e) => {
+        e.preventDefault();
+        lab.classList.remove('drop-hot');
+        const id = dragBandId || e.dataTransfer.getData('text/plain');
+        if (id && id !== band.id) moveBand(id, band.id);
+      });
+
       g.appendChild(lab);
 
       m.brands.forEach((brand) => {
@@ -356,13 +406,11 @@ const Matrix = (() => {
         add.className = 'addhere';
         add.textContent = '+ 添加产品';
         add.onclick = () => {
-          const mm = M();
-          const cellIndex = mm.bands.indexOf(band) * mm.brands.length + mm.brands.indexOf(brand);
           const newId = A.uid('i_');
           A.mark();
-          mm.products.push({ id: newId, brandId: brand.id, bandId: band.id, name: '新产品', price: '¥0', tag: 'default', italic: false, underline: false });
+          M().products.push({ id: newId, brandId: brand.id, bandId: band.id, name: '新产品', price: '¥0', tag: 'default', italic: false, underline: false });
           A.save('matrix'); render();
-          A.$$('.mx-cell')[cellIndex]?.querySelector(`.chip[data-id="${newId}"] .n`)?.select();
+          A.$(`.chip[data-id="${newId}"] .n`)?.select();
         };
         cell.appendChild(add);
 
@@ -377,46 +425,37 @@ const Matrix = (() => {
 
         g.appendChild(cell);
       });
+
+      // 补一格空位，跟表头那颗"新增品牌"按钮对齐，网格才不会错位
+      g.appendChild(Object.assign(document.createElement('div'), { className: 'mx-fill' }));
     });
 
+    const addBand = document.createElement('button');
+    addBand.type = 'button';
+    addBand.className = 'mx-add-band';
+    addBand.textContent = '+ 新增价格带';
+    addBand.onclick = () => {
+      A.mark();
+      M().bands.push({ id: A.uid('p_'), name: '0-0K' });
+      A.save('matrix'); render();
+      A.$$('.mx-band input').pop()?.select();
+    };
+    g.appendChild(addBand);
+
     paintSel();
-    renderTagEditor();
     renderLegendStats();
   }
 
-  /* ── 侧栏：分类编辑 ─────────────────────────────────── */
-  function renderTagEditor() {
-    const box = A.$('#tag-editor');
-    box.innerHTML = '';
-
-    Object.entries(M().tags).forEach(([key, t]) => {
-      const row = document.createElement('div');
-      row.className = 'tag-row';
-
-      const c = document.createElement('input');
-      c.type = 'color'; c.value = t.color;
-      c.addEventListener('input', () => { t.color = c.value; hex.value = c.value; A.save('matrix'); repaint(); });
-      A.trackable(c, render);
-
-      const hex = document.createElement('input');
-      hex.type = 'text'; hex.value = t.color; hex.spellcheck = false;
-      hex.style.flex = '0 0 74px';
-      hex.addEventListener('input', () => {
-        if (/^#[0-9a-f]{6}$/i.test(hex.value)) { t.color = hex.value; c.value = hex.value; A.save('matrix'); repaint(); }
-      });
-      A.trackable(hex);
-
-      const name = richField(t, 'label', renderLegendStats);
-
-      row.append(c, hex, name, A.mkKill('删除分类（产品会退回默认色）', () => {
-        A.mark();
-        const mm = M();
-        delete mm.tags[key];
-        mm.products.forEach((p) => { if (p.tag === key) p.tag = 'default'; });
-        A.save('matrix'); render();
-      }));
-      box.appendChild(row);
-    });
+  /** 价格带拖动排序：把 id 这条挪到 beforeId 前面 */
+  function moveBand(id, beforeId) {
+    const list = M().bands;
+    const from = list.findIndex((b) => b.id === id);
+    if (from < 0) return;
+    A.mark();
+    const [item] = list.splice(from, 1);
+    const to = list.findIndex((b) => b.id === beforeId);
+    list.splice(to < 0 ? list.length : to, 0, item);
+    A.save('matrix'); render();
   }
 
   /* ── 富文本字段：加粗 / 斜体 / 下划线 ─────────────────
@@ -477,28 +516,70 @@ const Matrix = (() => {
     return wrap;
   }
 
-  /** 只换颜色时别重建 DOM，否则输入焦点会丢 */
+  /** 只换颜色时别重建图例/矩阵的 DOM，否则输入焦点、正在拖拽的原生取色器都会被打断——
+   *  只重算卡片色块引用的 CSS 变量即可，图例本身颜色是它自己的 <input> 在显示，不用跟着重建 */
   function repaint() {
     A.$$('.chip').forEach((el) => {
       const p = M().products.find((x) => x.id === el.dataset.id);
       if (p) el.style.setProperty('--chip', colorOf(p.tag));
     });
-    renderLegendStats();
   }
 
-  /* ── 图例 + 统计 ────────────────────────────────────── */
+  /* ── 图例：兼当分类编辑器 ──────────────────────────────
+     图例本身就是"改一处、全盘生效"的编辑入口——不再单独开一块侧栏。
+     第一行是「默认色」（未分类产品用的兜底色，不是真分类，不能删）；
+     后面每行一个分类：色块 + 富文本名字 + 删除；最后一个「+」新增分类。 */
   function renderLegendStats() {
     const m = M();
     const lg = A.$('#legend');
     lg.innerHTML = '';
-    Object.entries(m.tags).forEach(([, t]) => {
-      const s = document.createElement('span');
-      s.innerHTML = `<i class="swatch" style="background:${t.color}"></i>`;
-      const label = document.createElement('span');
-      label.innerHTML = t.label || '';   // 已经过 sanitize 白名单，只可能是 b/i/u
-      s.appendChild(label);
-      lg.appendChild(s);
+
+    const defRow = document.createElement('div');
+    defRow.className = 'tag-row legend-default';
+    const defColor = document.createElement('input');
+    defColor.type = 'color'; defColor.title = '默认色（未分类产品）';
+    defColor.value = m.defaultColor;
+    defColor.addEventListener('input', () => { m.defaultColor = defColor.value; A.save('matrix'); repaint(); });
+    A.trackable(defColor, render);
+    const defLabel = document.createElement('span');
+    defLabel.className = 'legend-default-label';
+    defLabel.textContent = '默认色 · 未分类';
+    defRow.append(defColor, defLabel);
+    lg.appendChild(defRow);
+
+    Object.entries(m.tags).forEach(([key, t]) => {
+      const row = document.createElement('div');
+      row.className = 'tag-row';
+
+      const c = document.createElement('input');
+      c.type = 'color'; c.value = t.color;
+      c.addEventListener('input', () => { t.color = c.value; A.save('matrix'); repaint(); });
+      A.trackable(c, render);
+
+      const name = richField(t, 'label', null);
+
+      row.append(c, name, A.mkKill('删除分类（产品会退回默认色）', () => {
+        A.mark();
+        const mm = M();
+        delete mm.tags[key];
+        mm.products.forEach((p) => { if (p.tag === key) p.tag = 'default'; });
+        A.save('matrix'); render();
+      }));
+      lg.appendChild(row);
     });
+
+    const addTag = document.createElement('button');
+    addTag.type = 'button';
+    addTag.className = 'legend-add';
+    addTag.title = '新增一个分类';
+    addTag.textContent = '+';
+    addTag.onclick = () => {
+      A.mark();
+      M().tags[A.uid('t_')] = { label: '新分类', color: '#c9922f', italic: false, underline: false };
+      A.save('matrix'); render();
+      A.$('#legend').querySelector('.tag-row:last-of-type .rich')?.focus();
+    };
+    lg.appendChild(addTag);
 
     const prices = m.products.map((p) => Number(String(p.price).replace(/[^\d.]/g, ''))).filter((n) => n > 0);
     const avg = prices.length ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0;
@@ -600,9 +681,7 @@ const Matrix = (() => {
     { selector: '.chip', props: ['backgroundColor', 'borderColor'] },
     { selector: '.mx-corner, .mx-brand, .mx-band, .mx-cell', props: ['backgroundColor'] }
   ];
-  const LEGEND_FREEZE = [{ selector: 'span', props: ['color'] }];
-
-  /** h1/副标题、图例文字也要跟着放大——不止表格里的内容 */
+  /** h1/副标题也要跟着放大——不止表格里的内容（图例文字的缩放/冻色在 simplifyLegendForExport 里单独处理） */
   function markScalableGroup(origRoot, cloneRoot, selector) {
     const origEls = origRoot.querySelectorAll(selector);
     const cloneEls = cloneRoot.querySelectorAll(selector);
@@ -614,6 +693,34 @@ const Matrix = (() => {
     });
   }
 
+  /** 图例现在是"取色器 + 富文本 + 删除按钮"的编辑表单，导出快照只要看得懂
+   *  的静态图例——按真实文档里量出来的字号/颜色，新建 swatch + 文字的老样子
+   *  （不能直接复用表单元素，不然导出图里会带着色块选择器和删除叉号）。
+   *  必须在 freezeColors / markScalableGroup 处理图例之前调用：那两个函数
+   *  按 orig/clone 的 'span' 选择器逐个配对，得先把 clone 的结构改回
+   *  span+span 才对得上号。 */
+  function simplifyLegendForExport(origLegend, legend) {
+    const origRows = [...origLegend.querySelectorAll('.tag-row')];
+    const cloneRows = [...legend.querySelectorAll('.tag-row')];
+    origRows.forEach((origRow, i) => {
+      const cloneRow = cloneRows[i];
+      if (!cloneRow) return;
+      const colorInput = origRow.querySelector('input[type=color]');
+      const richOrLabel = origRow.querySelector('.rich, .legend-default-label');
+      const cs = richOrLabel ? getComputedStyle(richOrLabel) : null;
+      const span = document.createElement('span');
+      const swatch = document.createElement('i');
+      swatch.className = 'swatch';
+      swatch.style.background = colorInput ? colorInput.value : '';
+      const label = document.createElement('span');
+      label.innerHTML = richOrLabel ? richOrLabel.innerHTML : '';
+      if (cs) { label.style.color = cs.color; markScalable(label, parseFloat(cs.fontSize) || 12.5, parseFloat(cs.lineHeight)); }
+      span.append(swatch, label);
+      cloneRow.replaceWith(span);
+    });
+    legend.querySelector('.legend-add')?.remove();
+  }
+
   function buildExportClone() {
     const origHead = A.$('#matrix-canvas .paper-head');
     const origGrid = A.$('#matrix');
@@ -623,20 +730,21 @@ const Matrix = (() => {
     const grid = origGrid.cloneNode(true);
     const legend = origLegend.cloneNode(true);
 
+    head.querySelector('.matrix-head-tools')?.remove(); // 统计/说明图标/导出按钮都跟标题同一行，克隆时得先摘掉，不然会截进图里、也会打乱下面按 h1/p 顺序对应原节点的逻辑
+    grid.querySelectorAll('.mx-add-brand, .mx-add-band, .mx-fill, .mx-band-handle').forEach((el) => el.remove()); // 新增品牌/价格带的加号、拖拽手柄、补位空格都是编辑态才有意义的东西，且 fitScaleAndColumns 重算列宽时不会给它们留位置，留着会把导出图挤歪
+    simplifyLegendForExport(origLegend, legend);
+
     freezeColors(origHead, head, HEAD_FREEZE);
     freezeColors(origGrid, grid, GRID_FREEZE);
-    freezeColors(origLegend, legend, LEGEND_FREEZE);
 
     textifyInputs(origGrid, grid, '.mx-brand input');
     textifyInputs(origGrid, grid, '.mx-band input');
     textifyInputs(origGrid, grid, '.chip .n');
     textifyInputs(origGrid, grid, '.chip .p');
     markScalableGroup(origHead, head, 'h1, p');
-    markScalableGroup(origLegend, legend, 'span');
 
-    head.querySelector('#matrix-export-btn')?.remove(); // 按钮现在跟标题同一行，克隆时得摘掉，不然会截进图里
     head.querySelectorAll('[contenteditable]').forEach((el) => { el.contentEditable = 'false'; });
-    grid.querySelectorAll('.chip-tools, .addhere, .addrow, .addline, .kill, .mx-brand .kill').forEach((el) => el.remove());
+    grid.querySelectorAll('.chip-tools, .addhere, .addrow, .addline, .kill, .mx-brand .kill, .mx-band .kill').forEach((el) => el.remove());
     grid.querySelectorAll('.chip').forEach((el) => {
       el.classList.remove('sel', 'dragging');
       // .chip 自带一个 0.3s 的进场动画（从透明淡入），cloneNode 出来的
@@ -746,39 +854,30 @@ const Matrix = (() => {
     }
   }
 
+  /**
+   * 图例/分类编辑、统计、新增品牌/价格带都挪进画布本身了（图例可以直接
+   * 编辑、品牌行/价格带列末尾加号新增），标题行只留一个纯文字的说明
+   * 图标——鼠标移上去悬浮展开，面板里没有任何可交互控件，纯 hover 就够。
+   */
+  function wireInfoPanel() {
+    const wrap = A.$('#mx-info-wrap'), btn = A.$('#mx-info-btn'), panel = A.$('#mx-info-panel');
+    let closeTimer = null;
+    const open = () => { clearTimeout(closeTimer); panel.hidden = false; wrap.classList.add('on'); };
+    const close = () => { panel.hidden = true; wrap.classList.remove('on'); };
+    const scheduleClose = () => { clearTimeout(closeTimer); closeTimer = setTimeout(close, 260); };
+    wrap.addEventListener('mouseenter', open);
+    wrap.addEventListener('mouseleave', scheduleClose);
+    btn.addEventListener('click', (e) => { e.stopPropagation(); panel.hidden ? open() : scheduleClose(); });
+    document.addEventListener('click', (e) => { if (!panel.hidden && !wrap.contains(e.target)) close(); });
+  }
+
   /* ── 初始化 ─────────────────────────────────────────── */
   function init(api) {
     A = api;
 
     A.$('#matrix-export-btn').onclick = exportPNG;
 
-    A.$('#btn-add-tag').onclick = () => {
-      A.mark();
-      M().tags[A.uid('t_')] = { label: '新分类', color: '#c9922f', italic: false, underline: false };
-      A.save('matrix'); render();
-      A.$('#tag-editor').lastChild?.querySelectorAll('input[type=text]')[1]?.select();
-    };
-    A.$('#btn-add-brand').onclick = () => {
-      A.mark();
-      M().brands.push({ id: A.uid('b_'), name: '新品牌' });
-      A.save('matrix'); render();
-      A.$$('.mx-brand input').pop()?.select();
-    };
-    A.$('#btn-add-band').onclick = () => {
-      A.mark();
-      M().bands.push({ id: A.uid('p_'), name: '0-0K' });
-      A.save('matrix'); render();
-      A.$$('.mx-band input').pop()?.select();
-    };
-
-    const dc = A.$('#default-color'), dh = A.$('#default-color-hex');
-    dc.value = M().defaultColor; dh.value = M().defaultColor;
-    dc.addEventListener('input', () => { M().defaultColor = dc.value; dh.value = dc.value; A.save('matrix'); repaint(); });
-    dh.addEventListener('input', () => {
-      if (/^#[0-9a-f]{6}$/i.test(dh.value)) { M().defaultColor = dh.value; dc.value = dh.value; A.save('matrix'); repaint(); }
-    });
-    A.trackable(dc); A.trackable(dh);
-
+    wireInfoPanel();
     wireMarquee();
     wireBatchBar();
   }

@@ -316,7 +316,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
   background: none; cursor: pointer;
 }
-.tag-row input[type="color"]::-webkit-color-swatch { border: 1px solid #ffffff26; border-radius: 6px; }
+.tag-row input[type="color"]::-webkit-color-swatch { border: 1px solid var(--hair-strong); border-radius: 6px; }
 .tag-row input[type="text"] {
   flex: 1; min-width: 0; background: var(--surface-2); border: 1px solid var(--line);
   color: var(--text); padding: 6px 8px; border-radius: 6px; font-size: 12px;
@@ -487,12 +487,65 @@ select#own-brand {
 
 /* ── 沙盘矩阵 ─────────────────────────────────────────── */
 /* 导出按钮跟标题挤在同一行，省掉单独一行工具条的高度，正文可视区域更大 */
-.matrix-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.matrix-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .matrix-head-text { min-width: 0; }
 .matrix-head #matrix-export-btn { flex: 0 0 auto; margin-top: 2px; }
 .matrix-head #matrix-export-btn[disabled] { opacity: 0.55; cursor: wait; }
 .matrix-scroll { flex: 1; overflow: auto; padding-bottom: 6px; }
 .matrix { display: grid; gap: 1px; background: var(--hair); border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; min-width: max-content; }
+
+/* 价格带沙盘不再单独占一个左侧工作台：统计、说明文字都收进标题行，
+   分类编辑直接下沉到底部图例里，品牌/价格带的新增入口就地放在网格末尾——
+   右边给表格本身腾出最大可视宽度。 */
+.matrix-head-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; margin-top: 2px; }
+.mx-head-stats { display: flex; gap: 6px; }
+.mx-head-stats .stat { padding: 6px 11px; border-radius: 8px; }
+.mx-head-stats .stat b { font-size: 14.5px; }
+.mx-head-stats .stat span { font-size: 10px; white-space: nowrap; }
+
+.mx-info-wrap { position: relative; }
+.mx-info-btn {
+  flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--hair-strong); background: var(--ink-overlay); color: var(--ink-dim);
+  font-family: var(--f-mono); font-size: 14px; font-weight: 700;
+  display: grid; place-items: center; transition: all var(--fast);
+}
+.mx-info-btn:hover, .mx-info-wrap.on .mx-info-btn { border-color: var(--mint); background: var(--mint-dim); color: var(--mint); }
+.mx-info-panel {
+  position: absolute; right: 0; top: calc(100% + 8px); width: 280px;
+  padding: 14px 16px; background: var(--paper-card); border: 1px solid var(--hair-strong);
+  border-radius: 13px; box-shadow: 0 22px 48px -16px #00000055; z-index: 60;
+  animation: pop 0.18s var(--ease);
+}
+.mx-info-panel[hidden] { display: none; }
+.mx-info-panel .rail-hint:last-child { margin-bottom: 0; }
+
+/* 新增品牌列：跟表头同一行的窄列加号 */
+.mx-add-brand {
+  border: 1px dashed var(--hair-strong); background: none; color: var(--ink-dim); cursor: pointer;
+  font-size: 18px; font-weight: 700; transition: all var(--fast);
+}
+.mx-add-brand:hover { color: var(--ink); border-color: var(--ink); background: var(--ink-overlay); }
+.mx-fill { border: none; }
+
+/* 新增价格带：贯穿整行宽度的底部长条 */
+.mx-add-band {
+  grid-column: 1 / -1; border: 1px dashed var(--hair-strong); border-top: none; background: none;
+  color: var(--ink-dim); cursor: pointer; padding: 9px; font-size: 12.5px; transition: all var(--fast);
+}
+.mx-add-band:hover { color: var(--ink); border-color: var(--ink); background: var(--ink-overlay); }
+
+/* 价格带拖动排序的手柄 */
+.mx-band-handle {
+  flex: 0 0 10px; height: 16px; cursor: grab; opacity: 0; transition: opacity var(--fast);
+  background:
+    linear-gradient(var(--ink-dim), var(--ink-dim)) 0 2px / 4px 2px no-repeat,
+    linear-gradient(var(--ink-dim), var(--ink-dim)) 0 7px / 4px 2px no-repeat,
+    linear-gradient(var(--ink-dim), var(--ink-dim)) 0 12px / 4px 2px no-repeat;
+}
+.mx-band:hover .mx-band-handle { opacity: 1; }
+.mx-band.dragging { opacity: 0.4; }
+.mx-band.drop-hot { box-shadow: inset 0 2px 0 var(--mint), inset 0 -2px 0 var(--mint); }
 
 .mx-corner, .mx-brand, .mx-band, .mx-cell { background: var(--paper-card); }
 
@@ -619,11 +672,35 @@ select#own-brand {
 .tagmenu i { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; }
 
 .legend {
-  flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px 20px;
+  flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
   padding: 13px 4px 4px; margin-top: 12px; border-top: 1px solid var(--hair);
 }
 .legend span { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-dim); }
 .legend i.swatch { width: 11px; height: 11px; border-radius: 3px; }
+
+/* 图例兼当分类编辑器：色块 + 名字 + 删除，横向排成一颗颗小胶囊 */
+.legend .tag-row {
+  width: auto; margin-bottom: 0; gap: 5px; padding: 4px 5px;
+  background: var(--ink-overlay); border: 1px solid var(--hair); border-radius: 20px;
+}
+.legend .tag-row input[type="color"] { flex: 0 0 20px; width: 20px; height: 20px; }
+.legend .tag-row .richwrap { flex: 0 1 auto; }
+.legend .tag-row .rich {
+  min-height: auto; min-width: 32px; max-width: 220px; background: none; border: none;
+  padding: 2px 4px; font-size: 12.5px; color: var(--ink);
+}
+.legend .tag-row .rich:focus { border: none; outline: 1px solid var(--mint); border-radius: 4px; }
+.legend .legend-default { padding-right: 8px; }
+.legend-default-label { font-size: 12.5px; color: var(--ink-dim); padding: 2px 4px; }
+.legend .kill { opacity: 0; }
+.legend .tag-row:hover .kill { opacity: 1; }
+
+.legend-add {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  border: 1px dashed var(--hair-strong); background: none; color: var(--ink-dim);
+  font-size: 16px; font-weight: 700; display: grid; place-items: center; transition: all var(--fast);
+}
+.legend-add:hover { color: var(--ink); border-color: var(--ink); background: var(--ink-overlay); }
 
 /* ── 竞品对位表 ───────────────────────────────────────── */
 .compare-scroll { flex: 1; overflow: auto; padding: 34px 2px 40px; }
@@ -814,7 +891,8 @@ select#own-brand {
 
 @media (max-width: 1080px) {
   .rail { position: absolute; left: 0; top: 0; bottom: 0; z-index: 20; box-shadow: 20px 0 50px -20px #000; }
-  .canvas { margin-left: var(--rail-w); }
+  /* 价格带沙盘没有左侧工作台了，不用像其它视图那样给 .canvas 让出 .rail 的宽度 */
+  .view:not(#view-matrix) .canvas { margin-left: var(--rail-w); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1112,13 +1190,13 @@ body.readonly .chip-tools,
 body.readonly .richbar,
 body.readonly .slot-acts,
 body.readonly .batchbar,
-body.readonly #btn-add-tag,
-body.readonly #btn-add-brand,
-body.readonly #btn-add-band,
+body.readonly .legend-add,
+body.readonly .mx-add-brand,
+body.readonly .mx-add-band,
+body.readonly .mx-band-handle,
 body.readonly #btn-add-cbrand,
 body.readonly #btn-add-group,
-body.readonly .rail-sec.edit-only,
-body.readonly #default-color, body.readonly #default-color-hex { display: none !important; }
+body.readonly .rail-sec.edit-only { display: none !important; }
 /* .sheet-head .kill 是弹层的关闭按钮，不是价格带/对位表的编辑态删除按钮，
    只读模式下也要能关掉弹层，所以要从上面这条全局隐藏规则里排除出去 */
 body.readonly .sheet-head .kill { display: grid !important; }

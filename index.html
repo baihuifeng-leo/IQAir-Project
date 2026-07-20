@@ -76,47 +76,23 @@
 
   <!-- ══════════════ 视图一：价格带沙盘 ══════════════ -->
   <section class="view" id="view-matrix" data-view="matrix" data-theme-ready="true">
-    <aside class="rail rail--glass">
-      <div class="rail--glass-aurora"><i></i><i></i></div>
-      <div class="rail-head">
-        <span>图例与分类</span>
-        <button class="rail-toggle" title="收起工作台，腾出阅读空间" aria-label="收起工作台"></button>
-      </div>
-      <div class="rail-body">
-        <div class="rail-zone rail-zone--info">
-          <p class="rail-hint">这些颜色同时控制沙盘里的产品标签。改一处，全盘生效。</p>
-          <p class="rail-hint">在空白处按住鼠标拖出选框，可以一次选中多个产品；<kbd>Ctrl</kbd> 点击加选或取消。选中后整批拖到别的格子，或用底部工具条改分类、删除。</p>
-        </div>
-
-        <div class="rail-zone rail-zone--action">
-          <div id="tag-editor"></div>
-          <button class="solid" id="btn-add-tag">新增一个分类</button>
-
-          <div class="rail-sec">默认产品色</div>
-          <div class="tag-row">
-            <input type="color" id="default-color">
-            <input type="text" id="default-color-hex" spellcheck="false">
-          </div>
-
-          <div class="rail-sec">结构</div>
-          <button class="ghost wide" id="btn-add-brand">新增品牌列</button>
-          <button class="ghost wide" id="btn-add-band">新增价格带</button>
-        </div>
-
-        <div class="rail-zone rail-zone--stats">
-          <div class="rail-sec">统计</div>
-          <div class="stats" id="matrix-stats"></div>
-        </div>
-      </div>
-    </aside>
-
     <div class="canvas paper" id="matrix-canvas">
       <div class="paper-head matrix-head">
         <div class="matrix-head-text">
           <h1 contenteditable="plaintext-only" data-bind="matrix.title"></h1>
           <p contenteditable="plaintext-only" data-bind="matrix.subtitle"></p>
         </div>
-        <button class="ghost" id="matrix-export-btn">⭳ 导出 PNG（16:9）</button>
+        <div class="matrix-head-tools">
+          <div class="mx-head-stats" id="matrix-stats"></div>
+          <div class="mx-info-wrap" id="mx-info-wrap">
+            <button class="mx-info-btn" id="mx-info-btn" type="button" aria-haspopup="true" aria-label="使用说明">ⓘ</button>
+            <div class="mx-info-panel" id="mx-info-panel" hidden>
+              <p class="rail-hint">这些颜色同时控制沙盘里的产品标签。改一处，全盘生效——直接在下方图例里改色、加分类。</p>
+              <p class="rail-hint">在空白处按住鼠标拖出选框，可以一次选中多个产品；<kbd>Ctrl</kbd> 点击加选或取消。选中后整批拖到别的格子，或用底部工具条改分类、删除。</p>
+            </div>
+          </div>
+          <button class="ghost" id="matrix-export-btn">⭳ 导出 PNG（16:9）</button>
+        </div>
       </div>
       <div class="matrix-scroll">
         <div class="matrix" id="matrix"></div>
