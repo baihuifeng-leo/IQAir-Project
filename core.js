@@ -516,26 +516,25 @@ const App = (() => {
     return { show, hide };
   })();
 
-  /* ── 侧栏折叠 ───────────────────────────────────────── */
-  function wireRails() {
-    const KEY = 'wb.rail.collapsed';
-    const apply = (on) => {
-      $$('.view').forEach((v) => v.classList.toggle('rail-off', on));
-      $$('.rail-toggle').forEach((b) => { b.title = on ? '展开工作台' : '收起工作台，腾出阅读空间'; });
-    };
-    let on = localStorage.getItem(KEY) === '1';
-    apply(on);
-    $$('.rail-toggle').forEach((b) => (b.onclick = () => {
-      on = !on;
-      localStorage.setItem(KEY, on ? '1' : '0');
-      apply(on);
-      setTimeout(moveInk, 320);
-    }));
-    document.addEventListener('keydown', (e) => {
-      if (e.key === '\\' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('.view:not([hidden]) .rail-toggle')?.click(); }
-    });
-  }
   function renderAll() { Matrix.render(); Compare.render(); syncTitles(); Compare.syncHeads(); }
+
+  /**
+   * 通用的标题行 info 图标：鼠标移上去悬浮展开说明面板，纯 hover，面板里
+   * 不放任何可交互控件。价格带沙盘之外的几个视图去掉左侧工作台后，都用
+   * 这一套替代原来侧栏里的成段说明文字。
+   */
+  function wireInfoPanel(wrapSel, btnSel, panelSel) {
+    const wrap = $(wrapSel), btn = $(btnSel), panel = $(panelSel);
+    if (!wrap || !btn || !panel) return;
+    let closeTimer = null;
+    const open = () => { clearTimeout(closeTimer); panel.hidden = false; wrap.classList.add('on'); };
+    const close = () => { panel.hidden = true; wrap.classList.remove('on'); };
+    const scheduleClose = () => { clearTimeout(closeTimer); closeTimer = setTimeout(close, 260); };
+    wrap.addEventListener('mouseenter', open);
+    wrap.addEventListener('mouseleave', scheduleClose);
+    btn.addEventListener('click', (e) => { e.stopPropagation(); panel.hidden ? open() : scheduleClose(); });
+    document.addEventListener('click', (e) => { if (!panel.hidden && !wrap.contains(e.target)) close(); });
+  }
 
   /* ── 顶栏菜单 ───────────────────────────────────────── */
   function wireMenu() {
@@ -602,7 +601,6 @@ const App = (() => {
     Settings.init(api);
     bindTitles();
     renderAll();
-    wireRails();
 
     $$('.tab').forEach((t) => (t.onclick = () => go(t.dataset.view)));
     $('#btn-edit').onclick = () => setEditing(!editing);
@@ -645,7 +643,7 @@ const App = (() => {
     get state() { return state; },
     get me() { return me; },
     view: () => view,
-    peek, lightbox, isEditing, refreshModuleVisibility,
+    peek, lightbox, isEditing, refreshModuleVisibility, wireInfoPanel,
     $, $$, uid, clone, toast, save, mark, trackable, bindInput, mkKill, uploadImage, renderAll, guard
   };
 

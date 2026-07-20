@@ -214,7 +214,7 @@ const Report = (() => {
   function renderTrend() {
     const empty = A.$('#rpt-trend-empty'), box = A.$('#rpt-trend-chart');
     if (!data || !data.daily.length) {
-      empty.textContent = '还没有数据。用左边的「导入 / 更新 Excel」传一份进来。';
+      empty.textContent = '还没有数据。用标题栏的「导入 / 更新 Excel」传一份进来。';
       empty.hidden = false; box.hidden = true; return;
     }
     const inRange = data.daily.some((r) => (!rangeStart || r.date >= rangeStart) && (!rangeEnd || r.date <= rangeEnd));
@@ -287,7 +287,7 @@ const Report = (() => {
     const box = A.$('#rpt-compare');
     box.innerHTML = '';
     const daily = data?.daily || [];
-    if (!daily.length) { box.innerHTML = '<p class="rv-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份进来。</p>'; return; }
+    if (!daily.length) { box.innerHTML = '<p class="rv-empty">还没有数据。用标题栏的「导入 / 更新 Excel」传一份进来。</p>'; return; }
 
     const desc = [...daily].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     const thisWeek = desc.slice(0, 7), lastWeek = desc.slice(7, 14);
@@ -385,7 +385,7 @@ const Report = (() => {
     const weeks = data?.weimeng || [];
     if (!weeks.length) {
       select.innerHTML = '';
-      sub.textContent = '还没有记录，点左边「记录 / 编辑某周数据」填一份。';
+      sub.textContent = '还没有记录，点标题栏「记录 / 编辑某周数据」填一份。';
       note.hidden = true;
       return;
     }
@@ -534,8 +534,7 @@ const Report = (() => {
   function switchSub(s) {
     sub = s;
     A.$$('#rpt-switch button').forEach((b) => b.classList.toggle('on', b.dataset.sub === s));
-    A.$('#rpt-personal-rail').hidden = s !== 'personal';
-    A.$('#rpt-public-rail').hidden = s !== 'public';
+    A.$('#rpt-personal-tools').hidden = s !== 'personal';
     A.$('#rpt-personal-view').hidden = s !== 'personal';
     A.$('#rpt-public-view').hidden = s !== 'public';
     A.$('#rpt-head-sub').textContent = s === 'personal' ? '周报数据看板 · 个人报告' : '周报数据看板 · 公共报告';
@@ -564,10 +563,11 @@ const Report = (() => {
     }
   }
 
-  function wireDrop(dropId, fileInputId) {
-    const drop = A.$(dropId), pick = A.$(fileInputId);
-    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('hot'); }));
-    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove('hot')));
+  /** 没有专门的拖拽框了，整个个人报告看板区域都能接文件 */
+  function wireDrop(dropSel, fileInputId) {
+    const drop = A.$(dropSel), pick = A.$(fileInputId);
+    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drop-hot'); }));
+    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove('drop-hot')));
     drop.addEventListener('drop', (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) doImport(f); });
     pick.onchange = () => { if (pick.files[0]) doImport(pick.files[0]); };
   }
@@ -590,7 +590,8 @@ const Report = (() => {
     A.$$('#rpt-switch button').forEach((b) => (b.onclick = () => switchSub(b.dataset.sub)));
 
     A.$('#rpt-import-btn').onclick = () => { A.$('#rpt-import-file').value = ''; A.$('#rpt-import-file').click(); };
-    wireDrop('#rpt-import-drop', '#rpt-import-file');
+    wireDrop('#rpt-personal-view', '#rpt-import-file');
+    A.wireInfoPanel('#rpt-info-wrap', '#rpt-info-btn', '#rpt-info-panel');
 
     A.$('#rpt-weimeng-btn').onclick = () => openWeimengForm();
     A.$('#rpt-wm-edit-btn').onclick = () => openWeimengForm(A.$('#rpt-wm-week-select').value);

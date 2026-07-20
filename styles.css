@@ -76,7 +76,6 @@
   --p3d-star-op: 0.5;
   --p3d-bloom: 0.22;
 
-  --rail-w: 264px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --fast: 0.16s var(--ease);
   --slow: 0.42s var(--ease);
@@ -287,18 +286,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .view > .canvas { animation-delay: 0.05s; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 
-/* ── 左侧控制台 ───────────────────────────────────────── */
-.rail {
-  width: var(--rail-w); flex: 0 0 var(--rail-w); height: 100%;
-  background: linear-gradient(180deg, var(--surface), var(--surface-2));
-  border-right: 1px solid var(--line);
-  display: flex; flex-direction: column;
-}
-.rail-head {
-  padding: 15px 16px; font-family: var(--f-display); font-size: 12px; letter-spacing: 1.6px;
-  text-transform: uppercase; color: var(--dim); border-bottom: 1px solid var(--line-soft);
-}
-.rail-body { flex: 1; overflow-y: auto; padding: 14px 16px 40px; }
+/* ── 说明文字（原来是左侧控制台专用，现在各视图标题行的 info 面板也用这套） ── */
 /* 说明文字要弱化但不能弱到读不了——深色态 --dimmer(#4d5a72) 在侧栏底上
    只有约 2.6:1，实际反馈是看不清；换 --dim 保持"静音"层级同时过 4.5:1 */
 .rail-hint { color: var(--dim); font-size: 12.5px; line-height: 1.65; margin: 0 0 12px; }
@@ -331,38 +319,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tag-row .sq.on { background: var(--mint); color: #04231e; border-color: var(--mint); }
 .tag-row .sq.kill:hover { background: #43191c; color: #ff8f8f; border-color: #6b2129; }
 
-.switch { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12.5px; cursor: pointer; }
-.switch input { accent-color: var(--mint); width: 15px; height: 15px; }
-
-select#own-brand {
-  width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
-  padding: 9px 10px; border-radius: 8px; cursor: pointer;
-}
-.mark-legend { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-.chip-mark {
-  font-size: 11.5px; padding: 5px 9px; border-radius: 6px;
-  background: var(--overlay-weak); color: var(--dim); border-left: 3px solid var(--dimmer);
-}
-.chip-mark.good { border-left-color: var(--adv); color: #a9c3ff; }
-.chip-mark.bad { border-left-color: var(--dis); color: #ffa9a3; }
-/* 上面两个文字色是为深色侧栏挑的浅蓝/浅红，白底上洗白，浅色态直接用主色 */
-[data-theme="light"] .chip-mark.good { color: var(--adv); }
-[data-theme="light"] .chip-mark.bad { color: var(--dis); }
-
-.rail-zone--info {
-  padding: 10px 12px; margin-bottom: 18px; border-radius: 10px;
-  background: var(--overlay-weak); border: 1px solid var(--line-soft);
-}
-.rail-zone--info .rail-hint { margin: 0 0 8px; font-size: 12px; }
-.rail-zone--info .rail-hint:last-child { margin-bottom: 0; }
-
-.rail-zone--action .rail-sec:first-child { margin-top: 0; }
-
-.rail-zone--stats {
-  margin-top: 22px; padding-top: 16px; border-top: 1px dashed var(--line-soft);
-}
-.rail-zone--stats .rail-sec { margin-top: 0; }
-
 /* ═══════════════════════════════════════════════════════════
    深色 · 极光玻璃（Aurora Glass）
    浅色态没有这层装饰——[data-theme="light"] 直接隐藏，视觉上走
@@ -371,35 +327,24 @@ select#own-brand {
 @keyframes aurora-drift-1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(22px, 14px) scale(1.06); } }
 @keyframes aurora-drift-2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-18px, 10px) scale(1.04); } }
 @media (prefers-reduced-motion: reduce) {
-  .topbar-aurora i, .rail--glass-aurora i { animation: none !important; }
+  .topbar-aurora i { animation: none !important; }
 }
 
-.topbar-aurora, .rail--glass-aurora {
+.topbar-aurora {
   position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0;
 }
-[data-theme="light"] .topbar-aurora, [data-theme="light"] .rail--glass-aurora { display: none; }
+[data-theme="light"] .topbar-aurora { display: none; }
 
 .topbar-aurora i { position: absolute; width: 140px; height: 140px; border-radius: 50%; filter: blur(34px); opacity: 0.3; }
 .topbar-aurora i:nth-child(1) { background: var(--aurora-1); top: -70px; left: 8%; animation: aurora-drift-1 12s ease-in-out infinite; }
 .topbar-aurora i:nth-child(2) { background: var(--aurora-2); top: -70px; left: 46%; animation: aurora-drift-2 14s ease-in-out infinite; }
 
-.rail--glass-aurora i { position: absolute; width: 220px; height: 220px; border-radius: 50%; filter: blur(46px); opacity: 0.4; }
-.rail--glass-aurora i:nth-child(1) { background: var(--aurora-1); top: -60px; left: -60px; animation: aurora-drift-1 12s ease-in-out infinite; }
-.rail--glass-aurora i:nth-child(2) { background: var(--aurora-2); bottom: -70px; right: -50px; animation: aurora-drift-2 14s ease-in-out infinite; }
-
 .topbar > *:not(.topbar-aurora) { position: relative; z-index: 1; }
-.rail--glass { position: relative; overflow: hidden; }
-.rail--glass > *:not(.rail--glass-aurora) { position: relative; z-index: 1; }
 
 [data-theme="dark"] .topbar,
 :root:not([data-theme]) .topbar {
   background: rgba(16, 12, 28, 0.55);
   backdrop-filter: blur(16px) saturate(160%);
-}
-[data-theme="dark"] .rail--glass,
-:root:not([data-theme]) .rail--glass {
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(14px) saturate(160%);
 }
 [data-theme="dark"] .menu,
 :root:not([data-theme]) .menu {
@@ -421,23 +366,16 @@ select#own-brand {
 }
 [data-theme="light"] .topbar::after { display: none; } /* 顶栏描边漂移动效是深色态专属的"高光时刻"，浅色态不用 */
 
-[data-theme="light"] .rail--glass {
-  background: #ffffff;
-  backdrop-filter: none;
-}
-
 [data-theme="light"] .menu {
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(20px) saturate(180%);
 }
 
-/* .rail-zone--info/.stat/.solid 都是通用类名，在还没迁移的视图里也用（比如
-   评论风向标/竞品3D预览/报告管理的"导入 Excel"按钮也是 .solid）。这几条覆写
-   必须限定在 .view[data-theme-ready="true"] 范围内，不然全局切到浅色态时，
-   未迁移视图里这几个类名的阴影颜色会跟着跳变——Task 3 的兜底层只重新声明了
-   自定义属性（--bg/--mint 等），没有也不该覆盖这种不经过自定义属性、直接写
-   死颜色值的 box-shadow，所以这里必须自己限定作用域，不能指望兜底层兜底。 */
-[data-theme="light"] .view[data-theme-ready="true"] .rail-zone--info,
+/* .stat/.solid 都是通用类名，各视图标题行里到处在用（比如评论风向标/竞品3D预览/
+   报告管理的"导入 Excel"按钮也是 .solid）。这几条覆写必须限定在
+   .view[data-theme-ready="true"] 范围内——Task 3 的兜底层只重新声明了自定义属性
+   （--bg/--mint 等），没有也不该覆盖这种不经过自定义属性、直接写死颜色值的
+   box-shadow，所以这里必须自己限定作用域，不能指望兜底层兜底。 */
 [data-theme="light"] .view[data-theme-ready="true"] .stat {
   box-shadow: 0 6px 16px -10px rgba(30, 50, 110, 0.18);
 }
@@ -483,7 +421,14 @@ select#own-brand {
 .paper-head [contenteditable]:hover { background: var(--ink-overlay); }
 .paper-head [contenteditable]:focus { background: var(--focus-bg); outline: 1px solid var(--hair-strong); }
 
-.compare-head { border-left: 5px solid var(--dis); padding-left: 14px; margin-left: -4px; }
+.compare-head {
+  border-left: 5px solid var(--dis); padding-left: 14px; margin-left: -4px;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.compare-head-text { min-width: 0; }
+.compare-head-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; margin-top: 2px; }
+.compare-head-tools .lang-switch { width: 148px; margin-bottom: 0; }
+.compare-head-tools .en-status { margin-bottom: 0; white-space: nowrap; }
 
 /* ── 沙盘矩阵 ─────────────────────────────────────────── */
 /* 导出按钮跟标题挤在同一行，省掉单独一行工具条的高度，正文可视区域更大 */
@@ -505,22 +450,22 @@ select#own-brand {
 .mx-head-stats .stat b { font-size: 14.5px; }
 .mx-head-stats .stat span { font-size: 10px; white-space: nowrap; }
 
-.mx-info-wrap { position: relative; }
-.mx-info-btn {
+.info-wrap { position: relative; }
+.info-btn {
   flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
   border: 1px solid var(--hair-strong); background: var(--ink-overlay); color: var(--ink-dim);
   font-family: var(--f-mono); font-size: 14px; font-weight: 700;
   display: grid; place-items: center; transition: all var(--fast);
 }
-.mx-info-btn:hover, .mx-info-wrap.on .mx-info-btn { border-color: var(--mint); background: var(--mint-dim); color: var(--mint); }
-.mx-info-panel {
+.info-btn:hover, .info-wrap.on .info-btn { border-color: var(--mint); background: var(--mint-dim); color: var(--mint); }
+.info-panel {
   position: absolute; right: 0; top: calc(100% + 8px); width: 280px;
   padding: 14px 16px; background: var(--paper-card); border: 1px solid var(--hair-strong);
   border-radius: 13px; box-shadow: 0 22px 48px -16px #00000055; z-index: 60;
   animation: pop 0.18s var(--ease);
 }
-.mx-info-panel[hidden] { display: none; }
-.mx-info-panel .rail-hint:last-child { margin-bottom: 0; }
+.info-panel[hidden] { display: none; }
+.info-panel .rail-hint:last-child { margin-bottom: 0; }
 
 /* 新增品牌列：跟表头同一行的窄列加号 */
 .mx-add-brand {
@@ -548,6 +493,15 @@ select#own-brand {
 .mx-band:hover .mx-band-handle { opacity: 1; }
 .mx-band.dragging { opacity: 0.4; }
 .mx-band.drop-hot { box-shadow: inset 0 2px 0 var(--mint), inset 0 -2px 0 var(--mint); }
+
+/* 首行/首列锁定：手柄换成小锁图标，且悬停也不出现"可拖拽"的抓手光标 */
+.mx-band.locked .mx-band-handle, .mx-brand.locked .mx-brand-handle {
+  opacity: 0.5; cursor: default; background: none;
+}
+.mx-band.locked .mx-band-handle::before, .mx-brand.locked .mx-brand-handle::before {
+  content: '🔒'; font-size: 9px; line-height: 1;
+}
+.mx-band.locked:hover .mx-band-handle, .mx-brand.locked:hover .mx-brand-handle { opacity: 0.7; }
 
 .mx-corner, .mx-brand, .mx-band, .mx-cell { background: var(--paper-card); }
 
@@ -740,9 +694,26 @@ select#own-brand {
 /* 品牌表头 */
 .cmp-brand {
   padding: 10px 12px 14px; display: flex; flex-direction: column; align-items: center; gap: 8px;
-  position: relative; border-radius: 12px; transition: background var(--fast);
+  position: relative; border-radius: 12px; transition: background var(--fast); cursor: pointer;
 }
 .cmp-brand:hover { background: var(--overlay-strong); }
+.cmp-brand.is-own { cursor: default; }
+
+/* 新增品牌列 / 新增参数分组：跟价格带沙盘同一套"就地加号"，不再靠侧栏按钮。
+   加号按钮不进表头那个网格（避免多一列挤压 minmax 1fr，跟下面数据行错位），
+   就近浮在表头行右边即可。 */
+.cmp-head-wrap { display: flex; align-items: center; gap: 8px; padding: 0 1px; }
+.cmp-add-brand {
+  flex: 0 0 44px; align-self: stretch; border: 1px dashed var(--hair-strong); background: none;
+  color: var(--ink-dim); cursor: pointer; border-radius: 12px; font-size: 20px; font-weight: 700;
+  transition: all var(--fast);
+}
+.cmp-add-brand:hover { color: var(--ink); border-color: var(--ink); background: var(--ink-overlay); }
+.cmp-add-group {
+  width: 100%; border: 1px dashed var(--hair-strong); background: none; color: var(--ink-dim);
+  cursor: pointer; padding: 10px; font-size: 12.5px; border-radius: 14px; transition: all var(--fast);
+}
+.cmp-add-group:hover { color: var(--ink); border-color: var(--ink); background: var(--ink-overlay); }
 .cmp-brand.is-own {
   background: var(--card-grad);
   box-shadow: inset 0 0 0 2px var(--dis), 0 6px 20px -12px #cf372c66;
@@ -883,12 +854,11 @@ select#own-brand {
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 9px; border: 2px solid transparent; background-clip: content-box; }
-.rail-body::-webkit-scrollbar-thumb { background: #ffffff1c; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
 
 /* ── 打印：只留纸面 ───────────────────────────────────── */
 @media print {
-  .topbar, .rail, .toaster { display: none !important; }
+  .topbar, .toaster { display: none !important; }
   html, body, #workspace, .view, .canvas { height: auto; overflow: visible; }
   /* 纸面已双主题化，打印时强制回浅色令牌，深色主题下打印才不会白底白字 */
   .paper {
@@ -901,12 +871,6 @@ select#own-brand {
   }
   .matrix-scroll, .compare-scroll { overflow: visible; }
   .kill, .addhere, .addrow, .addline, .chip-tools, .swap { display: none !important; }
-}
-
-@media (max-width: 1080px) {
-  .rail { position: absolute; left: 0; top: 0; bottom: 0; z-index: 20; box-shadow: 20px 0 50px -20px #000; }
-  /* 价格带沙盘没有左侧工作台了，不用像其它视图那样给 .canvas 让出 .rail 的宽度 */
-  .view:not(#view-matrix) .canvas { margin-left: var(--rail-w); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1028,31 +992,6 @@ input.pin::placeholder { letter-spacing: 0; font-family: var(--f-body); font-siz
 .pic-slot:hover .slot-rm, .logo-slot:hover .slot-rm { opacity: 1; }
 .logo-slot { position: relative; }
 
-/* ═══ 侧栏折叠 ═════════════════════════════════════════════ */
-.rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.rail-toggle {
-  flex: 0 0 24px; width: 24px; height: 24px; border-radius: 7px; cursor: pointer;
-  border: 1px solid var(--line); background: var(--overlay-weak); position: relative;
-  transition: all var(--fast);
-}
-.rail-toggle::before {
-  content: ""; position: absolute; inset: 0; margin: auto;
-  width: 6px; height: 6px; border-left: 2px solid var(--dim); border-bottom: 2px solid var(--dim);
-  transform: translateX(1px) rotate(45deg);
-  transition: transform var(--slow), border-color var(--fast);
-}
-.rail-toggle:hover { border-color: var(--mint); background: var(--mint-dim); }
-.rail-toggle:hover::before { border-color: var(--mint); }
-
-.rail { transition: width var(--slow), margin-left var(--slow); overflow: hidden; }
-.view.rail-off .rail { margin-left: calc(var(--rail-w) * -1 + 44px); }
-.view.rail-off .rail-body { opacity: 0; pointer-events: none; transition: opacity 0.14s; }
-.view.rail-off .rail-head span { opacity: 0; }
-.view.rail-off .rail-head { justify-content: flex-end; padding-right: 9px; }
-.view.rail-off .rail-toggle::before { transform: translateX(-2px) rotate(-135deg); }
-.rail-body { transition: opacity 0.3s var(--ease) 0.1s; }
-.rail-head span { transition: opacity 0.16s; }
-
 /* ═══ 框选与批量操作 ═══════════════════════════════════════ */
 .matrix-scroll { user-select: none; }
 .matrix-scroll input { user-select: text; }
@@ -1163,7 +1102,6 @@ kbd {
 
 @media print {
   .batchbar, .imgpeek, .marquee, .sheet-mask { display: none !important; }
-  .view.rail-off .rail { margin-left: 0; }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1206,10 +1144,7 @@ body.readonly .slot-acts,
 body.readonly .batchbar,
 body.readonly .legend-add,
 body.readonly .mx-band-handle,
-body.readonly .mx-brand-handle,
-body.readonly #btn-add-cbrand,
-body.readonly #btn-add-group,
-body.readonly .rail-sec.edit-only { display: none !important; }
+body.readonly .mx-brand-handle { display: none !important; }
 
 /* .sheet-head .kill 是弹层的关闭按钮，不是价格带/对位表的编辑态删除按钮，
    只读模式下也要能关掉弹层，所以要从上面这条全局隐藏规则里排除出去 */
@@ -1319,8 +1254,28 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .rv-head p { margin: 5px 0 0; font-size: 11.5px; letter-spacing: 3px; text-transform: uppercase; color: var(--dimmer); }
-.rv-scroll { flex: 1; overflow-y: auto; padding: 22px 34px 60px; }
+.rv-scroll { flex: 1; overflow-y: auto; padding: 22px 34px 60px; transition: background var(--fast), box-shadow var(--fast); }
+.rv-scroll.drop-hot { background: var(--mint-dim); box-shadow: inset 0 0 0 2px var(--mint); }
 .rv-empty { color: var(--dimmer); padding: 60px 0; text-align: center; }
+
+/* 评论风向标/3D预览/报告管理去掉左侧工作台后，导入等操作都收进标题行这一排 */
+.rv-head-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+.rv-head-tools .lang-switch { width: 168px; margin-bottom: 0; }
+.rv-head-import { display: flex; align-items: center; gap: 6px; }
+.rv-head-import input[type="text"] {
+  width: 150px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+  padding: 7px 10px; border-radius: 8px; font-size: 12.5px;
+}
+.rv-head-import select {
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+  padding: 7px 10px; border-radius: 8px; font-size: 12.5px; max-width: 160px; cursor: pointer;
+}
+.ghost.danger { color: var(--dis); border-color: #6b2129; }
+.ghost.danger:hover { background: var(--dis); border-color: var(--dis); color: #fff; }
+
+/* 品牌声量条形图末尾露出的删除按钮，只有管理员能看到 */
+.rv-bar-row .kill { opacity: 0; margin-left: 4px; }
+.rv-bar-row:hover .kill { opacity: 1; }
 
 .rv-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .rv-stat {
@@ -1449,11 +1404,6 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .kw-ctx mark { background: #4ee0c130; color: var(--mint); padding: 0 2px; border-radius: 3px; }
 .kw-tip.neg .kw-ctx mark { background: color-mix(in srgb, var(--bad) 19%, transparent); color: var(--bad-text); }
 
-/* 侧栏 */
-#rv-brand-name, #rv-product-new-name {
-  width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
-  padding: 9px 11px; border-radius: 8px; margin-bottom: 8px;
-}
 #rv-brand-name:focus, #rv-product-new-name:focus { outline: none; border-color: var(--mint); }
 .rv-drop {
   border: 1px dashed var(--line); border-radius: 10px; padding: 12px; text-align: center;
@@ -1496,7 +1446,8 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .p3d-stat b { display: block; font-family: var(--f-mono); font-size: 19px; color: var(--mint); letter-spacing: -0.5px; }
 .p3d-stat span { font-size: 11px; color: var(--dim); letter-spacing: 0.4px; }
 
-.p3d-chart-wrap { flex: 1; min-height: 0; position: relative; padding: 10px 20px 20px; }
+.p3d-chart-wrap { flex: 1; min-height: 0; position: relative; padding: 10px 20px 20px; transition: box-shadow var(--fast); }
+.p3d-chart-wrap.drop-hot { box-shadow: inset 0 0 0 2px var(--mint); }
 /* 场景观感（深空辉光）随 --p3d-* 令牌走，令牌在 JS 里用 getComputedStyle
    现读去配 Three.js 材质（canvas 不吃 CSS 级联，跟报告趋势图的 ECharts
    同一套办法）；3D预览暂不跟随全局浅色主题，永远深空（浅色配方后续
@@ -1531,7 +1482,8 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .p3d-brow.off { opacity: 0.38; filter: grayscale(0.5); }
 .p3d-brow.off i { box-shadow: none; }
 
-.p3d-head-controls { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.p3d-head-controls { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+.p3d-brand-menu { width: 224px; max-height: 340px; overflow-y: auto; }
 #p3d-sizemode { margin-bottom: 0; flex: 0 0 auto; }
 #p3d-autorotate.on { color: var(--mint); border-color: var(--mint); background: var(--mint-dim); }
 #p3d-fullscreen.on { color: #5b8cff; border-color: #5b8cff; background: #5b8cff22; }
@@ -1754,9 +1706,7 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-exit-present:hover { color: var(--text); border-color: #33456a; }
 
 body.rpt-presenting .topbar,
-body.rpt-presenting .rail,
-body.rpt-presenting .rpt-head,
-body.rpt-presenting .rail-toggle { display: none !important; }
+body.rpt-presenting .rpt-head { display: none !important; }
 /* .rv-scroll 有两块（个人/公共报告），下面这条把 display 强改成 flex
    的规则选择器比 [hidden] 的 UA 样式优先级更高，会把本该隐藏的那块也
    撑出来一起分屏高度——显式钉住 [hidden] 兜底，不受下面规则影响 */
@@ -1834,19 +1784,6 @@ body.rpt-presenting .rpt-wm-weekbar { display: none; }
   .saveflag { padding: 6px; }
   .editbtn { padding: 7px 11px; font-size: 12.5px; }
   #workspace { height: calc(100% - 106px); }
-
-  /* 侧栏变抽屉 */
-  .rail {
-    position: fixed; left: 0; top: 106px; bottom: 0; width: min(300px, 86vw); z-index: 60;
-    transform: translateX(-102%); box-shadow: 24px 0 60px -24px #000;
-    transition: transform 0.3s var(--ease);
-  }
-  .view:not(.rail-off) .rail { transform: none; }
-  .view.rail-off .rail { margin-left: 0; }
-  .canvas { margin-left: 0 !important; }
-  .rail-toggle { position: fixed; left: auto; right: 10px; top: 62px; z-index: 61; }
-  .view.rail-off .rail-body { opacity: 1; pointer-events: auto; }
-  .view.rail-off .rail-head span { opacity: 1; }
 
   .paper { padding: 16px 14px 12px; }
   .paper-head h1 { font-size: 22px; }

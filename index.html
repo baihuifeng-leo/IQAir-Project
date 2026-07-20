@@ -84,9 +84,9 @@
         </div>
         <div class="matrix-head-tools">
           <div class="mx-head-stats" id="matrix-stats"></div>
-          <div class="mx-info-wrap" id="mx-info-wrap">
-            <button class="mx-info-btn" id="mx-info-btn" type="button" aria-haspopup="true" aria-label="使用说明">ⓘ</button>
-            <div class="mx-info-panel" id="mx-info-panel" hidden>
+          <div class="info-wrap" id="mx-info-wrap">
+            <button class="info-btn" id="mx-info-btn" type="button" aria-haspopup="true" aria-label="使用说明">ⓘ</button>
+            <div class="info-panel" id="mx-info-panel" hidden>
               <p class="rail-hint">这些颜色同时控制沙盘里的产品标签。改一处，全盘生效——直接在下方图例里改色、加分类。</p>
               <p class="rail-hint">在空白处按住鼠标拖出选框，可以一次选中多个产品；<kbd>Ctrl</kbd> 点击加选或取消。选中后整批拖到别的格子，或用底部工具条改分类、删除。</p>
             </div>
@@ -103,51 +103,29 @@
 
   <!-- ══════════════ 视图二：竞品对位 ══════════════ -->
   <section class="view" id="view-compare" data-view="compare" data-theme-ready="true" hidden>
-    <aside class="rail rail--glass">
-      <div class="rail--glass-aurora"><i></i><i></i></div>
-      <div class="rail-head">
-        <span>对位设置</span>
-        <button class="rail-toggle" title="收起工作台，腾出阅读空间" aria-label="收起工作台"></button>
-      </div>
-      <div class="rail-body">
-        <div class="rail-sec">语言</div>
-        <div class="lang-switch" id="lang-switch">
-          <button data-lang="zh" class="on">中文</button>
-          <button data-lang="en">English</button>
-          <i></i>
-        </div>
-        <div class="en-status" id="en-status"></div>
-        <p class="rail-hint">中文和英文各存一份。改了中文，对应的英文会被标成待更新；英文空着的地方会高亮提示。</p>
-
-        <div class="rail-sec">我方品牌</div>
-        <p class="rail-hint">选中后，该列会被高亮描边，方便一眼锁定自己。</p>
-        <select id="own-brand"></select>
-
-        <div class="rail-sec">高亮含义</div>
-        <div class="mark-legend">
-          <span class="chip-mark good">蓝色 · 我方优势</span>
-          <span class="chip-mark bad">红色 · 我方劣势</span>
-          <span class="chip-mark">灰色 · 中性</span>
-        </div>
-        <p class="rail-hint">点单元格里的圆点循环切换：中性 → 优势 → 劣势。</p>
-
-        <div class="rail-sec">结构</div>
-        <button class="ghost wide" id="btn-add-cbrand">新增品牌列</button>
-        <button class="ghost wide" id="btn-add-group">新增参数分组</button>
-
-        <div class="rail-sec">素材</div>
-        <p class="rail-hint">产品图会自动裁成 1:1 正方形，鼠标滑过放大，移开还原。</p>
-        <label class="switch">
-          <input type="checkbox" id="zoom-toggle" checked>
-          <span>滑过放大</span>
-        </label>
-      </div>
-    </aside>
-
     <div class="canvas paper" id="compare-canvas">
       <div class="paper-head compare-head">
-        <h1 contenteditable="plaintext-only"></h1>
-        <p contenteditable="plaintext-only"></p>
+        <div class="compare-head-text">
+          <h1 contenteditable="plaintext-only"></h1>
+          <p contenteditable="plaintext-only"></p>
+        </div>
+        <div class="compare-head-tools">
+          <div class="lang-switch" id="lang-switch">
+            <button data-lang="zh" class="on">中文</button>
+            <button data-lang="en">English</button>
+            <i></i>
+          </div>
+          <div class="en-status" id="en-status"></div>
+          <div class="info-wrap" id="cmp-info-wrap">
+            <button class="info-btn" id="cmp-info-btn" type="button" aria-haspopup="true" aria-label="使用说明">ⓘ</button>
+            <div class="info-panel" id="cmp-info-panel" hidden>
+              <p class="rail-hint">中文和英文各存一份。改了中文，对应的英文会被标成待更新；英文空着的地方会高亮提示。</p>
+              <p class="rail-hint">点品牌表头那一列可以把它设为「我方品牌」，该列会被高亮描边方便一眼锁定自己。</p>
+              <p class="rail-hint">高亮含义：<b>蓝色</b> 我方优势 · <b>红色</b> 我方劣势 · 灰色中性。点单元格里的圆点循环切换。</p>
+              <p class="rail-hint">产品图会自动裁成 1:1 正方形，鼠标滑过放大，移开还原。</p>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="compare-scroll">
         <div class="compare" id="compare"></div>
@@ -157,53 +135,36 @@
 
   <!-- ══════════════ 视图三：评论风向标 ══════════════ -->
   <section class="view view-rv" id="view-reviews" data-view="reviews" data-theme-ready="true" hidden>
-    <aside class="rail rail--glass">
-      <div class="rail--glass-aurora"><i></i><i></i></div>
-      <div class="rail-head">
-        <span>数据源</span>
-        <button class="rail-toggle" title="收起工作台" aria-label="收起工作台"></button>
-      </div>
-      <div class="rail-body">
-        <div id="rv-rail-compare">
-          <div class="rail-sec">导入评论</div>
-          <p class="rail-hint">填品牌名，选一份淘宝评论导出的 .xlsx。重复评论会自动跳过，只追加新的。</p>
-          <input type="text" id="rv-brand-name" placeholder="品牌 + 型号，如 352 Z90" spellcheck="false">
-          <div class="rv-drop" id="rv-drop">
-            <button class="solid" id="rv-import-btn">导入 Excel</button>
-            <span>或把文件拖到这里</span>
-          </div>
-
-          <div class="rail-sec">品牌</div>
-          <p class="rail-hint">点品牌名可以只看它的关键词。</p>
-          <div id="rv-brands"></div>
-        </div>
-
-        <div id="rv-rail-product" hidden>
-          <div class="rail-sec">选择 / 新建产品</div>
-          <p class="rail-hint">IQAir 自己的产品，各自独立清洗分析；数据同时会自动汇总进「IQAir」这个品牌的整体统计里。</p>
-          <div id="rv-products"></div>
-          <input type="text" id="rv-product-new-name" placeholder="新产品名称，如 GC-Multi" spellcheck="false">
-          <button class="ghost wide" id="rv-product-new-btn">新建产品</button>
-
-          <div class="rail-sec">导入这个产品的评论</div>
-          <p class="rail-hint" id="rv-product-import-hint">先在上面选一个产品。</p>
-          <div class="rv-drop" id="rv-product-drop">
-            <button class="solid" id="rv-product-import-btn" disabled>导入 Excel</button>
-            <span>或把文件拖到这里</span>
-          </div>
-        </div>
-      </div>
-    </aside>
-
     <div class="canvas rv-canvas">
       <div class="rv-head rpt-head">
         <div>
           <h1>评论风向标</h1>
           <p>Voice of Customer · 竞品口碑拆解</p>
         </div>
-        <div class="rpt-page-switch" id="rv-subview-switch">
-          <button class="on" data-sub="compare">竞品对比</button>
-          <button data-sub="product">本品分析</button>
+        <div class="rv-head-tools">
+          <div class="rv-head-import" id="rv-import-compare">
+            <input type="text" id="rv-brand-name" placeholder="品牌 + 型号，如 352 Z90" spellcheck="false">
+            <button class="solid" id="rv-import-btn">导入 Excel</button>
+          </div>
+          <div class="rv-head-import" id="rv-import-product" hidden>
+            <select id="rv-product-select"><option value="">选择产品…</option></select>
+            <input type="text" id="rv-product-new-name" placeholder="新产品名称" spellcheck="false">
+            <button class="ghost" id="rv-product-new-btn">+ 新建</button>
+            <button class="solid" id="rv-product-import-btn" disabled>导入 Excel</button>
+            <span id="rv-product-del-slot"></span>
+          </div>
+          <div class="info-wrap" id="rv-info-wrap">
+            <button class="info-btn" id="rv-info-btn" type="button" aria-haspopup="true" aria-label="使用说明">ⓘ</button>
+            <div class="info-panel" id="rv-info-panel" hidden>
+              <p class="rail-hint">填品牌名，选一份淘宝评论导出的 .xlsx 导入；重复评论会自动跳过，只追加新的。也可以直接把文件拖进下方看板区域。</p>
+              <p class="rail-hint">「品牌 × 维度」热力图里点品牌名，或者「品牌声量」条形图点一条，都能只看这一家的关键词和维度详情；再点一次取消。</p>
+              <p class="rail-hint">「本品分析」是给 IQAir 自己的产品做独立深度分析，数据同时会自动汇总进「IQAir」这个品牌的整体统计里。</p>
+            </div>
+          </div>
+          <div class="rpt-page-switch" id="rv-subview-switch">
+            <button class="on" data-sub="compare">竞品对比</button>
+            <button data-sub="product">本品分析</button>
+          </div>
         </div>
       </div>
       <div class="rv-scroll">
@@ -214,33 +175,6 @@
 
   <!-- ══════════════ 视图四：竞品3D预览 ══════════════ -->
   <section class="view" id="view-preview3d" data-view="preview3d" data-theme-ready="true" hidden>
-    <aside class="rail rail--glass">
-      <div class="rail--glass-aurora"><i></i><i></i></div>
-      <div class="rail-head">
-        <span>数据源</span>
-        <button class="rail-toggle" title="收起工作台" aria-label="收起工作台"></button>
-      </div>
-      <div class="rail-body">
-        <div class="rail-sec">导入 / 更新表格</div>
-        <p class="rail-hint">表头必须含：品牌、型号、商品ID、价格、颗粒物CADR、甲醛CADR、商品链接；可以再加两列可选的「5-6月销售额」「5-6月销量」，用来在图上切换气泡口径。每次导入用整份表格覆盖当前数据。</p>
-        <div class="rv-drop" id="p3d-drop">
-          <button class="solid" id="p3d-import-btn">导入 / 更新 Excel</button>
-          <span>或把文件拖到这里</span>
-        </div>
-
-        <div class="rail-sec">怎么看这张图</div>
-        <p class="rail-hint" id="p3d-sizehint">纵轴（竖直方向）是价格，水平面两个方向分别是颗粒物CADR、甲醛CADR；气泡越大，5-6月销量越高。滚轮缩放，点气泡跳转商品页，拖动可临时接管视角。</p>
-        <p class="rail-hint">气泡上方是品牌名和型号，视角旋转时相近的点可能会互相遮挡，鼠标停留看具体产品更准确。</p>
-
-        <div class="rail-sec">
-          品牌
-          <button class="ghost" id="p3d-show-all" style="float:right;padding:2px 8px;font-size:11px;">全部显示</button>
-        </div>
-        <p class="rail-hint">点品牌名可以单独隐藏它，方便对比看剩下的几家。</p>
-        <div id="p3d-brands"></div>
-      </div>
-    </aside>
-
     <div class="canvas p3d-canvas">
       <div class="rv-head rpt-head">
         <div>
@@ -248,6 +182,16 @@
           <p id="p3d-subtitle">价格（纵轴）× 颗粒物CADR × 甲醛CADR · 三维竞品定位</p>
         </div>
         <div class="p3d-head-controls">
+          <button class="solid" id="p3d-import-btn">导入 / 更新 Excel</button>
+          <div class="menu-wrap" id="p3d-brand-wrap">
+            <button class="ghost" id="p3d-brand-btn" aria-haspopup="true">品牌 ▾</button>
+            <div class="menu p3d-brand-menu" id="p3d-brand-menu" hidden>
+              <div class="menu-group">
+                <button type="button" id="p3d-show-all">全部显示</button>
+              </div>
+              <div class="menu-group" id="p3d-brands"></div>
+            </div>
+          </div>
           <button class="ghost on" id="p3d-autorotate" title="关闭后改为手动拖拽控制视角">⟲ 自动旋转：开</button>
           <div class="rpt-page-switch" id="p3d-sizemode">
             <button data-mode="costEff">气泡＝性价比</button>
@@ -255,12 +199,20 @@
             <button class="on" data-mode="qty">气泡＝销量</button>
           </div>
           <button class="ghost" id="p3d-axis-btn" title="自定义每个轴显示哪个数据维度、显示什么文字">⚙ 坐标轴</button>
+          <div class="info-wrap" id="p3d-info-wrap">
+            <button class="info-btn" id="p3d-info-btn" type="button" aria-haspopup="true" aria-label="使用说明">ⓘ</button>
+            <div class="info-panel" id="p3d-info-panel" hidden>
+              <p class="rail-hint">表头必须含：品牌、型号、商品ID、价格、颗粒物CADR、甲醛CADR、商品链接；可以再加两列可选的「5-6月销售额」「5-6月销量」，用来在图上切换气泡口径。每次导入用整份表格覆盖当前数据。</p>
+              <p class="rail-hint" id="p3d-sizehint"></p>
+              <p class="rail-hint">气泡上方是品牌名和型号，视角旋转时相近的点可能会互相遮挡，鼠标停留看具体产品更准确。</p>
+            </div>
+          </div>
           <button class="ghost" id="p3d-fullscreen" title="全屏查看，内部元素自动放大">⛶ 全屏</button>
         </div>
       </div>
       <div class="p3d-stats" id="p3d-stats"></div>
       <div class="p3d-chart-wrap">
-        <p class="rv-empty" id="p3d-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份进来。</p>
+        <p class="rv-empty" id="p3d-empty">还没有数据。在标题栏「导入 / 更新 Excel」传一份进来。</p>
         <div class="p3d-chart" id="p3d-chart" hidden></div>
       </div>
     </div>
@@ -268,46 +220,33 @@
 
   <!-- ══════════════ 视图五：报告管理 ══════════════ -->
   <section class="view" id="view-reports" data-view="reports" data-theme-ready="true" hidden>
-    <aside class="rail rail--glass">
-      <div class="rail--glass-aurora"><i></i><i></i></div>
-      <div class="rail-head">
-        <span>报告管理</span>
-        <button class="rail-toggle" title="收起工作台" aria-label="收起工作台"></button>
-      </div>
-      <div class="rail-body">
-        <div class="lang-switch" id="rpt-switch">
-          <button data-sub="personal" class="on">个人报告</button>
-          <button data-sub="public">公共报告</button>
-          <i></i>
-        </div>
-
-        <div id="rpt-personal-rail">
-          <div class="rail-sec">导入 / 更新数据 · 第 1 页</div>
-          <p class="rail-hint">一份 Excel 里同时含「天猫旗舰店整体」和「首页」两种口径，表头需含：统计时段、浏览量（店铺）、访客数（店铺）、浏览量（首页）、访客数（首页）、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数。目前只统计 IQAir天猫旗舰店。</p>
-          <p class="rail-hint">按日期增量合并——已经有的日期用新数据覆盖，其余日期不受影响，所以每周传同一份表格、时间窗口有重叠也没关系，只会追加新内容。目前只支持 .xlsx——如果导出的是老版 .xls，先用 Excel/WPS 另存为 .xlsx 再传。</p>
-          <div class="rv-drop" id="rpt-import-drop">
-            <button class="solid" id="rpt-import-btn">导入 / 更新 Excel</button>
-            <span>或把文件拖到这里</span>
-          </div>
-
-          <div class="rail-sec">微盟数据 · 第 2 页</div>
-          <p class="rail-hint">微盟（公众号/小程序/APP）后台没有导出功能，按周手动填。可以补填任意一周，环比默认跟该周的上一个自然周对比，不用自己算涨跌；再次填同一周是编辑更新，不是重复记录。</p>
-          <button class="solid" id="rpt-weimeng-btn">记录 / 编辑某周数据</button>
-        </div>
-
-        <div id="rpt-public-rail" hidden>
-          <p class="rail-hint">公共报告还在开发中，敬请期待。</p>
-        </div>
-      </div>
-    </aside>
-
     <div class="canvas rv-canvas" id="rpt-canvas">
       <div class="rv-head rpt-head">
         <div>
           <h1>报告管理</h1>
           <p id="rpt-head-sub">周报数据看板 · 个人报告</p>
         </div>
-        <button class="ghost" id="rpt-present-btn">▶ 放映模式</button>
+        <div class="rv-head-tools">
+          <div class="lang-switch" id="rpt-switch">
+            <button data-sub="personal" class="on">个人报告</button>
+            <button data-sub="public">公共报告</button>
+            <i></i>
+          </div>
+          <div id="rpt-personal-tools" class="rv-head-import">
+            <button class="solid" id="rpt-import-btn">导入 / 更新 Excel</button>
+            <button class="solid" id="rpt-weimeng-btn">记录 / 编辑某周数据</button>
+          </div>
+          <div class="info-wrap" id="rpt-info-wrap">
+            <button class="info-btn" id="rpt-info-btn" type="button" aria-haspopup="true" aria-label="使用说明">ⓘ</button>
+            <div class="info-panel" id="rpt-info-panel" hidden>
+              <p class="rail-hint">第 1 页导入的一份 Excel 里同时含「天猫旗舰店整体」和「首页」两种口径，表头需含：统计时段、浏览量（店铺）、访客数（店铺）、浏览量（首页）、访客数（首页）、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数。目前只统计 IQAir天猫旗舰店。</p>
+              <p class="rail-hint">按日期增量合并——已经有的日期用新数据覆盖，其余日期不受影响，所以每周传同一份表格、时间窗口有重叠也没关系，只会追加新内容。目前只支持 .xlsx——如果导出的是老版 .xls，先用 Excel/WPS 另存为 .xlsx 再传。也可以直接把文件拖进下方看板区域。</p>
+              <p class="rail-hint">第 2 页微盟数据（公众号/小程序/APP）后台没有导出功能，按周手动填。可以补填任意一周，环比默认跟该周的上一个自然周对比，不用自己算涨跌；再次填同一周是编辑更新，不是重复记录。</p>
+              <p class="rail-hint">公共报告还在开发中，敬请期待。</p>
+            </div>
+          </div>
+          <button class="ghost" id="rpt-present-btn">▶ 放映模式</button>
+        </div>
       </div>
       <div class="rv-scroll" id="rpt-personal-view">
         <div class="rpt-page-switch" id="rpt-page-switch">

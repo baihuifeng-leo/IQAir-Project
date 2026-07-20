@@ -128,8 +128,8 @@ const Reviews = (() => {
     const root = A.$('#rv-board');
     if (subView === 'product') { renderProductView(root); return; }
 
-    if (!data) { root.innerHTML = '<p class="rv-empty">还没有评论数据。用左边的「导入 Excel」传第一份进来。</p>'; return; }
-    if (!data.totals.reviews) { root.innerHTML = '<p class="rv-empty">评论库是空的。左边导入一份 xlsx 试试。</p>'; return; }
+    if (!data) { root.innerHTML = '<p class="rv-empty">还没有评论数据。用标题栏的「导入 Excel」传第一份进来。</p>'; return; }
+    if (!data.totals.reviews) { root.innerHTML = '<p class="rv-empty">评论库是空的。在标题栏导入一份 xlsx 试试。</p>'; return; }
 
     root.innerHTML = '';
     root.append(statBar(), aspectOverview(), heatmap(), brandVolume(), clouds());
@@ -173,7 +173,7 @@ const Reviews = (() => {
     const note = document.createElement('p');
     note.className = 'rv-note';
     note.textContent = brand
-      ? `正在只看【${brand.name}】——点左边品牌名或再点一次可以退回全部品牌的总览。`
+      ? `正在只看【${brand.name}】——在下面「品牌 × 维度」或「品牌声量」里再点一次这个品牌可以退回全部品牌的总览。`
       : '「模板/空评」是淘宝默认好评和未填写内容，已从所有统计中排除。';
     const wrap = document.createElement('div');
     wrap.append(box, note);
@@ -286,7 +286,18 @@ const Reviews = (() => {
       row.querySelector('.rv-bar-label').textContent = b.name;
       row.querySelector('.rv-bar-total').textContent = b.total.toLocaleString();
       row.title = `${b.name}\n评论总数 ${b.total} · 有效 ${valid} · 模板/空评 ${pct(b.template, b.total)}%\n点击只看这个品牌`;
-      row.onclick = () => { activeBrand = activeBrand === b.id ? '' : b.id; render(); renderRail(); };
+      row.onclick = () => { activeBrand = activeBrand === b.id ? '' : b.id; render(); syncHeadControls(); };
+      if (A.me.admin) {
+        row.appendChild(A.mkKill('删除这个品牌的全部评论', async () => {
+          if (!confirm(`删除「${b.name}」的 ${b.total} 条评论？这个操作不可撤销。`)) return;
+          try {
+            await call('/api/reviews/brand/' + b.id, { method: 'DELETE' });
+            A.toast('已删除');
+            if (activeBrand === b.id) activeBrand = '';
+            refresh();
+          } catch (err) { A.toast(err.message, 'bad'); }
+        }));
+      }
       box.appendChild(row);
     });
 
@@ -316,7 +327,7 @@ const Reviews = (() => {
     data.brands.forEach((b, rowIdx) => {
       const name = cell(b.name, 'rv-h-brand');
       name.title = '点击只看这个品牌';
-      name.onclick = () => { activeBrand = activeBrand === b.id ? '' : b.id; render(); renderRail(); };
+      name.onclick = () => { activeBrand = activeBrand === b.id ? '' : b.id; render(); syncHeadControls(); };
       if (activeBrand === b.id) name.classList.add('on');
       grid.appendChild(name);
 
@@ -453,11 +464,11 @@ const Reviews = (() => {
     const product = (data?.products || []).find((p) => p.id === activeProduct);
 
     if (!product) {
-      root.innerHTML = '<p class="rv-empty">左边「选择 / 新建产品」新建或选一个 IQAir 产品，开始针对这一款做深度评价分析。</p>';
+      root.innerHTML = '<p class="rv-empty">在标题栏「选择产品」新建或选一个 IQAir 产品，开始针对这一款做深度评价分析。</p>';
       return;
     }
     if (!product.total) {
-      root.innerHTML = `<p class="rv-empty">「${esc(product.name)}」还没有导入评论，左边「导入这个产品的评论」传一份 xlsx 进来。</p>`;
+      root.innerHTML = `<p class="rv-empty">「${esc(product.name)}」还没有导入评论，在标题栏「导入 Excel」传一份 xlsx 进来。</p>`;
       return;
     }
 
@@ -481,39 +492,40 @@ const Reviews = (() => {
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  function renderProductRail() {
-    const list = A.$('#rv-products');
-    list.innerHTML = '';
+  /** 标题栏那个产品下拉：选项列表、导入按钮的可用状态、管理员的删除按钮，都跟着 activeProduct 走 */
+  function syncProductPicker() {
+    const sel = A.$('#rv-product-select');
     const products = data?.products || [];
-    if (!products.length) { list.innerHTML = '<p class="rail-hint">还没有产品，新建一个开始。</p>'; }
-
+    sel.innerHTML = '<option value="">选择产品…</option>';
     products.forEach((p) => {
-      const row = document.createElement('div');
-      row.className = 'rv-brow' + (activeProduct === p.id ? ' on' : '');
-      row.innerHTML = `<i></i><div><b></b><span></span></div>`;
-      row.querySelector('i').style.background = '#4ee0c1';
-      row.querySelector('b').textContent = p.name;
-      row.querySelector('span').textContent = p.total ? `${p.total} 条 · ${p.firstDate.slice(0, 7)} 起` : '还没有评论';
-      row.onclick = () => { activeProduct = activeProduct === p.id ? '' : p.id; render(); renderRail(); };
-
-      if (A.me.admin) {
-        row.appendChild(A.mkKill('删除这个产品的全部评论', async (e) => {
-          if (!confirm(`删除「${p.name}」以及它的 ${p.total} 条评论？这个操作不可撤销。`)) return;
-          try {
-            await call('/api/reviews/product/' + p.id, { method: 'DELETE' });
-            A.toast('已删除');
-            if (activeProduct === p.id) activeProduct = '';
-            refresh();
-          } catch (err) { A.toast(err.message, 'bad'); }
-        }));
-      }
-      list.appendChild(row);
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.name + (p.total ? ` · ${p.total} 条` : ' · 还没有评论');
+      sel.appendChild(o);
     });
+    sel.value = activeProduct || '';
 
-    const importBtn = A.$('#rv-product-import-btn'), importHint = A.$('#rv-product-import-hint');
     const cur = products.find((p) => p.id === activeProduct);
+    const importBtn = A.$('#rv-product-import-btn');
     importBtn.disabled = !cur;
-    importHint.textContent = cur ? `正在给「${cur.name}」导入评论。` : '先在上面选一个产品。';
+    importBtn.title = cur ? `给「${cur.name}」导入评论` : '先选一个产品';
+
+    // .kill 这个类自带只读模式全局隐藏（见 styles.css body.readonly .kill），
+    // 用它而不是自己拿 A.isEditing() 判断一次——不然编辑态切换时这颗按钮的
+    // 显隐会跟不上（reviews 视图切编辑态不会整体重渲染）。
+    const slot = A.$('#rv-product-del-slot');
+    slot.innerHTML = '';
+    if (cur && A.me.admin) {
+      slot.appendChild(A.mkKill('删除这个产品的全部评论', async () => {
+        if (!confirm(`删除「${cur.name}」以及它的 ${cur.total} 条评论？这个操作不可撤销。`)) return;
+        try {
+          await call('/api/reviews/product/' + cur.id, { method: 'DELETE' });
+          A.toast('已删除');
+          activeProduct = '';
+          refresh();
+        } catch (err) { A.toast(err.message, 'bad'); }
+      }));
+    }
   }
 
   async function createProduct() {
@@ -550,38 +562,11 @@ const Reviews = (() => {
     }
   }
 
-  /* ── 侧栏：导入与品牌 ───────────────────────────────── */
-  function renderRail() {
-    A.$('#rv-rail-compare').hidden = subView !== 'compare';
-    A.$('#rv-rail-product').hidden = subView !== 'product';
-    if (subView === 'product') { renderProductRail(); return; }
-
-    const list = A.$('#rv-brands');
-    list.innerHTML = '';
-    if (!data?.brands.length) { list.innerHTML = '<p class="rail-hint">还没有品牌。</p>'; return; }
-
-    data.brands.forEach((b) => {
-      const row = document.createElement('div');
-      row.className = 'rv-brow' + (activeBrand === b.id ? ' on' : '');
-      row.innerHTML = `<i></i><div><b></b><span></span></div>`;
-      row.querySelector('i').style.background = b.color;
-      row.querySelector('b').textContent = b.name;
-      row.querySelector('span').textContent = `${b.total} 条 · ${b.firstDate.slice(0, 7)} 起`;
-      row.onclick = () => { activeBrand = activeBrand === b.id ? '' : b.id; render(); renderRail(); };
-
-      if (A.me.admin) {
-        row.appendChild(A.mkKill('删除这个品牌的全部评论', async (e) => {
-          if (!confirm(`删除「${b.name}」的 ${b.total} 条评论？这个操作不可撤销。`)) return;
-          try {
-            await call('/api/reviews/brand/' + b.id, { method: 'DELETE' });
-            A.toast('已删除');
-            if (activeBrand === b.id) activeBrand = '';
-            refresh();
-          } catch (err) { A.toast(err.message, 'bad'); }
-        }));
-      }
-      list.appendChild(row);
-    });
+  /** 标题行里两套导入控件（竞品对比 / 本品分析）哪套可见，跟着 subView 走 */
+  function syncHeadControls() {
+    A.$('#rv-import-compare').hidden = subView !== 'compare';
+    A.$('#rv-import-product').hidden = subView !== 'product';
+    if (subView === 'product') syncProductPicker();
   }
 
   async function doImport(file, brandName) {
@@ -611,7 +596,7 @@ const Reviews = (() => {
       data = await call('/api/reviews/summary');
     } catch { data = null; }
     render();
-    renderRail();
+    syncHeadControls();
   }
 
   function init(api) {
@@ -627,14 +612,25 @@ const Reviews = (() => {
     };
     pick.onchange = () => { if (pick.files[0]) doImport(pick.files[0], nameInput.value); };
 
-    // 拖拽导入
-    const drop = A.$('#rv-drop');
-    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('hot'); }));
-    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove('hot')));
-    drop.addEventListener('drop', (e) => {
+    A.$('#rv-product-select').onchange = (e) => { activeProduct = e.target.value; render(); syncHeadControls(); };
+    A.$('#rv-product-new-btn').onclick = createProduct;
+    A.$('#rv-product-new-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') createProduct(); });
+
+    const productPick = A.$('#rv-product-file');
+    A.$('#rv-product-import-btn').onclick = () => { productPick.value = ''; productPick.click(); };
+    productPick.onchange = () => { if (productPick.files[0]) doImportProduct(productPick.files[0]); };
+
+    // 拖拽导入：不再有专门的拖拽框，整个看板区域都能接文件——
+    // 落在哪套逻辑（品牌 / 产品）由当前 subView 决定。
+    const scroll = A.$('.view-rv .rv-scroll');
+    ['dragenter', 'dragover'].forEach((ev) => scroll.addEventListener(ev, (e) => { e.preventDefault(); scroll.classList.add('drop-hot'); }));
+    ['dragleave', 'drop'].forEach((ev) => scroll.addEventListener(ev, () => scroll.classList.remove('drop-hot')));
+    scroll.addEventListener('drop', (e) => {
       e.preventDefault();
       const f = e.dataTransfer.files[0];
-      if (f) doImport(f, nameInput.value);
+      if (!f) return;
+      if (subView === 'product') doImportProduct(f);
+      else doImport(f, nameInput.value);
     });
 
     /* ── 本品分析 ───────────────────────────────────────── */
@@ -643,25 +639,10 @@ const Reviews = (() => {
       if (!btn || btn.dataset.sub === subView) return;
       subView = btn.dataset.sub;
       [...A.$('#rv-subview-switch').children].forEach((b) => b.classList.toggle('on', b === btn));
-      render(); renderRail();
+      render(); syncHeadControls();
     };
 
-    A.$('#rv-product-new-btn').onclick = createProduct;
-    A.$('#rv-product-new-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') createProduct(); });
-
-    const productPick = A.$('#rv-product-file');
-    A.$('#rv-product-import-btn').onclick = () => { productPick.value = ''; productPick.click(); };
-    productPick.onchange = () => { if (productPick.files[0]) doImportProduct(productPick.files[0]); };
-
-    const productDrop = A.$('#rv-product-drop');
-    ['dragenter', 'dragover'].forEach((ev) => productDrop.addEventListener(ev, (e) => { e.preventDefault(); productDrop.classList.add('hot'); }));
-    ['dragleave', 'drop'].forEach((ev) => productDrop.addEventListener(ev, () => productDrop.classList.remove('hot')));
-    productDrop.addEventListener('drop', (e) => {
-      e.preventDefault();
-      const f = e.dataTransfer.files[0];
-      if (f) doImportProduct(f);
-    });
-
+    A.wireInfoPanel('#rv-info-wrap', '#rv-info-btn', '#rv-info-panel');
     window.addEventListener('scroll', hideTip, true);
     refresh();
   }

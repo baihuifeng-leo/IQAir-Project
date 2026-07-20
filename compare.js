@@ -46,12 +46,7 @@ const Compare = (() => {
     return el;
   }
 
-  /* ── 图片：悬停出大图，不靠 CSS 放大，所以不糊 ───────── */
-  function peekOn(el, src) {
-    if (!src || C().zoom === false) return;
-    A.peek.show(el, src);
-  }
-
+  /* ── 图片：悬停出大图，不靠 CSS 放大，所以不糊；一直开着，不再需要开关 ── */
   function imgSlot(brand, kind) {
     const conf = {
       logo:    { cls: 'logo-slot', ph: '＋ LOGO',        label: 'Logo' },
@@ -120,7 +115,7 @@ const Compare = (() => {
     }
 
     // 悬停仍给一个小预览，方便快速扫一眼；要看清字就点开原图
-    el.addEventListener('mouseenter', () => { if (brand[kind] && C().zoom !== false) A.peek.show(el, brand[kind]); });
+    el.addEventListener('mouseenter', () => { if (brand[kind]) A.peek.show(el, brand[kind]); });
     el.addEventListener('mouseleave', () => A.peek.hide());
 
     paint();
@@ -130,12 +125,24 @@ const Compare = (() => {
 
   /* ── 品牌表头 ───────────────────────────────────────── */
   function brandHead(b) {
+    const isOwn = b.id === C().ownBrandId;
     const card = document.createElement('div');
-    card.className = 'cmp-brand' + (b.id === C().ownBrandId ? ' is-own' : '');
+    card.className = 'cmp-brand' + (isOwn ? ' is-own' : '');
+    card.title = isOwn ? '当前的我方品牌' : '点击设为我方品牌';
+    // 点这一列空白处（不是输入框/图片/按钮）就把它设为我方品牌，
+    // 不分是否在编辑模式——原来的下拉框也是随时可选，不受编辑态限制。
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('input, button, .slot-box')) return;
+      const c = C();
+      if (c.ownBrandId === b.id) return;
+      A.mark();
+      c.ownBrandId = b.id;
+      A.save('compare'); render();
+    });
 
     const name = document.createElement('input');
     name.className = 'bname'; name.spellcheck = false;
-    A.bindInput(name, b, 'name', () => syncOwnSelect(), 'compare');
+    A.bindInput(name, b, 'name', null, 'compare');
 
     const model = document.createElement('input');
     model.className = 'bmodel'; model.spellcheck = false; model.placeholder = '型号';
@@ -246,17 +253,34 @@ const Compare = (() => {
   function render() {
     const root = A.$('#compare');
     const c = C();
+    const editing = A.isEditing();
     root.innerHTML = '';
     root.classList.toggle('en-mode', EN());
 
     const headWrap = document.createElement('div');
-    headWrap.style.padding = '0 1px';
+    headWrap.className = 'cmp-head-wrap';
     const head = document.createElement('div');
     head.className = 'cmp-row cmp-headrow';
     head.style.gridTemplateColumns = cols();
     head.appendChild(document.createElement('div'));
     c.brands.forEach((b) => head.appendChild(brandHead(b)));
     headWrap.appendChild(head);
+    if (editing) {
+      const addBrand = document.createElement('button');
+      addBrand.type = 'button';
+      addBrand.className = 'cmp-add-brand';
+      addBrand.title = '新增品牌列';
+      addBrand.textContent = '+';
+      addBrand.onclick = () => {
+        A.mark();
+        const b = { id: A.uid('c_'), name: '新品牌', model: '型号', logo: '', image: '', image34: '' };
+        c.brands.push(b);
+        c.groups.forEach((g) => g.rows.forEach((r) => (r.cells[b.id] = emptyCell())));
+        A.save('compare'); render();
+        A.$$('.cmp-brand .bname').pop()?.select();
+      };
+      headWrap.appendChild(addBrand);
+    }
     root.appendChild(headWrap);
 
     c.groups.forEach((g) => {
@@ -294,22 +318,24 @@ const Compare = (() => {
       root.appendChild(card);
     });
 
-    syncOwnSelect();
+    if (editing) {
+      const addGroup = document.createElement('button');
+      addGroup.type = 'button';
+      addGroup.className = 'cmp-add-group';
+      addGroup.textContent = '+ 新增参数分组';
+      addGroup.onclick = () => {
+        A.mark();
+        const cells = {};
+        C().brands.forEach((b) => (cells[b.id] = emptyCell()));
+        C().groups.push({ id: A.uid('g_'), name: '新分组', name_en: '', rows: [{ id: A.uid('r_'), label: '新参数', label_en: '', cells }] });
+        A.save('compare'); render();
+        A.$$('.cmp-group-title input').pop()?.select();
+      };
+      root.appendChild(addGroup);
+    }
+
     syncLangUI();
     countStale();
-  }
-
-  function syncOwnSelect() {
-    const sel = A.$('#own-brand');
-    const c = C();
-    sel.innerHTML = '';
-    c.brands.forEach((b) => {
-      const o = document.createElement('option');
-      o.value = b.id;
-      o.textContent = b.name + (b.model ? ' · ' + b.model : '');
-      sel.appendChild(o);
-    });
-    sel.value = c.ownBrandId || '';
   }
 
   function syncLangUI() {
@@ -379,37 +405,8 @@ const Compare = (() => {
   function init(api) {
     A = api;
 
-    A.$('#own-brand').onchange = (e) => {
-      A.mark();
-      C().ownBrandId = e.target.value;   // 现取，不用闭包里的旧引用
-      A.save('compare');
-      render();
-    };
-
-    A.$('#zoom-toggle').checked = C().zoom !== false;
-    A.$('#zoom-toggle').onchange = (e) => { C().zoom = e.target.checked; A.save('compare'); };
-
     A.$$('#lang-switch button').forEach((b) => (b.onclick = () => setLang(b.dataset.lang)));
-
-    A.$('#btn-add-cbrand').onclick = () => {
-      const c = C();
-      A.mark();
-      const b = { id: A.uid('c_'), name: '新品牌', model: '型号', logo: '', image: '', image34: '' };
-      c.brands.push(b);
-      c.groups.forEach((g) => g.rows.forEach((r) => (r.cells[b.id] = emptyCell())));
-      A.save('compare'); render();
-      A.$$('.cmp-brand .bname').pop()?.select();
-    };
-
-    A.$('#btn-add-group').onclick = () => {
-      const c = C();
-      A.mark();
-      const cells = {};
-      c.brands.forEach((b) => (cells[b.id] = emptyCell()));
-      c.groups.push({ id: A.uid('g_'), name: '新分组', name_en: '', rows: [{ id: A.uid('r_'), label: '新参数', label_en: '', cells }] });
-      A.save('compare'); render();
-      A.$$('.cmp-group-title input').pop()?.select();
-    };
+    A.wireInfoPanel('#cmp-info-wrap', '#cmp-info-btn', '#cmp-info-panel');
 
     bindHeads();
   }

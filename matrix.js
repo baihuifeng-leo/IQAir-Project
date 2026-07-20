@@ -84,7 +84,12 @@ const Matrix = (() => {
     A.bindInput(price, p, 'price', null, 'matrix');
 
     [name, price].forEach((i) => {
-      i.addEventListener('mousedown', (e) => { e.stopPropagation(); el.draggable = false; });
+      i.addEventListener('mousedown', (e) => {
+        // Ctrl/Cmd 按住时哪怕点在输入框上也是想多选，不是想聚焦编辑——
+        // 放行冒泡到卡片本身的 mousedown（下面那个），别在这里截胡。
+        if (e.ctrlKey || e.metaKey) { e.preventDefault(); return; }
+        e.stopPropagation(); el.draggable = false;
+      });
       i.addEventListener('blur', () => (el.draggable = A.isEditing()));
     });
 
@@ -324,15 +329,16 @@ const Matrix = (() => {
 
     g.appendChild(Object.assign(document.createElement('div'), { className: 'mx-corner' }));
 
-    m.brands.forEach((b) => {
+    m.brands.forEach((b, bIdx) => {
+      const locked = bIdx === 0;
       const h = document.createElement('div');
-      h.className = 'mx-brand';
+      h.className = 'mx-brand' + (locked ? ' locked' : '');
       h.dataset.id = b.id;
-      h.draggable = editing;
+      h.draggable = editing && !locked;
 
       const handle = document.createElement('span');
       handle.className = 'mx-brand-handle';
-      handle.title = '按住拖动调整品牌顺序';
+      handle.title = locked ? '首列锁定，不参与拖拽排序' : '按住拖动调整品牌顺序';
 
       const inp = document.createElement('input');
       inp.spellcheck = false;
@@ -371,7 +377,8 @@ const Matrix = (() => {
         const id = dragBrandId || e.dataTransfer.getData('text/plain');
         if (!id || id === b.id) return;
         const rect = h.getBoundingClientRect();
-        moveBrand(id, b.id, e.clientX > rect.left + rect.width / 2);
+        // 首列锁定在第一位：任何拖拽落到它上面都只能排到它后面，不能抢占第一位
+        moveBrand(id, b.id, locked || e.clientX > rect.left + rect.width / 2);
       });
 
       g.appendChild(h);
@@ -392,15 +399,16 @@ const Matrix = (() => {
       g.appendChild(addBrand);
     }
 
-    m.bands.forEach((band) => {
+    m.bands.forEach((band, pIdx) => {
+      const locked = pIdx === 0;
       const lab = document.createElement('div');
-      lab.className = 'mx-band';
+      lab.className = 'mx-band' + (locked ? ' locked' : '');
       lab.dataset.id = band.id;
-      lab.draggable = A.isEditing();
+      lab.draggable = editing && !locked;
 
       const handle = document.createElement('span');
       handle.className = 'mx-band-handle';
-      handle.title = '按住拖动调整价格带顺序';
+      handle.title = locked ? '首行锁定，不参与拖拽排序' : '按住拖动调整价格带顺序';
 
       const inp = document.createElement('input');
       inp.spellcheck = false;
@@ -439,7 +447,8 @@ const Matrix = (() => {
         const id = dragBandId || e.dataTransfer.getData('text/plain');
         if (!id || id === band.id) return;
         const rect = lab.getBoundingClientRect();
-        moveBand(id, band.id, e.clientY > rect.top + rect.height / 2);
+        // 首行锁定在第一位：任何拖拽落到它上面都只能排到它后面，不能抢占第一位
+        moveBand(id, band.id, locked || e.clientY > rect.top + rect.height / 2);
       });
 
       g.appendChild(lab);

@@ -145,9 +145,9 @@ const Preview3D = (() => {
     }
     scene.setAutoRotate(autoRotate);
     if (!ro) {
-      // 折叠/展开左侧工作台是 CSS transition（420ms）连续变宽度，容器尺寸
-      // 每一帧都在变，ResizeObserver 也就每一帧都触发一次——高频触发 WebGL
-      // resize（重建 framebuffer）会看着卡，等尺寸稳定了再调一次就够了。
+      // 窗口拖拽调整大小、进出全屏这些场景下容器尺寸会连续变化，
+      // ResizeObserver 也就跟着连续触发——高频触发 WebGL resize（重建
+      // framebuffer）会看着卡，等尺寸稳定了再调一次就够了。
       let resizeTimer = null;
       ro = new ResizeObserver(() => {
         clearTimeout(resizeTimer);
@@ -362,8 +362,8 @@ const Preview3D = (() => {
   }
   function closeAxisSheet() { if (axisSheetBox) axisSheetBox.hidden = true; }
 
-  /* ── 全屏：只对 .p3d-canvas 这个元素发起，rail 天然被排除在外，
-     不用额外写 CSS 去隐藏侧栏——这是 Fullscreen API 本身的语义 ── */
+  /* ── 全屏：只对 .p3d-canvas 这个元素发起，标题行的工具条也在它里面，
+     所以全屏时依然能用——这是 Fullscreen API 本身的语义 ── */
   function renderFullscreenBtn() {
     const btn = A.$('#p3d-fullscreen');
     if (!btn) return;
@@ -389,11 +389,17 @@ const Preview3D = (() => {
     requestAnimationFrame(() => scene && scene.resize());
   }
 
-  /* ── 侧栏：导入与品牌筛选 ─────────────────────────────── */
-  function renderRail() {
+  /* ── 标题栏「品牌」下拉菜单：筛选显示/隐藏 ───────────── */
+  function syncBrandMenu() {
     const list = A.$('#p3d-brands');
+    const btn = A.$('#p3d-brand-btn');
     list.innerHTML = '';
-    if (!data || !data.brands.length) { list.innerHTML = '<p class="rail-hint">还没有数据。</p>'; return; }
+    if (!data || !data.brands.length) {
+      list.innerHTML = '<p class="rail-hint">还没有数据。</p>';
+      btn.textContent = '品牌 ▾';
+      return;
+    }
+    btn.textContent = hidden.size ? `品牌 (${data.brands.length - hidden.size}/${data.brands.length}) ▾` : '品牌 ▾';
 
     data.brands.forEach((b) => {
       const row = document.createElement('div');
@@ -405,10 +411,16 @@ const Preview3D = (() => {
       row.title = hidden.has(b.name) ? '点击显示这个品牌' : '点击隐藏这个品牌';
       row.onclick = () => {
         if (hidden.has(b.name)) hidden.delete(b.name); else hidden.add(b.name);
-        render(); renderRail();
+        render(); syncBrandMenu();
       };
       list.appendChild(row);
     });
+  }
+
+  function wireBrandMenu() {
+    const wrap = A.$('#p3d-brand-wrap'), btn = A.$('#p3d-brand-btn'), menu = A.$('#p3d-brand-menu');
+    btn.onclick = (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; };
+    document.addEventListener('click', (e) => { if (!menu.hidden && !wrap.contains(e.target)) menu.hidden = true; });
   }
 
   async function doImport(file) {
@@ -435,7 +447,7 @@ const Preview3D = (() => {
     try { data = await call('/api/products3d/summary'); }
     catch { data = null; }
     render();
-    renderRail();
+    syncBrandMenu();
   }
 
   /** 切到这个 tab 时才第一次真正渲染——之前是 hidden，容器宽高是 0，画布会算错尺寸 */
@@ -460,16 +472,20 @@ const Preview3D = (() => {
     A.$('#p3d-import-btn').onclick = () => { pick.value = ''; pick.click(); };
     pick.onchange = () => { if (pick.files[0]) doImport(pick.files[0]); };
 
-    const drop = A.$('#p3d-drop');
-    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('hot'); }));
-    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove('hot')));
-    drop.addEventListener('drop', (e) => {
+    // 拖拽导入：没有专门的拖拽框了，直接把文件拖进整块图表区域即可
+    const dropZone = A.$('.p3d-chart-wrap');
+    ['dragenter', 'dragover'].forEach((ev) => dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.add('drop-hot'); }));
+    ['dragleave', 'drop'].forEach((ev) => dropZone.addEventListener(ev, () => dropZone.classList.remove('drop-hot')));
+    dropZone.addEventListener('drop', (e) => {
       e.preventDefault();
       const f = e.dataTransfer.files[0];
       if (f) doImport(f);
     });
 
-    A.$('#p3d-show-all').onclick = () => { hidden.clear(); render(); renderRail(); };
+    wireBrandMenu();
+    A.$('#p3d-show-all').onclick = () => { hidden.clear(); render(); syncBrandMenu(); };
+
+    A.wireInfoPanel('#p3d-info-wrap', '#p3d-info-btn', '#p3d-info-panel');
 
     A.$('#p3d-sizemode').onclick = (e) => {
       const btn = e.target.closest('button[data-mode]');
