@@ -686,7 +686,7 @@ select#own-brand {
 .legend .tag-row input[type="color"] { flex: 0 0 20px; width: 20px; height: 20px; }
 .legend .tag-row .richwrap { flex: 0 1 auto; }
 .legend .tag-row .rich {
-  min-height: auto; min-width: 32px; max-width: 220px; background: none; border: none;
+  min-height: auto; min-width: 32px; max-width: none; white-space: nowrap; background: none; border: none;
   padding: 2px 4px; font-size: 12.5px; color: var(--ink);
 }
 .legend .tag-row .rich:focus { border: none; outline: 1px solid var(--mint); border-radius: 4px; }
@@ -1191,12 +1191,17 @@ body.readonly .richbar,
 body.readonly .slot-acts,
 body.readonly .batchbar,
 body.readonly .legend-add,
-body.readonly .mx-add-brand,
-body.readonly .mx-add-band,
 body.readonly .mx-band-handle,
 body.readonly #btn-add-cbrand,
 body.readonly #btn-add-group,
 body.readonly .rail-sec.edit-only { display: none !important; }
+
+/* .mx-add-brand / .mx-add-band 是 #matrix 网格的直接子项（占着自己的列/整行）。
+   display:none 会把它们整个从网格布局里摘掉，auto-flow 会拿后面那个本该排在下一行第一列的
+   价格带标签去回填这个空出来的格子，导致整行错位——所以这两个用 visibility:hidden，
+   照样占位但不可见、不可交互。 */
+body.readonly .mx-add-brand,
+body.readonly .mx-add-band { visibility: hidden !important; }
 /* .sheet-head .kill 是弹层的关闭按钮，不是价格带/对位表的编辑态删除按钮，
    只读模式下也要能关掉弹层，所以要从上面这条全局隐藏规则里排除出去 */
 body.readonly .sheet-head .kill { display: grid !important; }
