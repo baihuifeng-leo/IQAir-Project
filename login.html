@@ -5,21 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>登录 · 电商工作台</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a0e17'/><path d='M6 20h7M6 14h13M6 26h4' stroke='%234ee0c1' stroke-width='2.6' stroke-linecap='round'/><circle cx='24' cy='11' r='3' fill='%235b8cff'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a0e17'/><path d='M6 20h7M6 14h13M6 26h4' stroke='%23A6C8FF' stroke-width='2.6' stroke-linecap='round'/><circle cx='24' cy='11' r='3' fill='%235227FF'/></svg>">
 <link rel="stylesheet" href="/styles.css">
 <style>
   /* 全局样式表把 html/body 锁成 overflow:hidden（内页需要），登录页要放开 */
   html { height: auto; min-height: 100%; }
+
+  /* 登录页局部覆盖：口令面板配色跟随 Lightfall 背景（蓝紫粉）走，仅作用于本页 */
+  :root {
+    --mint: #A6C8FF;
+    --mint-dim: rgba(166, 200, 255, 0.18);
+  }
+
   body {
     overflow: hidden; position: relative; height: 100vh; min-height: 100vh;
     background:
-      radial-gradient(65% 80% at 24% 46%, #146070 0%, #0c4351 26%, #072e3c 45%, #051c28 65%, #030f18 85%, #030710 100%);
+      radial-gradient(65% 80% at 24% 46%, #2a1470 0%, #1c0f5c 26%, #130a42 45%, #0a0730 65%, #050320 85%, #02010a 100%);
   }
 
   #wave-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
   .vignette {
     position: fixed; inset: 0; z-index: 1; pointer-events: none;
-    background: radial-gradient(120% 100% at 50% 50%, transparent 45%, #030710b0 100%);
+    background: radial-gradient(120% 100% at 50% 50%, transparent 45%, #050318b0 100%);
   }
 
   /* ── 左上角品牌徽标 ── */
@@ -39,13 +46,13 @@
 
   .hero-h { margin: 0 0 22px; animation: rise 0.55s var(--ease) both; }
   .hero-h h1 { margin: 0; font-family: var(--f-display); line-height: 1.16; }
-  .hero-h .l1 { display: block; font-size: clamp(24px, 2.7vw, 32px); font-weight: 700; color: #fbfffe; text-shadow: 0 0 30px #4ee0c130; }
-  .hero-h .l2 { display: block; margin-top: 4px; font-size: clamp(15px, 1.5vw, 18px); font-weight: 500; letter-spacing: 1px; color: #9fb0c2; }
+  .hero-h .l1 { display: block; font-size: clamp(24px, 2.7vw, 32px); font-weight: 700; color: #fbfaff; text-shadow: 0 0 30px #a683ff40; }
+  .hero-h .l2 { display: block; margin-top: 4px; font-size: clamp(15px, 1.5vw, 18px); font-weight: 500; letter-spacing: 1px; color: #b9b8d6; }
 
   .gate-wrap { perspective: 1000px; animation: rise 0.6s var(--ease) both; }
   .gate {
-    background: linear-gradient(165deg, #163444 0%, #0d2836 60%, rgba(11,28,38,0.42) 100%);
-    background-color: rgba(16, 40, 52, 0.32);
+    background: linear-gradient(165deg, #241a5c 0%, #150f42 60%, rgba(18,12,50,0.42) 100%);
+    background-color: rgba(28, 18, 70, 0.32);
     backdrop-filter: blur(20px) saturate(160%);
     -webkit-backdrop-filter: blur(20px) saturate(160%);
     border: 1px solid rgba(255,255,255,0.14);
@@ -57,13 +64,13 @@
     transform-style: preserve-3d; will-change: transform;
   }
   .field { margin-bottom: 15px; }
-  .field label { display: block; font-size: 12.5px; color: #cfd8e4; margin-bottom: 7px; }
+  .field label { display: block; font-size: 12.5px; color: #d6d3ec; margin-bottom: 7px; }
   .field input {
     width: 100%; background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.22); color: #fff;
     padding: 10px 13px; border-radius: 8px; transition: border-color var(--fast), box-shadow var(--fast), background var(--fast);
   }
-  .field input::placeholder { color: #8fa0b3; }
-  .field input:focus { outline: none; background: rgba(255,255,255,0.08); border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-dim), 0 0 20px -4px #4ee0c188; }
+  .field input::placeholder { color: #9c9bc0; }
+  .field input:focus { outline: none; background: rgba(255,255,255,0.08); border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-dim), 0 0 20px -4px #7c5fff88; }
   #p { font-family: var(--f-mono); letter-spacing: 8px; font-size: 16px; }
   #p::placeholder { letter-spacing: 6px; }
 
@@ -228,137 +235,279 @@
     });
   })();
 
-  // ── 全屏背景：光丝编织波纹 + 电路方框装饰 + 粒子 ──
+  // ── 全屏背景：Lightfall 光丝坠落（原生 WebGL 实现，无第三方依赖，替代原光丝波纹效果）──
   (function () {
     const canvas = $('#wave-canvas');
-    const ctx = canvas.getContext('2d');
-    let w, h, dpr, strands, sparks, boxes;
+    const gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: false })
+      || canvas.getContext('experimental-webgl', { alpha: true, antialias: true, premultipliedAlpha: false });
+    if (!gl) return; // 不支持 WebGL 时，退回 body 上的 CSS 渐变背景
+
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const mouseEnabled = window.matchMedia('(pointer: fine)').matches;
 
-    const MINT = '110,235,220';
-    const CYAN = '90,210,235';
-    const BLUE = '120,170,255';
-    const COLORS = [MINT, CYAN, MINT, BLUE, CYAN, MINT, CYAN];
+    const CONFIG = {
+      colors: ['#A6C8FF', '#5227FF', '#FF9FFC'],
+      backgroundColor: '#0A29FF',
+      speed: 0.5,
+      streakCount: 2,
+      streakWidth: 1,
+      streakLength: 1,
+      glow: 1,
+      density: 0.6,
+      twinkle: 1,
+      zoom: 3,
+      backgroundGlow: 0.5,
+      opacity: 1,
+      mouseStrength: 0.5,
+      mouseRadius: 1,
+      mouseDampening: 0.15,
+    };
 
+    const vertexSrc = `
+attribute vec2 position;
+attribute vec2 uv;
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position, 0.0, 1.0);
+}
+`;
+
+    const fragmentSrc = `
+precision highp float;
+
+uniform vec3  iResolution;
+uniform vec2  iMouse;
+uniform float iTime;
+
+uniform vec3  uColor0;
+uniform vec3  uColor1;
+uniform vec3  uColor2;
+uniform vec3  uColor3;
+uniform vec3  uColor4;
+uniform vec3  uColor5;
+uniform vec3  uColor6;
+uniform vec3  uColor7;
+uniform int   uColorCount;
+
+uniform vec3  uBgColor;
+uniform vec3  uMouseColor;
+uniform float uSpeed;
+uniform int   uStreakCount;
+uniform float uStreakWidth;
+uniform float uStreakLength;
+uniform float uGlow;
+uniform float uDensity;
+uniform float uTwinkle;
+uniform float uZoom;
+uniform float uBgGlow;
+uniform float uOpacity;
+uniform float uMouseEnabled;
+uniform float uMouseStrength;
+uniform float uMouseRadius;
+
+varying vec2 vUv;
+
+vec3 palette(float h) {
+  int count = uColorCount;
+  if (count < 1) count = 1;
+  int idx = int(floor(clamp(h, 0.0, 0.999999) * float(count)));
+  if (idx <= 0) return uColor0;
+  if (idx == 1) return uColor1;
+  if (idx == 2) return uColor2;
+  if (idx == 3) return uColor3;
+  if (idx == 4) return uColor4;
+  if (idx == 5) return uColor5;
+  if (idx == 6) return uColor6;
+  return uColor7;
+}
+
+vec3 tanhv(vec3 x) {
+  vec3 e = exp(-2.0 * x);
+  return (1.0 - e) / (1.0 + e);
+}
+
+vec2 sceneC(vec2 frag, vec2 r) {
+  vec2 P = (frag + frag - r) / r.x;
+  float z = 0.0;
+  float d = 1e3;
+  vec4 O = vec4(0.0);
+  for (int k = 0; k < 39; k++) {
+    if (d <= 1e-4) break;
+    O = z * normalize(vec4(P, uZoom, 0.0)) - vec4(0.0, 4.0, 1.0, 0.0) / 4.5;
+    d = 1.0 - sqrt(length(O * O));
+    z += d;
+  }
+  return vec2(O.x, atan(O.z, O.y));
+}
+
+void mainImage(out vec4 o, vec2 C) {
+  vec2 r = iResolution.xy;
+  vec2 uv0 = (C + C - r) / r.x;
+  float T = 0.1 * iTime * uSpeed + 9.0;
+  float angRings = max(1.0, floor(6.28318530718 * max(uDensity, 0.05) + 0.5));
+  vec2 Y = vec2(5e-3, 6.28318530718 / angRings);
+
+  vec2 c0 = sceneC(C, r);
+  vec2 cdx = sceneC(C + vec2(1.0, 0.0), r);
+  vec2 cdy = sceneC(C + vec2(0.0, 1.0), r);
+  vec2 dCx = cdx - c0;
+  vec2 dCy = cdy - c0;
+  dCx.y -= 6.28318530718 * floor(dCx.y / 6.28318530718 + 0.5);
+  dCy.y -= 6.28318530718 * floor(dCy.y / 6.28318530718 + 0.5);
+  vec2 fw = abs(dCx) + abs(dCy);
+  C = c0;
+
+  vec2 P = vec2(2.0, 1.0) * uv0 - (r / r.x) * vec2(0.0, 1.0);
+  vec4 O = vec4(uBgColor * 90.0 * uBgGlow / (1e3 * dot(P, P) + 6.0), 0.0);
+
+  float mGlow = 0.0;
+  if (uMouseEnabled > 0.5) {
+    vec2 mN = (iMouse + iMouse - r) / r.x;
+    float md = length(uv0 - mN);
+    mGlow = exp(-md * md / max(uMouseRadius * uMouseRadius, 1e-4)) * uMouseStrength;
+    O.rgb += uMouseColor * mGlow * 0.25;
+  }
+
+  float zr = 5e-4 * uStreakWidth;
+  vec2 rr = vec2(max(length(fw), 1e-5));
+  float tail = 19.0 / max(uStreakLength, 0.05);
+
+  for (int m = 0; m < 16; m++) {
+    if (m >= uStreakCount) break;
+    float jf = float(m) + 1.0;
+    float ic = fract(sin(dot(vec2(jf, floor(C.x / Y.x + 0.5)), vec2(7.0, 11.0)) * 73.0));
+    vec2 Pp = C - (T + T * ic) * vec2(0.0, 1.0);
+    Pp -= floor(Pp / Y + 0.5) * Y;
+    float h = fract(8663.0 * ic);
+    vec3 col = palette(h);
+    float weight = mix(1.5, 1.0 + sin(T + 7.0 * h + 4.0), uTwinkle);
+    weight *= (1.0 + mGlow * 2.0);
+    vec2 inner = vec2(length(max(Pp, vec2(-1.0, 0.0))), length(Pp) - zr) - zr;
+    vec2 sm = vec2(1.0) - smoothstep(-rr, rr, inner);
+    O.rgb += dot(sm, vec2(exp(tail * Pp.y), 3.0)) * col * weight;
+    C.x += Y.x / 8.0;
+  }
+
+  vec3 colr = sqrt(tanhv(max(O.rgb * uGlow - vec3(0.04, 0.08, 0.02), 0.0)));
+  o = vec4(colr, uOpacity);
+}
+
+void main() {
+  vec4 color;
+  mainImage(color, vUv * iResolution.xy);
+  gl_FragColor = color;
+}
+`;
+
+    function compile(type, src) {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(sh));
+      return sh;
+    }
+    const program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSrc));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSrc));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { console.error(gl.getProgramInfoLog(program)); return; }
+    gl.useProgram(program);
+
+    const posBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const posLoc = gl.getAttribLocation(program, 'position');
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+    const uvBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 2, 0, 0, 2]), gl.STATIC_DRAW);
+    const uvLoc = gl.getAttribLocation(program, 'uv');
+    gl.enableVertexAttribArray(uvLoc);
+    gl.vertexAttribPointer(uvLoc, 2, gl.FLOAT, false, 0, 0);
+
+    const hexToRGB = hex => {
+      const c = hex.replace('#', '').padEnd(6, '0');
+      return [parseInt(c.slice(0, 2), 16) / 255, parseInt(c.slice(2, 4), 16) / 255, parseInt(c.slice(4, 6), 16) / 255];
+    };
+    const MAX_COLORS = 8;
+    const baseColors = CONFIG.colors.slice(0, MAX_COLORS);
+    const colorCount = baseColors.length;
+    const colorArr = Array.from({ length: MAX_COLORS }, (_, i) => hexToRGB(baseColors[Math.min(i, colorCount - 1)]));
+    const avgColor = colorArr.slice(0, colorCount).reduce(
+      (a, c) => [a[0] + c[0] / colorCount, a[1] + c[1] / colorCount, a[2] + c[2] / colorCount], [0, 0, 0]
+    );
+
+    const U = {};
+    [
+      'iResolution', 'iMouse', 'iTime', 'uColor0', 'uColor1', 'uColor2', 'uColor3', 'uColor4', 'uColor5', 'uColor6', 'uColor7',
+      'uColorCount', 'uBgColor', 'uMouseColor', 'uSpeed', 'uStreakCount', 'uStreakWidth', 'uStreakLength', 'uGlow', 'uDensity',
+      'uTwinkle', 'uZoom', 'uBgGlow', 'uOpacity', 'uMouseEnabled', 'uMouseStrength', 'uMouseRadius'
+    ].forEach(name => { U[name] = gl.getUniformLocation(program, name); });
+
+    colorArr.forEach((c, i) => gl.uniform3fv(U['uColor' + i], c));
+    gl.uniform1i(U.uColorCount, colorCount);
+    gl.uniform3fv(U.uBgColor, hexToRGB(CONFIG.backgroundColor));
+    gl.uniform3fv(U.uMouseColor, avgColor);
+    gl.uniform1f(U.uSpeed, CONFIG.speed);
+    gl.uniform1i(U.uStreakCount, Math.max(1, Math.min(16, Math.round(CONFIG.streakCount))));
+    gl.uniform1f(U.uStreakWidth, CONFIG.streakWidth);
+    gl.uniform1f(U.uStreakLength, CONFIG.streakLength);
+    gl.uniform1f(U.uGlow, CONFIG.glow);
+    gl.uniform1f(U.uDensity, CONFIG.density);
+    gl.uniform1f(U.uTwinkle, CONFIG.twinkle);
+    gl.uniform1f(U.uZoom, CONFIG.zoom);
+    gl.uniform1f(U.uBgGlow, CONFIG.backgroundGlow);
+    gl.uniform1f(U.uOpacity, CONFIG.opacity);
+    gl.uniform1f(U.uMouseEnabled, mouseEnabled ? 1 : 0);
+    gl.uniform1f(U.uMouseStrength, CONFIG.mouseStrength);
+    gl.uniform1f(U.uMouseRadius, CONFIG.mouseRadius);
+
+    let dpr;
     function resize() {
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = window.innerWidth; h = window.innerHeight;
-      canvas.width = w * dpr; canvas.height = h * dpr;
-      canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      strands = COLORS.map((color, i) => ({
-        color,
-        baseY: h * (0.14 + (i / COLORS.length) * 0.62),
-        amp: h * (0.07 + Math.random() * 0.08),
-        amp2: h * (0.03 + Math.random() * 0.035),
-        freq: 2.2 + Math.random() * 1.3,
-        freq2: 4.5 + Math.random() * 2.5,
-        speed: 0.12 + Math.random() * 0.1,
-        phase: Math.random() * Math.PI * 2,
-        width: 1.3 + Math.random() * 1.8,
-      }));
-
-      const count = Math.round(Math.min(140, Math.max(70, (w * h) / 13000)));
-      sparks = Array.from({ length: count }, () => ({
-        u: Math.random(),               // 沿 x 方向的相对位置 0..1
-        strandIdx: Math.floor(Math.random() * strands.length),
-        off: (Math.random() - 0.5) * 10,
-        z: Math.random(),
-        vx: 0.05 + Math.random() * 0.09,
-        phase: Math.random() * Math.PI * 2,
-        size: 0.8 + Math.random() * 2.2,
-      }));
-
-      boxes = Array.from({ length: 5 }, () => ({
-        x: w * (0.02 + Math.random() * 0.22),
-        y: h * (0.55 + Math.random() * 0.35),
-        size: 30 + Math.random() * 70,
-        rot: (Math.random() - 0.5) * 0.5,
-        alpha: 0.05 + Math.random() * 0.08,
-      }));
+      dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const w = window.innerWidth, h = window.innerHeight;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.uniform3f(U.iResolution, canvas.width, canvas.height, 1);
     }
-
-    // 淡出包络：左 60% 明亮，右侧逐渐减弱（贴近卡片处几乎消失，卡片外沿又微微透出）
-    function envelope(xNorm) {
-      if (xNorm < 0.58) return 1;
-      const t = (xNorm - 0.58) / 0.42;
-      return Math.max(0.08, 1 - t * 0.85);
-    }
-
-    function strandY(s, x, t) {
-      return s.baseY
-        + Math.sin(x / (w / s.freq) + t * s.speed + s.phase) * s.amp
-        + Math.sin(x / (w / s.freq2) - t * s.speed * 0.7) * s.amp2;
-    }
-
-    function drawStrands(t) {
-      for (const s of strands) {
-        ctx.beginPath();
-        for (let x = 0; x <= w; x += 7) {
-          const y = strandY(s, x, t);
-          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        const grad = ctx.createLinearGradient(0, 0, w, 0);
-        const a = 0.8;
-        grad.addColorStop(0, `rgba(${s.color},${a * envelope(0)})`);
-        grad.addColorStop(0.58, `rgba(${s.color},${a * envelope(0.58)})`);
-        grad.addColorStop(1, `rgba(${s.color},${a * envelope(1)})`);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = s.width;
-        ctx.shadowColor = `rgba(${s.color},1)`;
-        ctx.shadowBlur = 16;
-        ctx.stroke();
-      }
-      ctx.shadowBlur = 0;
-    }
-
-    function drawBoxes() {
-      for (const b of boxes) {
-        ctx.save();
-        ctx.translate(b.x, b.y);
-        ctx.rotate(b.rot);
-        ctx.strokeStyle = `rgba(150,210,220,${b.alpha})`;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(-b.size / 2, -b.size / 2, b.size, b.size);
-        ctx.restore();
-      }
-    }
-
-    function drawSparks(t) {
-      for (const p of sparks) {
-        p.u += p.vx * 0.0016 * (0.4 + p.z);
-        if (p.u > 1) p.u -= 1;
-        const x = p.u * w;
-        const s = strands[p.strandIdx];
-        const y = strandY(s, x, t) + p.off;
-        const env = envelope(p.u);
-        const twinkle = 0.5 + 0.5 * Math.sin(t * 2.6 + p.phase);
-        const alpha = (0.3 + p.z * 0.5) * twinkle * env;
-        if (alpha <= 0.02) continue;
-        ctx.beginPath();
-        ctx.arc(x, y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${p.z > 0.6 ? MINT : CYAN},${alpha})`;
-        ctx.shadowColor = `rgba(${MINT},0.9)`;
-        ctx.shadowBlur = 6;
-        ctx.fill();
-      }
-      ctx.shadowBlur = 0;
-    }
-
-    let t = 0;
-    function step() {
-      ctx.clearRect(0, 0, w, h);
-      drawBoxes();
-      drawStrands(t);
-      drawSparks(t);
-      t += 0.012;
-      if (!reduceMotion) requestAnimationFrame(step);
-    }
-
     resize();
     window.addEventListener('resize', resize);
-    if (reduceMotion) { drawBoxes(); drawStrands(0); drawSparks(0); } else { step(); }
+
+    const mouseTarget = [0, 0];
+    const mouseCur = [0, 0];
+    if (mouseEnabled) {
+      window.addEventListener('pointermove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        mouseTarget[0] = (e.clientX - rect.left) * dpr;
+        mouseTarget[1] = (rect.height - (e.clientY - rect.top)) * dpr;
+      });
+    }
+
+    let lastT = 0;
+    function frame(t) {
+      requestAnimationFrame(frame);
+      const dt = lastT ? (t - lastT) / 1000 : 0;
+      lastT = t;
+      const factor = Math.min(1, 1 - Math.exp(-dt / Math.max(1e-4, CONFIG.mouseDampening)));
+      mouseCur[0] += (mouseTarget[0] - mouseCur[0]) * factor;
+      mouseCur[1] += (mouseTarget[1] - mouseCur[1]) * factor;
+      gl.uniform2f(U.iMouse, mouseCur[0], mouseCur[1]);
+      gl.uniform1f(U.iTime, t * 0.001);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    if (reduceMotion) {
+      gl.uniform2f(U.iMouse, 0, 0);
+      gl.uniform1f(U.iTime, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    } else {
+      requestAnimationFrame(frame);
+    }
   })();
 </script>
 </body>
