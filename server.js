@@ -100,8 +100,28 @@ async function loadUsers() {
   }
 }
 const saveUsers = () => writeAtomic(USERS_FILE, JSON.stringify(users, null, 1));
-const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [], theme: u.theme === 'light' ? 'light' : 'dark' });
+const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [], theme: u.theme === 'light' ? 'light' : 'dark', p3dAxis: u.p3dAxis || null });
 const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports'];
+const P3D_DIMS = ['pmCadr', 'hchoCadr', 'price'];
+/** 坐标轴设置合法性：x/y/z 三个轴必须凑齐 P3D_DIMS 这三个维度、不重不漏；
+ *  文字可以留白（留白代表用回默认文案，前端 preview3d.js 里处理），
+ *  给了就必须是字符串、且不能长到把轴名标签撑爆。 */
+function validP3dAxis(v) {
+  if (!v || typeof v !== 'object') return false;
+  const map = v.map;
+  if (!map || typeof map !== 'object') return false;
+  const vals = ['x', 'y', 'z'].map((k) => map[k]);
+  if (vals.some((d) => !P3D_DIMS.includes(d))) return false;
+  if (new Set(vals).size !== 3) return false;
+  if (v.labels !== undefined) {
+    if (typeof v.labels !== 'object' || v.labels === null) return false;
+    for (const k of Object.keys(v.labels)) {
+      if (!P3D_DIMS.includes(k)) return false;
+      if (typeof v.labels[k] !== 'string' || v.labels[k].length > 20) return false;
+    }
+  }
+  return true;
+}
 
 /* ═══ 文档：每份独立 rev，冲突走三方合并 ═════════════════ */
 /* ═══ 变更日志：JSONL 追加写，超过 8MB 轮转一次 ═════════ */
@@ -366,7 +386,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'PATCH') {
         const isSelf = u.id === me.id;
         if (!isSelf && !me.admin) return json(res, 403, { error: '只能改自己的 PIN' });
-        const { pin, name, admin, hiddenModules, theme } = await body(req, 4096);
+        const { pin, name, admin, hiddenModules, theme, p3dAxis } = await body(req, 4096);
         if (pin !== undefined) {
           if (!validPin(pin)) return json(res, 400, { error: 'PIN 必须是 6 位数字' });
           u.pin = hashPin(pin);
@@ -396,6 +416,12 @@ const server = http.createServer(async (req, res) => {
           if (!isSelf) return json(res, 403, { error: '只能改自己的主题偏好' });
           if (theme !== 'dark' && theme !== 'light') return json(res, 400, { error: '主题只能是 dark 或 light' });
           u.theme = theme;
+        }
+        // 3D 预览的坐标轴设置，同样是个人使用习惯——只能改自己的
+        if (p3dAxis !== undefined) {
+          if (!isSelf) return json(res, 403, { error: '只能改自己的坐标轴设置' });
+          if (p3dAxis !== null && !validP3dAxis(p3dAxis)) return json(res, 400, { error: '坐标轴设置格式不对' });
+          u.p3dAxis = p3dAxis;
         }
         await saveUsers();
         announcePresence();

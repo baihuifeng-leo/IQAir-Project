@@ -18,9 +18,10 @@ const Preview3D = (() => {
   const hidden = new Set();   // 被隐藏（取消勾选）的品牌
 
   /* ── 坐标轴：三个数据维度可以自由分配到 x/y/z 三个轴，每个轴
-     显示的文字也能自定义——跟 sizeMode/autoRotate 一样是纯前端的
-     会话状态，不持久化，刷新页面回到默认（价格＝z、颗粒物＝x、
-     甲醛＝y），保持跟这个视图其它设置一致的行为方式。 ── */
+     显示的文字也能自定义。默认价格＝z、颗粒物＝x、甲醛＝y；改动会
+     自动存到账号（users.json 的 p3dAxis 字段，见 saveAxisPref），
+     换设备登录也是自己上次调好的样子，跟 sizeMode/autoRotate 那种
+     纯会话状态（不持久化）不一样。 ── */
   const DIMS = {
     pmCadr: { label: '颗粒物 CADR', short: '颗粒物CADR' },
     hchoCadr: { label: '甲醛 CADR', short: '甲醛CADR' },
@@ -270,7 +271,7 @@ const Preview3D = (() => {
           <button class="kill" id="p3d-axis-close" title="关闭">×</button>
         </div>
         <div class="sheet-body">
-          <p class="rail-hint">三个方向分别显示哪个数据维度可以自由调换，显示的文字也能自己改——只在你本次浏览有效，刷新页面会回到默认。</p>
+          <p class="rail-hint">三个方向分别显示哪个数据维度可以自由调换，显示的文字也能自己改——改完自动保存到你的账号，换设备登录也是这个样子。</p>
           <div id="p3d-axis-rows" class="p3d-axis-rows"></div>
           <button class="ghost" id="p3d-axis-reset">恢复默认</button>
         </div>
@@ -288,7 +289,26 @@ const Preview3D = (() => {
       Object.keys(DIMS).forEach((k) => { axisLabels[k] = DIMS[k].label; });
       renderAxisSheetRows();
       render();
+      saveAxisPref();
     };
+  }
+
+  /** 坐标轴改动即生效即保存，不用额外的"保存"按钮——跟功能显示设置
+   *  （settings.js）那类个人偏好开关体验一致；保存失败也不回退本地
+   *  显示（用户还在对话框里改着），只是提示一下、下次可能得重改。 */
+  async function saveAxisPref() {
+    try {
+      const r = A.guard(await fetch('/api/users/' + A.me.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p3dAxis: { map: axisMap, labels: axisLabels } })
+      }));
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || '保存失败');
+      A.me.p3dAxis = { map: { ...axisMap }, labels: { ...axisLabels } };
+    } catch (e) {
+      if (e.expired) return;
+      A.toast('坐标轴设置没能保存到账号，换设备可能看不到：' + e.message, 'bad');
+    }
   }
 
   function renderAxisSheetRows() {
@@ -326,11 +346,13 @@ const Preview3D = (() => {
     axisMap[axis] = dim;
     renderAxisSheetRows();
     render();
+    saveAxisPref();
   }
 
   function setAxisLabel(dim, text) {
     axisLabels[dim] = text.trim() || DIMS[dim].label;
     render();
+    saveAxisPref();
   }
 
   function openAxisSheet() {
@@ -426,6 +448,13 @@ const Preview3D = (() => {
 
   function init(api) {
     A = api;
+
+    const saved = A.me.p3dAxis;
+    if (saved && saved.map && DIMS[saved.map.x] && DIMS[saved.map.y] && DIMS[saved.map.z]) {
+      axisMap = { x: saved.map.x, y: saved.map.y, z: saved.map.z };
+      if (saved.labels) Object.keys(DIMS).forEach((k) => { if (saved.labels[k]) axisLabels[k] = saved.labels[k]; });
+    }
+
     const pick = A.$('#p3d-file');
 
     A.$('#p3d-import-btn').onclick = () => { pick.value = ''; pick.click(); };
