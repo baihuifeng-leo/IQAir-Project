@@ -567,6 +567,18 @@ select#own-brand {
 .mx-brand .kill { opacity: 0; transition: opacity var(--fast); }
 .mx-brand:hover .kill { opacity: 1; }
 
+/* 品牌列拖动排序的手柄——跟价格带那颗横放的手柄同一套视觉，改成竖放贴合列头 */
+.mx-brand-handle {
+  flex: 0 0 16px; height: 10px; cursor: grab; opacity: 0; transition: opacity var(--fast);
+  background:
+    linear-gradient(90deg, var(--ink-dim), var(--ink-dim)) 2px 0 / 2px 4px no-repeat,
+    linear-gradient(90deg, var(--ink-dim), var(--ink-dim)) 7px 0 / 2px 4px no-repeat,
+    linear-gradient(90deg, var(--ink-dim), var(--ink-dim)) 12px 0 / 2px 4px no-repeat;
+}
+.mx-brand:hover .mx-brand-handle { opacity: 1; }
+.mx-brand.dragging { opacity: 0.4; }
+.mx-brand.drop-hot { box-shadow: inset 2px 0 0 var(--mint), inset -2px 0 0 var(--mint); }
+
 .mx-band {
   position: sticky; left: 0; z-index: 3;
   min-width: 116px; padding: 12px 10px; display: flex; align-items: center; gap: 8px;
@@ -1194,6 +1206,7 @@ body.readonly .slot-acts,
 body.readonly .batchbar,
 body.readonly .legend-add,
 body.readonly .mx-band-handle,
+body.readonly .mx-brand-handle,
 body.readonly #btn-add-cbrand,
 body.readonly #btn-add-group,
 body.readonly .rail-sec.edit-only { display: none !important; }

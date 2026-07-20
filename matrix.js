@@ -303,6 +303,7 @@ const Matrix = (() => {
 
   /* ── 主网格 ─────────────────────────────────────────── */
   let dragBandId = null;
+  let dragBrandId = null;
 
   function render() {
     const g = A.$('#matrix');
@@ -323,10 +324,20 @@ const Matrix = (() => {
     m.brands.forEach((b) => {
       const h = document.createElement('div');
       h.className = 'mx-brand';
+      h.dataset.id = b.id;
+      h.draggable = editing;
+
+      const handle = document.createElement('span');
+      handle.className = 'mx-brand-handle';
+      handle.title = '按住拖动调整品牌顺序';
+
       const inp = document.createElement('input');
       inp.spellcheck = false;
       A.bindInput(inp, b, 'name', renderLegendStats, 'matrix');
-      h.append(inp, A.mkKill('删除这个品牌及其产品', () => {
+      inp.addEventListener('mousedown', (e) => { e.stopPropagation(); h.draggable = false; });
+      inp.addEventListener('blur', () => { h.draggable = editing; });
+
+      h.append(handle, inp, A.mkKill('删除这个品牌及其产品', () => {
         if (!confirm(`删除「${b.name}」以及它下面的所有产品？`)) return;
         A.mark();
         const mm = M();
@@ -334,6 +345,30 @@ const Matrix = (() => {
         mm.products = mm.products.filter((x) => x.brandId !== b.id);
         A.save('matrix'); render();
       }));
+
+      h.addEventListener('dragstart', (e) => {
+        dragBrandId = b.id;
+        h.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', b.id);
+      });
+      h.addEventListener('dragend', () => {
+        dragBrandId = null;
+        A.$$('.mx-brand.dragging').forEach((el) => el.classList.remove('dragging'));
+      });
+      h.addEventListener('dragover', (e) => {
+        if (!dragBrandId || dragBrandId === b.id) return;
+        e.preventDefault();
+        h.classList.add('drop-hot');
+      });
+      h.addEventListener('dragleave', () => h.classList.remove('drop-hot'));
+      h.addEventListener('drop', (e) => {
+        e.preventDefault();
+        h.classList.remove('drop-hot');
+        const id = dragBrandId || e.dataTransfer.getData('text/plain');
+        if (id && id !== b.id) moveBrand(id, b.id);
+      });
+
       g.appendChild(h);
     });
 
@@ -457,6 +492,18 @@ const Matrix = (() => {
   /** 价格带拖动排序：把 id 这条挪到 beforeId 前面 */
   function moveBand(id, beforeId) {
     const list = M().bands;
+    const from = list.findIndex((b) => b.id === id);
+    if (from < 0) return;
+    A.mark();
+    const [item] = list.splice(from, 1);
+    const to = list.findIndex((b) => b.id === beforeId);
+    list.splice(to < 0 ? list.length : to, 0, item);
+    A.save('matrix'); render();
+  }
+
+  /* 品牌列拖动排序：把 id 这列挪到 beforeId 前面（跟 moveBand 同一个套路） */
+  function moveBrand(id, beforeId) {
+    const list = M().brands;
     const from = list.findIndex((b) => b.id === id);
     if (from < 0) return;
     A.mark();
@@ -739,7 +786,7 @@ const Matrix = (() => {
     const legend = origLegend.cloneNode(true);
 
     head.querySelector('.matrix-head-tools')?.remove(); // 统计/说明图标/导出按钮都跟标题同一行，克隆时得先摘掉，不然会截进图里、也会打乱下面按 h1/p 顺序对应原节点的逻辑
-    grid.querySelectorAll('.mx-add-brand, .mx-add-band, .mx-fill, .mx-band-handle').forEach((el) => el.remove()); // 新增品牌/价格带的加号、拖拽手柄、补位空格都是编辑态才有意义的东西，且 fitScaleAndColumns 重算列宽时不会给它们留位置，留着会把导出图挤歪
+    grid.querySelectorAll('.mx-add-brand, .mx-add-band, .mx-fill, .mx-band-handle, .mx-brand-handle').forEach((el) => el.remove()); // 新增品牌/价格带的加号、拖拽手柄、补位空格都是编辑态才有意义的东西，且 fitScaleAndColumns 重算列宽时不会给它们留位置，留着会把导出图挤歪
     simplifyLegendForExport(origLegend, legend);
 
     freezeColors(origHead, head, HEAD_FREEZE);
