@@ -23,6 +23,27 @@ const Reviews = (() => {
 
   const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
 
+  /**
+   * 统计数字滚动动效：从 0 弹到目标值，参照 React Bits 的 CountUp（spring 手感）
+   * 用 easeOutCubic 近似——纯 CSS transition 数不了整数文本，只能逐帧改 textContent。
+   */
+  const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function countUp(el, to, { suffix = '', duration = 900, delay = 0 } = {}) {
+    to = Number(to) || 0;
+    if (reduceMotion()) { el.textContent = to.toLocaleString() + suffix; return; }
+    el.textContent = '0' + suffix;
+    const start = performance.now() + delay;
+    const ease = (t) => 1 - Math.pow(1 - t, 3);
+    function frame(now) {
+      const elapsed = now - start;
+      if (elapsed < 0) { requestAnimationFrame(frame); return; }
+      const t = Math.min(1, elapsed / duration);
+      el.textContent = Math.round(to * ease(t)).toLocaleString() + suffix;
+      if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
   /* ── 关键词溯源浮层 ─────────────────────────────────── */
   let tipTimer = null, tipBox = null;
 
@@ -123,23 +144,23 @@ const Reviews = (() => {
 
     const tiles = brand
       ? [
-          [brand.total.toLocaleString(), '该品牌评论数'],
-          [(brand.total - brand.template).toLocaleString(), '有效评论'],
-          [brand.negClauses.toLocaleString(), '差评分句', 'neg'],
-          [brand.posClauses.toLocaleString(), '好评分句']
+          [brand.total, '该品牌评论数'],
+          [brand.total - brand.template, '有效评论'],
+          [brand.negClauses, '差评分句', 'neg'],
+          [brand.posClauses, '好评分句']
         ]
       : [
-          [data.totals.reviews.toLocaleString(), '评论总数'],
-          [(data.totals.reviews - data.totals.template).toLocaleString(), '有效评论'],
-          [pct(data.totals.template, data.totals.reviews) + '%', '模板/空评'],
+          [data.totals.reviews, '评论总数'],
+          [data.totals.reviews - data.totals.template, '有效评论'],
+          [pct(data.totals.template, data.totals.reviews), '模板/空评', null, '%'],
           [data.totals.brands, '品牌']
         ];
-    tiles.forEach(([v, k, mark]) => {
+    tiles.forEach(([v, k, mark, suffix], i) => {
       const c = document.createElement('div');
       c.className = 'rv-stat' + (mark === 'neg' ? ' neg hoverable' : '');
       c.innerHTML = `<b></b><span></span>`;
-      c.querySelector('b').textContent = v;
       c.querySelector('span').textContent = k;
+      countUp(c.querySelector('b'), v, { suffix: suffix || '', delay: i * 70 });
       if (mark === 'neg') {
         const tip = () => showTip(c, { polarity: 'neg', label: brand ? `${brand.name} · 差评句` : '差评句' });
         c.addEventListener('mouseenter', tip);
@@ -405,17 +426,17 @@ const Reviews = (() => {
     const box = document.createElement('div');
     box.className = 'rv-stats';
     const tiles = [
-      [product.total.toLocaleString(), '评论数'],
-      [(product.total - product.template).toLocaleString(), '有效评论'],
-      [product.negClauses.toLocaleString(), '差评分句', 'neg'],
-      [product.posClauses.toLocaleString(), '好评分句']
+      [product.total, '评论数'],
+      [product.total - product.template, '有效评论'],
+      [product.negClauses, '差评分句', 'neg'],
+      [product.posClauses, '好评分句']
     ];
-    tiles.forEach(([v, k, mark]) => {
+    tiles.forEach(([v, k, mark], i) => {
       const c = document.createElement('div');
       c.className = 'rv-stat' + (mark === 'neg' ? ' neg hoverable' : '');
       c.innerHTML = `<b></b><span></span>`;
-      c.querySelector('b').textContent = v;
       c.querySelector('span').textContent = k;
+      countUp(c.querySelector('b'), v, { delay: i * 70 });
       if (mark === 'neg') {
         const tip = () => showTip(c, { polarity: 'neg', label: `${product.name} · 差评句`, brandId: '', productId: product.id });
         c.addEventListener('mouseenter', tip);
