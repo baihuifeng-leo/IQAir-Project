@@ -228,7 +228,10 @@ const Matrix = (() => {
 
     scroll.addEventListener('mousedown', (e) => {
       if (e.button !== 0 || !A.isEditing()) return;
-      if (e.target.closest('.chip, button, input')) return;
+      // .mx-band / .mx-brand 是行/列头，靠 draggable 原生拖拽排序——这里的
+      // preventDefault() 会连带取消它们的拖拽起手，必须排除掉，不然框选逻辑
+      // 一直抢在原生 dragstart 前面把 mousedown 吃掉，行列拖拽永远不会触发
+      if (e.target.closest('.chip, button, input, .mx-band, .mx-brand')) return;
       additive = e.ctrlKey || e.metaKey || e.shiftKey;
       if (!additive) clearSel();
       start = { x: e.clientX, y: e.clientY };
@@ -366,7 +369,9 @@ const Matrix = (() => {
         e.preventDefault();
         h.classList.remove('drop-hot');
         const id = dragBrandId || e.dataTransfer.getData('text/plain');
-        if (id && id !== b.id) moveBrand(id, b.id);
+        if (!id || id === b.id) return;
+        const rect = h.getBoundingClientRect();
+        moveBrand(id, b.id, e.clientX > rect.left + rect.width / 2);
       });
 
       g.appendChild(h);
@@ -432,7 +437,9 @@ const Matrix = (() => {
         e.preventDefault();
         lab.classList.remove('drop-hot');
         const id = dragBandId || e.dataTransfer.getData('text/plain');
-        if (id && id !== band.id) moveBand(id, band.id);
+        if (!id || id === band.id) return;
+        const rect = lab.getBoundingClientRect();
+        moveBand(id, band.id, e.clientY > rect.top + rect.height / 2);
       });
 
       g.appendChild(lab);
@@ -489,27 +496,32 @@ const Matrix = (() => {
     renderLegendStats();
   }
 
-  /** 价格带拖动排序：把 id 这条挪到 beforeId 前面 */
-  function moveBand(id, beforeId) {
+  /** 价格带拖动排序：把 id 这条挪到 targetId 旁边。
+   *  after 由放手时鼠标在目标行上半/下半决定——如果永远只往"前面"插，
+   *  拖到紧挨着的下一行时，先移除 id 会让 targetId 的下标正好补上被腾出
+   *  的位置，"插到 targetId 前面"就等于插回原处，看起来跟没拖一样。 */
+  function moveBand(id, targetId, after) {
     const list = M().bands;
     const from = list.findIndex((b) => b.id === id);
     if (from < 0) return;
     A.mark();
     const [item] = list.splice(from, 1);
-    const to = list.findIndex((b) => b.id === beforeId);
-    list.splice(to < 0 ? list.length : to, 0, item);
+    let to = list.findIndex((b) => b.id === targetId);
+    if (to < 0) to = list.length; else if (after) to += 1;
+    list.splice(to, 0, item);
     A.save('matrix'); render();
   }
 
-  /* 品牌列拖动排序：把 id 这列挪到 beforeId 前面（跟 moveBand 同一个套路） */
-  function moveBrand(id, beforeId) {
+  /* 品牌列拖动排序：跟 moveBand 同一个套路，方向判断改成水平方向 */
+  function moveBrand(id, targetId, after) {
     const list = M().brands;
     const from = list.findIndex((b) => b.id === id);
     if (from < 0) return;
     A.mark();
     const [item] = list.splice(from, 1);
-    const to = list.findIndex((b) => b.id === beforeId);
-    list.splice(to < 0 ? list.length : to, 0, item);
+    let to = list.findIndex((b) => b.id === targetId);
+    if (to < 0) to = list.length; else if (after) to += 1;
+    list.splice(to, 0, item);
     A.save('matrix'); render();
   }
 
