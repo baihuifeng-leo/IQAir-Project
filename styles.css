@@ -493,6 +493,8 @@ select#own-brand {
 .matrix-head #matrix-export-btn[disabled] { opacity: 0.55; cursor: wait; }
 .matrix-scroll { flex: 1; overflow: auto; padding-bottom: 6px; }
 .matrix { display: grid; gap: 1px; background: var(--hair); border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; min-width: max-content; }
+/* 深色态卡片底色跟 --hair 太接近，中间的网格分隔线快糊没了——单独加深这一处 */
+[data-theme="dark"] .matrix, :root:not([data-theme]) .matrix { background: var(--hair-strong); }
 
 /* 价格带沙盘不再单独占一个左侧工作台：统计、说明文字都收进标题行，
    分类编辑直接下沉到底部图例里，品牌/价格带的新增入口就地放在网格末尾——
@@ -1196,12 +1198,6 @@ body.readonly #btn-add-cbrand,
 body.readonly #btn-add-group,
 body.readonly .rail-sec.edit-only { display: none !important; }
 
-/* .mx-add-brand / .mx-add-band 是 #matrix 网格的直接子项（占着自己的列/整行）。
-   display:none 会把它们整个从网格布局里摘掉，auto-flow 会拿后面那个本该排在下一行第一列的
-   价格带标签去回填这个空出来的格子，导致整行错位——所以这两个用 visibility:hidden，
-   照样占位但不可见、不可交互。 */
-body.readonly .mx-add-brand,
-body.readonly .mx-add-band { visibility: hidden !important; }
 /* .sheet-head .kill 是弹层的关闭按钮，不是价格带/对位表的编辑态删除按钮，
    只读模式下也要能关掉弹层，所以要从上面这条全局隐藏规则里排除出去 */
 body.readonly .sheet-head .kill { display: grid !important; }
@@ -1234,6 +1230,15 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .richbar button:nth-child(1) { font-weight: 800; }
 .richbar button:nth-child(2) { font-style: italic; }
 .richbar button:nth-child(3) { text-decoration: underline; }
+
+/* 图例胶囊很窄，工具栏贴在原位（右上角叠在文字上）会跟分类名字/删除按钮糊在一起——
+   干脆挪到胶囊上方单独一层，配上卡片底色 + 描边 + 投影，跟正文明确分开 */
+.legend .tag-row .richbar {
+  top: auto; left: 50%; right: auto; bottom: calc(100% + 5px); transform: translateX(-50%);
+  z-index: 4; padding: 3px; border-radius: 8px;
+  background: var(--paper-card); border: 1px solid var(--hair-strong);
+  box-shadow: 0 10px 24px -10px #00000055;
+}
 
 .legend span > span b { font-weight: 800; }
 
@@ -1499,7 +1504,7 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .p3d-pt-label em { font-style: normal; font-weight: 500; font-size: 11px; opacity: 0.82; margin-left: 4px; }
 
 /* 场景引擎自己的 tooltip 容器（原来这层壳是 echarts 的 option 配的）——
-   跟着主题令牌走，深色态数值跟原来一样，浅色态换成白底卡片 */
+   跟着主题令牌走；3D预览模块整体钉死深色（见 core.js go()），这里就是深色态那一套值 */
 .p3d-tooltip { position: absolute; z-index: 5; pointer-events: none;
                background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
                box-shadow: 0 20px 44px -18px #0006; }
@@ -1910,9 +1915,6 @@ body.rpt-presenting .rpt-wm-weekbar { display: none; }
 [data-theme="light"] .rpt-scope-badge.alt { background: #3358c91c; color: #2d4fbe; }
 [data-theme="light"] .rpt-scope-badge.alt2 { background: #8a5cd41f; color: #6a44c9; }
 [data-theme="light"] .rpt-exit-present { background: #ffffffc9; }
-
-/* 3D预览：全屏按钮激活态跟浅色蓝 */
-[data-theme="light"] #p3d-fullscreen.on { color: var(--blue); border-color: var(--blue); background: rgba(51, 88, 201, 0.1); }
 
 /* 浮层卡片阴影：纯黑投影 → 柔和的蓝灰投影 */
 [data-theme="light"] .sheet { box-shadow: 0 44px 90px -30px rgba(30, 50, 110, 0.28); }

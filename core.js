@@ -420,6 +420,9 @@ const App = (() => {
     }
   }
 
+  /* 竞品3D预览的场景（星空/辉光等）没跟着做浅色适配，就不给它浅色开关了——
+     进这个模块强制走深色显示，主题偏好本身（me.theme / localStorage）不动，
+     离开时把 data-theme 换回真实偏好即可，其它模块的浅色/深色切换不受影响。 */
   function go(next) {
     view = next;
     $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.view === next));
@@ -430,6 +433,9 @@ const App = (() => {
     $('#btn-edit').hidden = !isDoc;
     $('#btn-undo').hidden = !isDoc;
     $('#btn-redo').hidden = !isDoc;
+    const inP3D = next === 'preview3d';
+    $('#btn-theme').hidden = inP3D;
+    document.documentElement.setAttribute('data-theme', inP3D ? 'dark' : (me?.theme || 'dark'));
     if (next === 'preview3d') Preview3D.onShow();
     if (next === 'reports') Report.onShow();
   }

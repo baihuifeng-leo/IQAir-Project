@@ -307,9 +307,13 @@ const Matrix = (() => {
   function render() {
     const g = A.$('#matrix');
     const m = M();
+    const editing = A.isEditing();
     g.innerHTML = '';
-    // 最后一列固定窄宽度，专门给"新增品牌列"的加号按钮用
-    g.style.gridTemplateColumns = `130px repeat(${m.brands.length}, minmax(170px, 1fr)) 44px`;
+    // 最后一列固定窄宽度，专门给"新增品牌列"的加号按钮用——查看模式没有这个按钮，
+    // 不留这列，省出来的宽度让 minmax(…, 1fr) 自动把每个品牌列撑到最大
+    g.style.gridTemplateColumns = editing
+      ? `130px repeat(${m.brands.length}, minmax(170px, 1fr)) 44px`
+      : `130px repeat(${m.brands.length}, minmax(170px, 1fr))`;
 
     // 已经不存在的产品从选区里剔掉
     [...sel].forEach((id) => { if (!m.products.some((p) => p.id === id)) sel.delete(id); });
@@ -333,18 +337,20 @@ const Matrix = (() => {
       g.appendChild(h);
     });
 
-    const addBrand = document.createElement('button');
-    addBrand.type = 'button';
-    addBrand.className = 'mx-add-brand';
-    addBrand.title = '新增品牌列';
-    addBrand.textContent = '+';
-    addBrand.onclick = () => {
-      A.mark();
-      M().brands.push({ id: A.uid('b_'), name: '新品牌' });
-      A.save('matrix'); render();
-      A.$$('.mx-brand input').pop()?.select();
-    };
-    g.appendChild(addBrand);
+    if (editing) {
+      const addBrand = document.createElement('button');
+      addBrand.type = 'button';
+      addBrand.className = 'mx-add-brand';
+      addBrand.title = '新增品牌列';
+      addBrand.textContent = '+';
+      addBrand.onclick = () => {
+        A.mark();
+        M().brands.push({ id: A.uid('b_'), name: '新品牌' });
+        A.save('matrix'); render();
+        A.$$('.mx-brand input').pop()?.select();
+      };
+      g.appendChild(addBrand);
+    }
 
     m.bands.forEach((band) => {
       const lab = document.createElement('div');
@@ -426,21 +432,23 @@ const Matrix = (() => {
         g.appendChild(cell);
       });
 
-      // 补一格空位，跟表头那颗"新增品牌"按钮对齐，网格才不会错位
-      g.appendChild(Object.assign(document.createElement('div'), { className: 'mx-fill' }));
+      // 补一格空位，跟表头那颗"新增品牌"按钮对齐，网格才不会错位（查看模式没有那颗按钮，不用补）
+      if (editing) g.appendChild(Object.assign(document.createElement('div'), { className: 'mx-fill' }));
     });
 
-    const addBand = document.createElement('button');
-    addBand.type = 'button';
-    addBand.className = 'mx-add-band';
-    addBand.textContent = '+ 新增价格带';
-    addBand.onclick = () => {
-      A.mark();
-      M().bands.push({ id: A.uid('p_'), name: '0-0K' });
-      A.save('matrix'); render();
-      A.$$('.mx-band input').pop()?.select();
-    };
-    g.appendChild(addBand);
+    if (editing) {
+      const addBand = document.createElement('button');
+      addBand.type = 'button';
+      addBand.className = 'mx-add-band';
+      addBand.textContent = '+ 新增价格带';
+      addBand.onclick = () => {
+        A.mark();
+        M().bands.push({ id: A.uid('p_'), name: '0-0K' });
+        A.save('matrix'); render();
+        A.$$('.mx-band input').pop()?.select();
+      };
+      g.appendChild(addBand);
+    }
 
     paintSel();
     renderLegendStats();
