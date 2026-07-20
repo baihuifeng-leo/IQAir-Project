@@ -44,27 +44,15 @@ const Preview3D = (() => {
 
   const withCostEff = (p) => ({ ...p, costEff: p.price > 0 ? ((p.pmCadr + p.hchoCadr) / p.price) * 1000 : 0 });
 
-  // 场景背景是深是浅：全屏永远深空（跟场景引擎的 --p3d-* 令牌钉死逻辑一致），
-  // 非全屏跟全局深浅主题走
-  let theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  const effectiveTheme = () => (fullscreenOn ? 'dark' : theme);
-
   /**
-   * 标题颜色跟气泡色走，但背景是深色时深色品牌色（比如深棕、深灰）、
-   * 背景是浅色时浅色品牌色（比如浅黄、浅粉）直接拿来做文字都会糊、
-   * 看不清——深底往白混、浅底往黑混，对比度已经够的颜色不用动，
+   * 标题颜色跟气泡色走，但深色品牌色（比如深棕、深灰）直接拿来做文字
+   * 在深空底上会糊、看不清——往白混，对比度已经够的颜色不用动，
    * 色相还是那个品牌色，不会变成大家都一个颜色。
    */
-  function labelColor(hex, bg) {
+  function labelColor(hex) {
     const h = String(hex || '').replace('#', '');
     const r = parseInt(h.slice(0, 2), 16) || 0, g = parseInt(h.slice(2, 4), 16) || 0, b = parseInt(h.slice(4, 6), 16) || 0;
     const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-    if (bg === 'light') {
-      if (yiq <= 130) return hex;
-      const mix = 0.65 - ((255 - yiq) / 125) * 0.35; // 越亮混得越多，最亮混 65%，刚好够 130 门槛的混 30%
-      const nr = Math.round(r * (1 - mix)), ng = Math.round(g * (1 - mix)), nb = Math.round(b * (1 - mix));
-      return `rgb(${nr}, ${ng}, ${nb})`;
-    }
     if (yiq >= 150) return hex;
     const mix = 0.65 - (yiq / 150) * 0.35; // 越暗混得越多，最暗混 65%，刚好够 150 门槛的混 30%
     const nr = Math.round(r + (255 - r) * mix), ng = Math.round(g + (255 - g) * mix), nb = Math.round(b + (255 - b) * mix);
@@ -114,11 +102,10 @@ const Preview3D = (() => {
     const shown = all.filter((p) => !hidden.has(p.brand));
     const vals = shown.map((p) => Math.sqrt(Math.max(0, mode.calc(p))));
     const lo = Math.min(...vals, 0), hi = Math.max(...vals, 1);
-    // 全屏是给「看细节」用的，光靠画布变大不够——气泡本身的基础大小
-    // 也要跟着放大一档，不然占屏比例反而变小，越看越费劲
-    const scale = fullscreenOn ? 1.5 : 1;
-    // 基数/增量是首版 1.7/3.4 的 ×0.75——首版实测视觉密度偏高（大球互相叠、显乱）
-    const radius = (p) => (1.28 + ((Math.sqrt(Math.max(0, mode.calc(p))) - lo) / ((hi - lo) || 1)) * 2.55) * scale;
+    // 全屏和默认状态气泡大小必须一致——之前全屏额外 ×1.5 过，被反馈跟
+    // 默认态比例对不上，已去掉；基数/增量是首版 1.7/3.4 的 ×0.75
+    // （首版实测视觉密度偏高，大球互相叠、显乱）
+    const radius = (p) => 1.28 + ((Math.sqrt(Math.max(0, mode.calc(p))) - lo) / ((hi - lo) || 1)) * 2.55;
 
     const axes = {};
     for (const axis of ['x', 'y', 'z']) {
@@ -127,12 +114,11 @@ const Preview3D = (() => {
       axes[axis] = { name: axisLabels[dim] || DIMS[dim].label, max, ticks, fmt: DIM_FMT[dim] || String };
     }
 
-    const bg = effectiveTheme();
     const points = shown.map((p) => ({
       ax: p[axisMap.x], ay: p[axisMap.y], az: p[axisMap.z],
       radius: radius(p),
       brand: p.brand, model: p.model, color: p.color,
-      labelColor: labelColor(p.color, bg),
+      labelColor: labelColor(p.color),
       url: p.url,
       tipHTML: tipHTML(p)
     }));
@@ -377,17 +363,8 @@ const Preview3D = (() => {
     // 进入/退出全屏这个时机，:fullscreen 触发的 var()/自定义属性重算偶发滞后
     // （气泡口径切换标签就踩过这个坑），class 切换的重算没有这层不确定性
     A.$('.p3d-canvas').classList.toggle('p3d-fs', fullscreenOn);
-    if (scene) scene.setTheme(); // 全屏钉死深空，退出全屏跟着当前主题走
     render();
     requestAnimationFrame(() => scene && scene.resize());
-  }
-
-  // 主题切换时场景背景/星野/网格跟着重读 --p3d-* 令牌；气泡文字的可读性
-  // 混色也要按新背景重算，所以还要走一遍 render() 重建数据点
-  function onThemeChange() {
-    theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-    if (scene) scene.setTheme();
-    render();
   }
 
   /* ── 侧栏：导入与品牌筛选 ─────────────────────────────── */
@@ -479,8 +456,6 @@ const Preview3D = (() => {
     A.$('#p3d-fullscreen').onclick = toggleFullscreen;
     document.addEventListener('fullscreenchange', onFullscreenChange);
     renderFullscreenBtn();
-
-    document.addEventListener('wb-themechange', onThemeChange);
 
     // 切走这个 tab 时（.view 被加 hidden）暂停渲染循环，切回来再恢复——
     // 不然离开页面后 WebGL 还在后台整帧渲染白烧 GPU

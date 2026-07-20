@@ -148,20 +148,6 @@
   --dis: #cf372c;
   --dis-bg: #ffeceb;
   --dis-dim: #b8564c;
-
-  /* 3D预览浅色配方：深空→晴日纸面，克制光效同款脾气（缎面哑光=高级），
-     只是把整套色相从"深夜"挪到"白日"——网格/边框收暗一档保证在白底上够看，
-     bloom 阈值高的白背景很容易被辉光洗成一片白雾，这里把强度降到几乎只提亮
-     球体高光本身 */
-  --p3d-bg: #eef1f5;
-  --p3d-grid-a: #9fb2d6;
-  --p3d-grid-b: #d9e0ee;
-  --p3d-frame-glow: #148269;
-  --p3d-frame-main: #3358c9;
-  --p3d-frame-weak: #c3ccdd;
-  --p3d-star: #b9c6e0;
-  --p3d-star-op: 0.35;
-  --p3d-bloom: 0.06;
 }
 
 /* 原生控件（滚动条/日期选择器等）跟随主题 */
@@ -1410,17 +1396,16 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .p3d-stat span { font-size: 11px; color: var(--dim); letter-spacing: 0.4px; }
 
 .p3d-chart-wrap { flex: 1; min-height: 0; position: relative; padding: 10px 20px 20px; }
-/* 场景观感（深空辉光/晴日纸面）随 --p3d-* 令牌走，令牌在 JS 里用
-   getComputedStyle 现读去配 Three.js 材质（canvas 不吃 CSS 级联，
-   跟报告趋势图的 ECharts 同一套办法）；
+/* 场景观感（深空辉光）随 --p3d-* 令牌走，令牌在 JS 里用 getComputedStyle
+   现读去配 Three.js 材质（canvas 不吃 CSS 级联，跟报告趋势图的 ECharts
+   同一套办法）；3D预览暂不跟随全局浅色主题，永远深空（浅色配方后续
+   再调优加回来，见 git 历史 43c5402/eb82427 一带）；
    position:relative 是 CSS2D 标签层和 tooltip 绝对定位的锚 */
 .p3d-chart { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: 12px; background: var(--p3d-bg); }
 .p3d-chart canvas { display: block; }
 .p3d-chart-wrap .rv-empty { padding-top: 120px; }
 
-/* ── Three.js 场景里的 CSS2D 文字（轴名/刻度/产品标签）—— 深空底默认配色，
-   浅色配方见下方 [data-theme="light"] 覆写（气泡文字色由 JS 按当前主题
-   算过对比度，这里只调文字阴影方向：深底用黑晕托底、浅底用白晕托底） ── */
+/* ── Three.js 场景里的 CSS2D 文字（轴名/刻度/产品标签） ── */
 .p3d-axis-name { font-size: 15px; font-weight: 600; letter-spacing: 3px; color: #8ef0d8; white-space: nowrap;
                  text-shadow: 0 0 14px #56e6c6b3, 0 1px 3px #000c; }
 .p3d-axis-tick { font-size: 13px; color: #9fb0d0; white-space: nowrap; font-variant-numeric: tabular-nums;
@@ -1429,16 +1414,6 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
                 text-shadow: 0 1px 4px #000e, 0 0 10px #0009; pointer-events: none; }
 .p3d-pt-label b { font-weight: 600; }
 .p3d-pt-label em { font-style: normal; font-weight: 500; font-size: 11px; opacity: 0.82; margin-left: 4px; }
-
-[data-theme="light"] .p3d-canvas:not(:fullscreen) .p3d-axis-name {
-  color: #0f7a63; text-shadow: 0 0 10px rgba(31, 158, 133, 0.22), 0 1px 2px rgba(255, 255, 255, 0.75);
-}
-[data-theme="light"] .p3d-canvas:not(:fullscreen) .p3d-axis-tick {
-  color: #46557a; text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
-}
-[data-theme="light"] .p3d-canvas:not(:fullscreen) .p3d-pt-label {
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.9), 0 0 6px rgba(255, 255, 255, 0.6);
-}
 
 /* 场景引擎自己的 tooltip 容器（原来这层壳是 echarts 的 option 配的）——
    跟着主题令牌走，深色态数值跟原来一样，浅色态换成白底卡片 */
@@ -1823,9 +1798,8 @@ body.rpt-presenting .rpt-wm-weekbar { display: none; }
    放在文件末尾保证覆写优先级。
    ═══════════════════════════════════════════════════════════ */
 
-/* 评论风向标 / 3D预览外围：深空渐变底 → 瓷白渐变底 */
-[data-theme="light"] .rv-canvas,
-[data-theme="light"] .p3d-canvas:not(:fullscreen) {
+/* 评论风向标外围：深空渐变底 → 瓷白渐变底（3D预览暂不跟随浅色主题，见上方说明） */
+[data-theme="light"] .rv-canvas {
   background:
     radial-gradient(1200px 500px at 15% -10%, rgba(31, 158, 133, 0.09), transparent 60%),
     radial-gradient(900px 460px at 88% 6%, rgba(51, 88, 201, 0.07), transparent 62%),

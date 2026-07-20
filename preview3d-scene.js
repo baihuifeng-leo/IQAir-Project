@@ -31,8 +31,7 @@ const HALO_OP = 0.15, STEM_OP = 0.28, DOT_OP = 0.5;
 
 /** 场景调色板现读 --p3d-* 令牌（canvas 不吃 CSS 级联，Three.js 材质只能
  *  用 getComputedStyle 现读——跟报告趋势图的 ECharts 同一套办法）。
- *  非全屏下跟全局深浅主题走；全屏态 CSS 已把这些令牌钉回深空配方，
- *  这里读到的自然就是"全屏永远深空"。 */
+ *  3D预览暂不跟随全局浅色主题，只读一次，永远深空。 */
 function readPalette(container) {
   const css = getComputedStyle(container);
   const tk = (name, fb) => (css.getPropertyValue(name) || fb).trim();
@@ -95,7 +94,7 @@ function create(container) {
     return null; // 调用方降级到空态提示
   }
 
-  let palette = readPalette(container);
+  const palette = readPalette(container);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(palette.bg);
@@ -449,16 +448,6 @@ function create(container) {
     },
     /** 单独重播进入动画（切回 tab 时用，不重建数据） */
     playEntry,
-    /** 主题/全屏状态变化时调用：重读 --p3d-* 令牌，刷新背景/星野/辉光强度；
-     *  网格与坐标框的调色板会在调用方紧接着的 setData() 里一并生效
-     *  （气泡本身不跟场景调色板走，只有网格/星野/背景需要在这里手动刷新） */
-    setTheme() {
-      palette = readPalette(container);
-      scene.background = new THREE.Color(palette.bg);
-      starPoints.material.color = new THREE.Color(palette.star);
-      starPoints.material.opacity = palette.starOp;
-      bloomPass.strength = palette.bloom;
-    },
     setAutoRotate(v) {
       wantRotate = !!v;
       controls.autoRotate = wantRotate;
@@ -467,6 +456,12 @@ function create(container) {
     resize() {
       const w = container.clientWidth, h = container.clientHeight;
       if (!w || !h) return;
+      // 全屏时画布面积暴涨，devicePixelRatio 2x 意味着实际渲染像素翻4倍，
+      // bloom 是好几趟全分辨率高斯模糊叠出来的，越大越卡——大画布把上限
+      // 降到 1.5x（像素数降到约56%），肉眼看不太出来但流畅不少；
+      // 窗口态画布本来就小，2x 不吃性能，维持原样
+      const big = w * h > 1_400_000;
+      renderer.setPixelRatio(Math.min(devicePixelRatio, big ? 1.5 : 2));
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
