@@ -23,9 +23,9 @@ cp server.js xlsx-lite.js reviews-nlp.js reviews-ingest.js \
    reviews-store.js preview3d-store.js report-store.js install.sh README.md \
    "$WORK/competitive-workbench/"
 
-cp index.html login.html login-scene.js core.js matrix.js compare.js reviews.js preview3d.js \
+cp index.html login.html core.js matrix.js compare.js reviews.js preview3d.js \
    preview3d-scene.js report.js admin.js users.js settings.js styles.css \
-   echarts.min.js html2canvas.min.js \
+   echarts.min.js html2canvas.min.js iqair-logo.webp \
    three.module.min.js three-orbitcontrols.js three-effectcomposer.js \
    three-renderpass.js three-unrealbloompass.js three-outputpass.js \
    three-copyshader.js three-luminosityhighpassshader.js three-maskpass.js \
@@ -34,6 +34,8 @@ cp index.html login.html login-scene.js core.js matrix.js compare.js reviews.js 
 
 # 竞品3D预览已从 ECharts-GL 迁到 Three.js，旧库从包里移除（echarts.min.js 保留，评论页在用）
 rm -f "$WORK/competitive-workbench/public/echarts-gl.min.js"
+# 登录页背景已从 WebGL 数据核心换回光丝波纹 Canvas2D 版，不再需要这个模块
+rm -f "$WORK/competitive-workbench/public/login-scene.js"
 
 tar czf competitive-workbench.tar.gz -C "$WORK" competitive-workbench
 echo "已重新打包 competitive-workbench.tar.gz"

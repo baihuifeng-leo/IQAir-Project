@@ -9,216 +9,153 @@
 <link rel="stylesheet" href="/styles.css">
 <style>
   /* 全局样式表把 html/body 锁成 overflow:hidden（内页需要），登录页要放开 */
-  html { height: auto; min-height: 100%; overflow-y: auto; }
+  html { height: auto; min-height: 100%; }
   body {
-    overflow: visible; position: relative;
-    height: auto; min-height: 100vh; min-height: 100dvh;
-    display: grid; place-items: center; padding: 48px 20px;
+    overflow: hidden; position: relative; height: 100vh; min-height: 100vh;
     background:
-      radial-gradient(1100px 640px at 78% -12%, #6b98ff14, transparent 62%),
-      radial-gradient(900px 560px at 6% 108%, #4ee0c111, transparent 60%),
-      var(--bg);
+      radial-gradient(65% 80% at 24% 46%, #146070 0%, #0c4351 26%, #072e3c 45%, #051c28 65%, #030f18 85%, #030710 100%);
   }
 
-  /* ── 背景：极光色团 + 细网格 ─────────────────────────── */
-  .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-  .aurora { position: absolute; border-radius: 50%; filter: blur(70px); will-change: transform; }
-  .aurora.a1 { width: 560px; height: 560px; left: -6%; top: -18%; background: radial-gradient(circle, #4ee0c13d, transparent 68%); animation: drift1 26s ease-in-out infinite; }
-  .aurora.a2 { width: 680px; height: 680px; right: -8%; top: 24%; background: radial-gradient(circle, #6b98ff33, transparent 68%); filter: blur(95px); animation: drift2 32s ease-in-out infinite; }
-  .aurora.a3 { width: 420px; height: 420px; left: 34%; bottom: -20%; background: radial-gradient(circle, #4ee0c126, transparent 68%); animation: drift1 22s ease-in-out -8s infinite reverse; }
-  @keyframes drift1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(44px,28px) scale(1.07); } }
-  @keyframes drift2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-52px,22px) scale(0.94); } }
+  #wave-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+  .vignette {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background: radial-gradient(120% 100% at 50% 50%, transparent 45%, #030710b0 100%);
+  }
 
-  .grid-lines {
-    position: absolute; inset: 0; opacity: 0.5;
-    background:
-      linear-gradient(90deg, #8494ae0a 1px, transparent 1px),
-      linear-gradient(180deg, #8494ae0a 1px, transparent 1px);
-    background-size: 44px 44px;
-    -webkit-mask-image: radial-gradient(720px 560px at 50% 42%, #000 0%, transparent 78%);
-    mask-image: radial-gradient(720px 560px at 50% 42%, #000 0%, transparent 78%);
+  /* ── 左上角品牌徽标 ── */
+  .brand-badge {
+    position: fixed; top: 26px; left: 28px; z-index: 3;
+    animation: rise 0.5s var(--ease) both;
   }
-  .bg-glow {
-    position: fixed; inset: 0; z-index: 2; pointer-events: none;
-    background: radial-gradient(480px 480px at var(--mx, 50%) var(--my, 40%), #4ee0c110, transparent 62%);
-  }
-  #bg-webgl {
-    position: fixed; inset: 0; z-index: 1; width: 100%; height: 100%;
-    pointer-events: none; opacity: 0; transition: opacity 1.1s var(--ease);
-  }
-  #bg-webgl.ready { opacity: 1; }
+  .brand-badge img { display: block; height: 34px; width: auto; filter: drop-shadow(0 2px 8px #000a); }
 
-  /* ── 舞台：左品牌 / 右卡片,窄屏纵向堆叠 ─────────────── */
+  /* ── 主体：标题 + 卡片，整体偏右悬浮居中 ── */
   .stage {
-    position: relative; z-index: 3;
-    display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 400px);
-    gap: clamp(36px, 6vw, 96px); align-items: center;
-    width: 100%; max-width: 1020px;
+    position: relative; z-index: 2; min-height: 100vh;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 24px clamp(32px, 15vw, 220px) 24px 28px;
   }
+  .stack { width: min(360px, 100%); }
 
-  .intro { animation: rise 0.6s var(--ease) both; }
-  .intro .brandmark { margin-bottom: 26px; }
-  .intro .brandmark .mark { width: 32px; height: 27px; }
-  .intro h1 {
-    margin: 0; font-family: var(--f-display); font-weight: 700; line-height: 1.08;
-    font-size: clamp(34px, 4.6vw, 52px); letter-spacing: 1px;
-    background: linear-gradient(120deg, #f2fffc, #4ee0c1 52%, #6b98ff);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 0 26px #4ee0c12e);
-  }
-  .intro h1 span { display: block; }
-  .intro .tagline { margin: 16px 0 0; color: var(--dim); font-size: 14.5px; line-height: 1.8; max-width: 40ch; }
+  .hero-h { margin: 0 0 22px; animation: rise 0.55s var(--ease) both; }
+  .hero-h h1 { margin: 0; font-family: var(--f-display); line-height: 1.16; }
+  .hero-h .l1 { display: block; font-size: clamp(24px, 2.7vw, 32px); font-weight: 700; color: #fbfffe; text-shadow: 0 0 30px #4ee0c130; }
+  .hero-h .l2 { display: block; margin-top: 4px; font-size: clamp(15px, 1.5vw, 18px); font-weight: 500; letter-spacing: 1px; color: #9fb0c2; }
 
-  .feats { margin: 30px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 13px; }
-  .feats li { display: flex; align-items: center; gap: 11px; color: var(--dim); font-size: 13.5px; }
-  .feats svg { flex: 0 0 30px; width: 30px; height: 30px; padding: 6px; border-radius: 9px; background: #ffffff08; border: 1px solid var(--line-soft); }
-  .feats b { color: var(--text); font-weight: 600; margin-right: 6px; }
-
-  /* ── 登录卡片 ────────────────────────────────────────── */
+  .gate-wrap { perspective: 1000px; animation: rise 0.6s var(--ease) both; }
   .gate {
-    position: relative; width: 100%;
-    background: linear-gradient(180deg, #0f1728e6, #0a111fe6);
-    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    border: 1px solid var(--line); border-radius: 20px;
-    padding: 32px 30px 26px;
-    box-shadow: 0 40px 90px -32px #000, inset 0 1px 0 #ffffff0d;
-    animation: rise 0.6s var(--ease) 0.08s both;
-    transform: perspective(1000px) rotateX(var(--tiltx, 0deg)) rotateY(var(--tilty, 0deg));
-    transition: transform 0.5s var(--ease), box-shadow 0.5s var(--ease);
-    will-change: transform;
+    background: linear-gradient(165deg, #163444 0%, #0d2836 60%, rgba(11,28,38,0.42) 100%);
+    background-color: rgba(16, 40, 52, 0.32);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 16px;
+    padding: 22px 24px 20px;
+    box-shadow: 0 30px 70px -25px #000c, inset 0 1px 0 rgba(255,255,255,0.1);
+    transform: rotateX(0deg) rotateY(0deg);
+    transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease);
+    transform-style: preserve-3d; will-change: transform;
   }
-  /* 顶缘一道渐变高光,取代大面积发光 */
-  .gate::before {
-    content: ""; position: absolute; top: -1px; left: 24px; right: 24px; height: 1px;
-    background: linear-gradient(90deg, transparent, #4ee0c1aa, #6b98ffaa, transparent);
-    z-index: 1;
-  }
-  /* 跟随光标的镜面高光——玻璃质感的关键：不是固定光泽，而是随视角"活"的反光 */
-  .gate::after {
-    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-    background: radial-gradient(340px 260px at var(--sx, 50%) var(--sy, 20%), #ffffff14, transparent 62%);
-    opacity: 0; transition: opacity 0.4s var(--ease);
-  }
-  .gate:hover::after { opacity: 1; }
-  .gate h2 { margin: 0 0 6px; font-family: var(--f-display); font-size: 20px; letter-spacing: 0.5px; }
-  .gate .sub { color: var(--dimmer); font-size: 12.5px; margin: 0 0 24px; line-height: 1.7; }
-
-  .field { margin-bottom: 14px; }
-  .field label {
-    display: block; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
-    color: var(--dim); margin-bottom: 7px; font-weight: 700;
-  }
-  .field .inwrap { position: relative; }
-  .field .inwrap svg {
-    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
-    width: 16px; height: 16px; color: var(--dimmer); pointer-events: none;
-    transition: color var(--fast);
-  }
+  .field { margin-bottom: 15px; }
+  .field label { display: block; font-size: 12.5px; color: #cfd8e4; margin-bottom: 7px; }
   .field input {
-    width: 100%; background: var(--well); border: 1px solid var(--line); color: var(--text);
-    padding: 12px 12px 12px 36px; border-radius: 10px;
-    transition: border-color var(--fast), box-shadow var(--fast);
+    width: 100%; background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.22); color: #fff;
+    padding: 10px 13px; border-radius: 8px; transition: border-color var(--fast), box-shadow var(--fast), background var(--fast);
   }
-  .field input:focus { outline: none; border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-dim); }
-  .field .inwrap:focus-within svg { color: var(--mint); }
-  #p { font-family: var(--f-mono); letter-spacing: 9px; font-size: 17px; }
-  #p::placeholder { letter-spacing: 6px; color: var(--dimmer); }
+  .field input::placeholder { color: #8fa0b3; }
+  .field input:focus { outline: none; background: rgba(255,255,255,0.08); border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-dim), 0 0 20px -4px #4ee0c188; }
+  #p { font-family: var(--f-mono); letter-spacing: 8px; font-size: 16px; }
+  #p::placeholder { letter-spacing: 6px; }
 
   .gate .solid {
-    margin-top: 20px; padding: 12px; font-size: 15px; border-radius: 10px;
+    width: 100%; margin-top: 6px; padding: 12px; position: relative; overflow: hidden;
+    border-radius: 999px; cursor: pointer;
+    border: 1.5px solid rgba(200,248,255,0.95);
+    font-family: var(--f-body); font-size: 14.5px; font-weight: 700; color: #0b2230;
+    background: linear-gradient(90deg, #1f93c9 0%, #a9edff 22%, #eafeff 50%, #a9edff 78%, #1f93c9 100%);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.15),
+      0 0 22px 2px rgba(80,222,255,0.55),
+      0 6px 16px -6px rgba(0,0,0,0.45),
+      inset 0 9px 12px -7px rgba(255,255,255,0.9),
+      inset 0 -8px 10px -6px rgba(15,110,150,0.4);
     transition: transform 0.24s var(--ease), box-shadow 0.24s var(--ease), filter 0.24s var(--ease);
   }
-  .gate .solid:hover { transform: translateY(-1px); box-shadow: 0 10px 26px -8px #17b79c; filter: brightness(1.1); }
-  .gate .solid:active { transform: none; }
-  .gate .solid:disabled { transform: none; filter: none; cursor: wait; opacity: 0.85; }
+  .gate .solid:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.2),
+      0 0 30px 4px rgba(80,222,255,0.7),
+      0 8px 20px -6px rgba(0,0,0,0.5),
+      inset 0 9px 12px -7px rgba(255,255,255,0.95),
+      inset 0 -8px 10px -6px rgba(15,110,150,0.4);
+  }
+  .gate .solid:active { transform: translateY(0); }
+  .gate .solid:disabled { cursor: wait; filter: brightness(0.9); }
 
   .err {
-    margin: 14px 0 0; padding: 10px 12px; border-radius: 9px; font-size: 12.5px;
-    background: #2a121480; color: #ff9a9a; border: 1px solid #ff616133; border-left: 3px solid #ff6161;
+    margin: 12px 0 0; padding: 9px 12px; border-radius: 8px; font-size: 12.5px;
+    background: #2a1214cc; color: #ff9a9a; border-left: 3px solid #ff6161;
     animation: shake 0.32s var(--ease);
   }
   @keyframes shake { 25% { transform: translateX(-5px); } 60% { transform: translateX(4px); } 100% { transform: none; } }
 
-  .foot {
-    margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line-soft);
-    font-size: 11.5px; color: var(--dimmer); line-height: 1.8;
-  }
+  .row-rf { margin-top: 14px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #b7c2d1; }
+  .row-rf .remember { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .row-rf .remember input { width: 13px; height: 13px; accent-color: var(--mint); cursor: pointer; }
+  .row-rf .forgot { color: #b7c2d1; background: none; border: none; padding: 0; font-size: 12px; cursor: pointer; text-decoration: none; }
+  .row-rf .forgot:hover { color: var(--mint); text-decoration: underline; }
+  .forgot-note { margin-top: 8px; font-size: 11.5px; color: var(--dimmer); text-align: right; }
 
-  @media (max-width: 900px) {
-    .stage { grid-template-columns: minmax(0, 420px); justify-content: center; gap: 34px; }
-    .intro { text-align: center; }
-    .intro .brandmark { justify-content: center; }
-    .intro .tagline { margin-inline: auto; }
-    .feats { display: none; } /* 手机上直奔登录,少滚一屏 */
+  @media (max-width: 760px) {
+    body { overflow-y: auto; height: auto; }
+    .stage { justify-content: center; padding: 100px 20px 40px; align-items: flex-start; }
+    .hero-h .l1, .hero-h .l2 { text-align: center; }
+    .stack { width: min(380px, 100%); }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .aurora { animation: none; }
+    .gate { transition: none; }
   }
 </style>
 </head>
 <body>
-<div class="bg" aria-hidden="true">
-  <div class="aurora a1"></div>
-  <div class="aurora a2"></div>
-  <div class="aurora a3"></div>
-  <div class="grid-lines"></div>
+<canvas id="wave-canvas"></canvas>
+<div class="vignette"></div>
+
+<div class="brand-badge">
+  <img src="/iqair-logo.webp" alt="IQAir">
 </div>
-<canvas id="bg-webgl" aria-hidden="true"></canvas>
-<div class="bg-glow" id="bg-glow" aria-hidden="true"></div>
 
-<main class="stage">
-  <section class="intro">
-    <div class="brandmark">
-      <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
-      <div class="brandtext">
-        <strong>电商工作台</strong>
-        <em>E-commerce Workbench</em>
-      </div>
-    </div>
-    <h1><span>IQAir</span><span>电商管理系统</span></h1>
-    <p class="tagline">团队共用的竞品价格带沙盘、参数对位与口碑拆解。多人实时协同,改动自动合并、全程留痕。</p>
-    <ul class="feats">
-      <li>
-        <svg viewBox="0 0 24 24" fill="none" stroke="#4ee0c1" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>
-        <span><b>价格带沙盘</b>品牌 × 价格带的产品布局,一眼看清空位</span>
-      </li>
-      <li>
-        <svg viewBox="0 0 24 24" fill="none" stroke="#6b98ff" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 3H4v18h5M15 3h5v18h-5M9 12h6"/></svg>
-        <span><b>竞品对位</b>参数逐项对齐,优劣势高亮标注</span>
-      </li>
-      <li>
-        <svg viewBox="0 0 24 24" fill="none" stroke="#4ee0c1" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.2 2.2M16.2 16.2l2.2 2.2M18.4 5.6l-2.2 2.2M7.8 16.2l-2.2 2.2"/><circle cx="12" cy="12" r="3.2"/></svg>
-        <span><b>评论风向标</b>竞品差评关键词自动拆解溯源</span>
-      </li>
-    </ul>
-  </section>
-
-  <section class="gate" aria-label="登录">
-    <h2>登录</h2>
-    <p class="sub">用你的用户名和 6 位 PIN 进入工作台。</p>
-
-    <div class="field">
-      <label for="u">用户名</label>
-      <div class="inwrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.6-3.2 4.6-5 8-5s6.4 1.8 8 5"/></svg>
-        <input id="u" type="text" autocomplete="username" autofocus spellcheck="false">
-      </div>
-    </div>
-    <div class="field">
-      <label for="p">PIN · 6 位数字</label>
-      <div class="inwrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-        <input id="p" type="password" inputmode="numeric" autocomplete="current-password" maxlength="6" placeholder="······">
-      </div>
+<div class="stage">
+  <div class="stack">
+    <div class="hero-h">
+      <h1><span class="l1">IQAir 电商工作台</span><span class="l2">E-Commerce Workbench</span></h1>
     </div>
 
-    <button class="solid" id="go">进入工作台</button>
-    <div id="err" role="alert" hidden></div>
+    <div class="gate-wrap">
+      <div class="gate">
+        <div class="field">
+          <label for="u">用户名</label>
+          <input id="u" type="text" autocomplete="username" autofocus spellcheck="false" placeholder="输入用户名">
+        </div>
+        <div class="field">
+          <label for="p">PIN · 6 位数字</label>
+          <input id="p" type="password" inputmode="numeric" autocomplete="current-password" maxlength="6" placeholder="······">
+        </div>
 
-    <p class="foot">登录后这台设备 30 天免登录。忘了 PIN 就找管理员重置。</p>
-  </section>
-</main>
+        <button class="solid" id="go">Sign In</button>
+        <div id="err" hidden></div>
+
+        <div class="row-rf">
+          <label class="remember"><input type="checkbox" id="remember" checked><span>记住我</span></label>
+          <button type="button" class="forgot" id="forgot-btn">忘记密码？</button>
+        </div>
+        <p class="forgot-note" id="forgot-note" hidden>PIN 忘了找管理员重置，这台设备登录后 30 天内免登录。</p>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
   const $ = (s) => document.querySelector(s);
@@ -262,42 +199,167 @@
       fail('连不上服务。到服务器上看一眼：systemctl status workbench');
     }
     btn.disabled = false;
-    btn.textContent = '进入工作台';
+    btn.textContent = 'Sign In';
     pinBox.select();
   }
 
   $('#go').onclick = submit;
   document.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
 
-  // ── 光标跟随光晕（触屏/降级动画时自动没有 pointermove,天然关闭）──
-  const glow = $('#bg-glow');
-  window.addEventListener('pointermove', (e) => {
-    glow.style.setProperty('--mx', e.clientX + 'px');
-    glow.style.setProperty('--my', e.clientY + 'px');
-  });
+  $('#forgot-btn').onclick = () => { $('#forgot-note').hidden = false; };
 
-  // ── 登录卡片：随光标做轻微 3D 倾斜 + 镜面高光跟随，触屏/降级动画下自动不生效 ──
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const gate = $('.gate');
-  if (gate && !reduceMotion && matchMedia('(hover: hover)').matches) {
-    gate.addEventListener('pointermove', (e) => {
-      const r = gate.getBoundingClientRect();
-      const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
-      gate.style.setProperty('--tiltx', ((0.5 - py) * 5).toFixed(2) + 'deg');
-      gate.style.setProperty('--tilty', ((px - 0.5) * 6).toFixed(2) + 'deg');
-      gate.style.setProperty('--sx', (px * 100).toFixed(1) + '%');
-      gate.style.setProperty('--sy', (py * 100).toFixed(1) + '%');
+  // ── 登录卡片 3D 倾斜微交互 ──
+  (function () {
+    if (!window.matchMedia('(pointer: fine)').matches) return; // 触屏不做倾斜
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const wrap = $('.gate-wrap');
+    const card = $('.gate');
+    const MAX_TILT = 5;
+    wrap.addEventListener('pointermove', (e) => {
+      const r = wrap.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width;
+      const py = (e.clientY - r.top) / r.height;
+      const ry = (px - 0.5) * MAX_TILT * 2;
+      const rx = (0.5 - py) * MAX_TILT * 2;
+      card.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
     });
-    gate.addEventListener('pointerleave', () => {
-      gate.style.setProperty('--tiltx', '0deg');
-      gate.style.setProperty('--tilty', '0deg');
+    wrap.addEventListener('pointerleave', () => {
+      card.style.transform = 'rotateX(0deg) rotateY(0deg)';
     });
-  }
+  })();
 
-  // WebGL 背景加载好第一帧才淡入，避免白屏/黑屏闪一下
-  const webglCanvas = $('#bg-webgl');
-  requestAnimationFrame(() => requestAnimationFrame(() => webglCanvas.classList.add('ready')));
+  // ── 全屏背景：光丝编织波纹 + 电路方框装饰 + 粒子 ──
+  (function () {
+    const canvas = $('#wave-canvas');
+    const ctx = canvas.getContext('2d');
+    let w, h, dpr, strands, sparks, boxes;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const MINT = '110,235,220';
+    const CYAN = '90,210,235';
+    const BLUE = '120,170,255';
+    const COLORS = [MINT, CYAN, MINT, BLUE, CYAN, MINT, CYAN];
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = window.innerWidth; h = window.innerHeight;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      strands = COLORS.map((color, i) => ({
+        color,
+        baseY: h * (0.14 + (i / COLORS.length) * 0.62),
+        amp: h * (0.07 + Math.random() * 0.08),
+        amp2: h * (0.03 + Math.random() * 0.035),
+        freq: 2.2 + Math.random() * 1.3,
+        freq2: 4.5 + Math.random() * 2.5,
+        speed: 0.12 + Math.random() * 0.1,
+        phase: Math.random() * Math.PI * 2,
+        width: 1.3 + Math.random() * 1.8,
+      }));
+
+      const count = Math.round(Math.min(140, Math.max(70, (w * h) / 13000)));
+      sparks = Array.from({ length: count }, () => ({
+        u: Math.random(),               // 沿 x 方向的相对位置 0..1
+        strandIdx: Math.floor(Math.random() * strands.length),
+        off: (Math.random() - 0.5) * 10,
+        z: Math.random(),
+        vx: 0.05 + Math.random() * 0.09,
+        phase: Math.random() * Math.PI * 2,
+        size: 0.8 + Math.random() * 2.2,
+      }));
+
+      boxes = Array.from({ length: 5 }, () => ({
+        x: w * (0.02 + Math.random() * 0.22),
+        y: h * (0.55 + Math.random() * 0.35),
+        size: 30 + Math.random() * 70,
+        rot: (Math.random() - 0.5) * 0.5,
+        alpha: 0.05 + Math.random() * 0.08,
+      }));
+    }
+
+    // 淡出包络：左 60% 明亮，右侧逐渐减弱（贴近卡片处几乎消失，卡片外沿又微微透出）
+    function envelope(xNorm) {
+      if (xNorm < 0.58) return 1;
+      const t = (xNorm - 0.58) / 0.42;
+      return Math.max(0.08, 1 - t * 0.85);
+    }
+
+    function strandY(s, x, t) {
+      return s.baseY
+        + Math.sin(x / (w / s.freq) + t * s.speed + s.phase) * s.amp
+        + Math.sin(x / (w / s.freq2) - t * s.speed * 0.7) * s.amp2;
+    }
+
+    function drawStrands(t) {
+      for (const s of strands) {
+        ctx.beginPath();
+        for (let x = 0; x <= w; x += 7) {
+          const y = strandY(s, x, t);
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        const grad = ctx.createLinearGradient(0, 0, w, 0);
+        const a = 0.8;
+        grad.addColorStop(0, `rgba(${s.color},${a * envelope(0)})`);
+        grad.addColorStop(0.58, `rgba(${s.color},${a * envelope(0.58)})`);
+        grad.addColorStop(1, `rgba(${s.color},${a * envelope(1)})`);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = s.width;
+        ctx.shadowColor = `rgba(${s.color},1)`;
+        ctx.shadowBlur = 16;
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    function drawBoxes() {
+      for (const b of boxes) {
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(b.rot);
+        ctx.strokeStyle = `rgba(150,210,220,${b.alpha})`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-b.size / 2, -b.size / 2, b.size, b.size);
+        ctx.restore();
+      }
+    }
+
+    function drawSparks(t) {
+      for (const p of sparks) {
+        p.u += p.vx * 0.0016 * (0.4 + p.z);
+        if (p.u > 1) p.u -= 1;
+        const x = p.u * w;
+        const s = strands[p.strandIdx];
+        const y = strandY(s, x, t) + p.off;
+        const env = envelope(p.u);
+        const twinkle = 0.5 + 0.5 * Math.sin(t * 2.6 + p.phase);
+        const alpha = (0.3 + p.z * 0.5) * twinkle * env;
+        if (alpha <= 0.02) continue;
+        ctx.beginPath();
+        ctx.arc(x, y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${p.z > 0.6 ? MINT : CYAN},${alpha})`;
+        ctx.shadowColor = `rgba(${MINT},0.9)`;
+        ctx.shadowBlur = 6;
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    let t = 0;
+    function step() {
+      ctx.clearRect(0, 0, w, h);
+      drawBoxes();
+      drawStrands(t);
+      drawSparks(t);
+      t += 0.012;
+      if (!reduceMotion) requestAnimationFrame(step);
+    }
+
+    resize();
+    window.addEventListener('resize', resize);
+    if (reduceMotion) { drawBoxes(); drawStrands(0); drawSparks(0); } else { step(); }
+  })();
 </script>
-<script type="module" src="/login-scene.js"></script>
 </body>
 </html>
