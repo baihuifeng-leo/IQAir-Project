@@ -301,7 +301,14 @@ function parseCookies(h = '') {
   return out;
 }
 
-const OPEN = new Set(['/login', '/login.html', '/styles.css', '/api/login', '/api/health', '/robots.txt', '/favicon.ico']);
+const OPEN = new Set([
+  '/login', '/login.html', '/styles.css', '/api/login', '/api/health', '/robots.txt', '/favicon.ico',
+  // 登录页自带的 3D 背景（Three.js），未登录也要能加载
+  '/login-scene.js', '/three.module.min.js', '/three-orbitcontrols.js', '/three-css2drenderer.js',
+  '/three-effectcomposer.js', '/three-renderpass.js', '/three-shaderpass.js', '/three-outputpass.js',
+  '/three-unrealbloompass.js', '/three-pass.js', '/three-maskpass.js', '/three-copyshader.js',
+  '/three-luminosityhighpassshader.js', '/three-outputshader.js',
+]);
 
 /* ═══ 路由 ═══════════════════════════════════════════════ */
 const server = http.createServer(async (req, res) => {

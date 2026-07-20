@@ -23,7 +23,7 @@ cp server.js xlsx-lite.js reviews-nlp.js reviews-ingest.js \
    reviews-store.js preview3d-store.js report-store.js install.sh README.md \
    "$WORK/competitive-workbench/"
 
-cp index.html login.html core.js matrix.js compare.js reviews.js preview3d.js \
+cp index.html login.html login-scene.js core.js matrix.js compare.js reviews.js preview3d.js \
    preview3d-scene.js report.js admin.js users.js settings.js styles.css \
    echarts.min.js html2canvas.min.js \
    three.module.min.js three-orbitcontrols.js three-effectcomposer.js \
