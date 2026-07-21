@@ -1,5 +1,9 @@
 const assert = require('assert');
 const { runOcr, checkAvailable } = require('./materialcheck-ocr.js');
+const fs = require('fs');
+const fsp = fs.promises;
+const os = require('os');
+const path = require('path');
 
 let pass = 0, fail = 0;
 const t = (name, fn) => {
@@ -162,6 +166,120 @@ async function run() {
     const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX', productA, products);
     assert.deepStrictEqual(r.missingKeywords, []);
     assert.deepStrictEqual(r.crossedKeywords, []);
+  });
+
+  // ── materialcheck-store.js ────────────────────────────
+  const { MaterialCheckStore } = require('./materialcheck-store.js');
+  const stubOcr = (text) => async () => text;
+
+  async function freshStore() {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
+    const store = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
+    await store.load();
+    await store.saveProducts(
+      [
+        { id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi', '抗菌滤网认证号XXX'] },
+        { id: 'pb', name: 'GCX XE', keywords: ['GCX XE', '静音悬浮马达'] }
+      ],
+      ['7天无理由退换']
+    );
+    return store;
+  }
+
+  await tAsync('saveProducts 拒绝重复关键词并保留原有数据', async () => {
+    const store = await freshStore();
+    await assert.rejects(
+      store.saveProducts([{ id: 'pa', name: 'A', keywords: ['同一个词'] }, { id: 'pb', name: 'B', keywords: ['同一个词'] }], []),
+      /同一个词/
+    );
+    assert.strictEqual(store.products.length, 2); // 拒绝后没有把坏数据写进去
+  });
+
+  await tAsync('detectFile 文件名可判定时直接产出通过结果', async () => {
+    const store = await freshStore();
+    const result = await store.detectFile({
+      buf: Buffer.from('fake-image-bytes'), ext: '.jpg', filename: 'GC-Multi_主图.jpg',
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX 7天无理由退换')
+    });
+    assert.strictEqual(result.status, 'pass');
+    assert.strictEqual(result.productId, 'pa');
+    assert.strictEqual(result.matchMethod, 'filename');
+    assert.strictEqual(store.records.length, 1);
+  });
+
+  await tAsync('detectFile 缺词时判定不通过', async () => {
+    const store = await freshStore();
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg',
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi')
+    });
+    assert.strictEqual(result.status, 'fail');
+    assert.deepStrictEqual(result.missingKeywords, ['抗菌滤网认证号XXX']);
+  });
+
+  await tAsync('detectFile 文件名和 OCR 都无法判定时返回待人工选择，不写入历史记录', async () => {
+    const store = await freshStore();
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0001.jpg',
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('无关文字')
+    });
+    assert.strictEqual(result.needsManualPick, true);
+    assert.ok(result.pendingId);
+    assert.strictEqual(store.records.length, 0);
+  });
+
+  await tAsync('resolvePending 用人工选择的产品完成判定并写入历史', async () => {
+    const store = await freshStore();
+    const pending = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0001.jpg',
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX')
+    });
+    // 用一段两个产品都不命中的文字，强迫走人工选择路径
+    const ambiguousPending = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0002.jpg',
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('完全无关的文字')
+    });
+    const resolved = await store.resolvePending(ambiguousPending.pendingId, 'pa', 'li');
+    assert.strictEqual(resolved.matchMethod, 'manual');
+    assert.strictEqual(resolved.productId, 'pa');
+    assert.strictEqual(store.records.length, 2); // pending 本身没落库，resolvePending 后 + 上面那条 filename 判定的
+  });
+
+  await tAsync('resolvePending 对不存在的 pendingId 抛出错误', async () => {
+    const store = await freshStore();
+    await assert.rejects(store.resolvePending('mcp_不存在', 'pa', 'li'), /过期|不存在/);
+  });
+
+  await tAsync('detectFile 串词时标注来源产品，判定不通过', async () => {
+    const store = await freshStore();
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg',
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX GCX XE')
+    });
+    assert.strictEqual(result.status, 'fail');
+    assert.strictEqual(result.crossedKeywords[0].fromProductName, 'GCX XE');
+  });
+
+  await tAsync('listRecords 按产品和状态过滤，最新的排最前', async () => {
+    const store = await freshStore();
+    await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX') });
+    await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: 'GC-Multi_b.jpg', batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
+    const passOnly = store.listRecords({ productId: 'pa', status: 'pass' });
+    assert.strictEqual(passOnly.length, 1);
+    assert.strictEqual(passOnly[0].filename, 'GC-Multi_a.jpg');
+  });
+
+  await tAsync('load() 能重新读回持久化的数据', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
+    const store1 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
+    await store1.load();
+    await store1.saveProducts([{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }], []);
+    await store1.detectFile({ buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi.jpg', batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
+
+    const store2 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
+    await store2.load();
+    assert.strictEqual(store2.products.length, 1);
+    assert.strictEqual(store2.records.length, 1);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
