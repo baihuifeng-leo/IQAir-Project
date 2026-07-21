@@ -415,7 +415,7 @@ module.exports = {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd competitive-workbench && node materialcheck.test.js`
-Expected: `23 passed, 0 failed`
+Expected: `24 passed, 0 failed` (corrected from an original miscount of 23 — the task actually specifies 19 new test cases, not 18, so 5 prior + 19 = 24; confirmed by running the suite after Task 2 completed)
 
 - [ ] **Step 5: Commit**
 
@@ -743,7 +743,7 @@ module.exports = { MaterialCheckStore };
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd competitive-workbench && node materialcheck.test.js`
-Expected: `36 passed, 0 failed`
+Expected: `33 passed, 0 failed` (corrected: 24 after Task 2 + 9 new store tests in this task)
 
 - [ ] **Step 5: Commit**
 
