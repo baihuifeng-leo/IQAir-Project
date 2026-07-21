@@ -146,13 +146,6 @@
             <input type="text" id="rv-brand-name" placeholder="品牌 + 型号，如 352 Z90" spellcheck="false">
             <button class="solid" id="rv-import-btn">导入 Excel</button>
           </div>
-          <div class="rv-head-import" id="rv-import-product" hidden>
-            <select id="rv-product-select"><option value="">选择产品…</option></select>
-            <input type="text" id="rv-product-new-name" placeholder="新产品名称" spellcheck="false">
-            <button class="ghost" id="rv-product-new-btn">+ 新建</button>
-            <button class="solid" id="rv-product-import-btn" disabled>导入 Excel</button>
-            <span id="rv-product-del-slot"></span>
-          </div>
           <div class="info-wrap" id="rv-info-wrap">
             <button class="info-btn" id="rv-info-btn" type="button" aria-haspopup="true" aria-label="使用说明">ⓘ</button>
             <div class="info-panel" id="rv-info-panel" hidden>
@@ -168,6 +161,13 @@
         </div>
       </div>
       <div class="rv-scroll">
+        <div class="rv-head-import rv-product-bar" id="rv-import-product" hidden>
+          <select id="rv-product-select"><option value="">选择产品…</option></select>
+          <input type="text" id="rv-product-new-name" placeholder="新产品名称" spellcheck="false">
+          <button class="ghost" id="rv-product-new-btn">+ 新建</button>
+          <button class="solid" id="rv-product-import-btn" disabled>导入 Excel</button>
+          <span id="rv-product-del-slot"></span>
+        </div>
         <div id="rv-board"><p class="rv-empty">读取中…</p></div>
       </div>
     </div>
@@ -182,7 +182,6 @@
           <p id="p3d-subtitle">价格（纵轴）× 颗粒物CADR × 甲醛CADR · 三维竞品定位</p>
         </div>
         <div class="p3d-head-controls">
-          <button class="solid" id="p3d-import-btn">导入 / 更新 Excel</button>
           <div class="menu-wrap" id="p3d-brand-wrap">
             <button class="ghost" id="p3d-brand-btn" aria-haspopup="true">品牌 ▾</button>
             <div class="menu p3d-brand-menu" id="p3d-brand-menu" hidden>
@@ -208,6 +207,7 @@
             </div>
           </div>
           <button class="ghost" id="p3d-fullscreen" title="全屏查看，内部元素自动放大">⛶ 全屏</button>
+          <button class="solid" id="p3d-import-btn">导入 / 更新 Excel</button>
         </div>
       </div>
       <div class="p3d-stats" id="p3d-stats"></div>

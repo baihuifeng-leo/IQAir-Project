@@ -464,11 +464,11 @@ const Reviews = (() => {
     const product = (data?.products || []).find((p) => p.id === activeProduct);
 
     if (!product) {
-      root.innerHTML = '<p class="rv-empty">在标题栏「选择产品」新建或选一个 IQAir 产品，开始针对这一款做深度评价分析。</p>';
+      root.innerHTML = '<p class="rv-empty">在上方「选择产品」新建或选一个 IQAir 产品，开始针对这一款做深度评价分析。</p>';
       return;
     }
     if (!product.total) {
-      root.innerHTML = `<p class="rv-empty">「${esc(product.name)}」还没有导入评论，在标题栏「导入 Excel」传一份 xlsx 进来。</p>`;
+      root.innerHTML = `<p class="rv-empty">「${esc(product.name)}」还没有导入评论，在上方「导入 Excel」传一份 xlsx 进来。</p>`;
       return;
     }
 
@@ -492,7 +492,7 @@ const Reviews = (() => {
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  /** 标题栏那个产品下拉：选项列表、导入按钮的可用状态、管理员的删除按钮，都跟着 activeProduct 走 */
+  /** 本品分析页顶部那个产品下拉：选项列表、导入按钮的可用状态、管理员的删除按钮，都跟着 activeProduct 走 */
   function syncProductPicker() {
     const sel = A.$('#rv-product-select');
     const products = data?.products || [];

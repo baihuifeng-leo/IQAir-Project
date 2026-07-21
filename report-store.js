@@ -56,13 +56,18 @@ const normDate = (v) => {
 const WEIMENG_METRICS = ['pageviews', 'visitors', 'visits', 'avgDepth', 'clickUsers', 'clicks', 'avgStay', 'bounceRate'];
 const WEIMENG_CHANNELS = ['wechat', 'miniprogram', 'app'];
 
-/** 任意日期落到当周周一，微盟数据按周记录，主键是周一 */
+/** 任意日期落到当周周一，微盟数据按周记录，主键是周一
+ *  之前用 toISOString() 转本地日期，服务器时区不是 UTC 时会跨天
+ *  （比如 UTC+9 上，周一 00:00 本地时间转出去是前一天 15:00 UTC），
+ *  存下来的 weekStart 跟前端用本地日期算出来查询的 key 对不上，
+ *  存了跟没存一样——查的时候永远找不到，表现成"填过还是空的"。
+ *  改成跟前端 ymd() 一样，全程用本地日期字段拼字符串，不经 UTC。 */
 const mondayOf = (v) => {
   const d = new Date(String(v ?? '').trim() + 'T00:00:00');
   if (isNaN(d)) return null;
   const dow = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - dow);
-  return d.toISOString().slice(0, 10);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 };
 
 /** 在所有 sheet、每个 sheet 的前 10 行里找「包含所有必需列名」的表头行 */

@@ -248,6 +248,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .solid:hover { filter: brightness(1.12); box-shadow: 0 8px 22px -8px #17b79c; }
 .solid:active { transform: translateY(1px); }
 
+/* .solid 原本是给旧侧栏画的整行按钮（width:100%、margin-top:10px 用来跟上一个
+   控件拉开一行间距，padding:10px + 继承 body 的 15.5px 字号）。评论风向标/
+   竞品3D预览/报告管理的标题行改成横排后直接复用了这个类，没重置——按钮不但
+   会被撑成几乎占满整排，字号和内边距也比同排的 .ghost/输入框/下拉大一圈，
+   横排时明显"更粗更高"。这里统一按 .ghost 的尺寸对齐，让同一行的按钮观感一致。 */
+.rv-head-import .solid,
+.p3d-head-controls .solid {
+  width: auto; margin-top: 0; padding: 7px 12px; font-size: 13.5px;
+}
+
 .menu-wrap { position: relative; }
 .menu {
   position: absolute; right: 0; top: calc(100% + 8px); width: 190px; padding: 6px;
@@ -437,7 +447,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .matrix-head #matrix-export-btn { flex: 0 0 auto; margin-top: 2px; }
 .matrix-head #matrix-export-btn[disabled] { opacity: 0.55; cursor: wait; }
 .matrix-scroll { flex: 1; overflow: auto; padding-bottom: 6px; }
-.matrix { display: grid; gap: 1px; background: var(--hair); border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; min-width: max-content; }
+/* 这里绝不能加 overflow:hidden——它会成为 .mx-corner/.mx-brand/.mx-band 这些
+   sticky 子元素"最近的非 visible 祖先"，把 sticky 参照系锁死在 .matrix 自己
+   身上（这个元素本身从不滚动），首行首列冻结直接失效。圆角改由 .mx-corner
+   自己裁一个角落，不靠外层裁切。 */
+.matrix { display: grid; gap: 1px; background: var(--hair); border: 1px solid var(--hair); border-radius: 12px; min-width: max-content; }
 /* 深色态卡片底色跟 --hair 太接近，中间的网格分隔线快糊没了——单独加深这一处 */
 [data-theme="dark"] .matrix, :root:not([data-theme]) .matrix { background: var(--hair-strong); }
 
@@ -445,10 +459,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
    分类编辑直接下沉到底部图例里，品牌/价格带的新增入口就地放在网格末尾——
    右边给表格本身腾出最大可视宽度。 */
 .matrix-head-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; margin-top: 2px; }
-.mx-head-stats { display: flex; gap: 6px; }
-.mx-head-stats .stat { padding: 6px 11px; border-radius: 8px; }
-.mx-head-stats .stat b { font-size: 14.5px; }
-.mx-head-stats .stat span { font-size: 10px; white-space: nowrap; }
+.mx-head-stats { display: flex; align-items: center; gap: 6px; }
+/* 基础 .stat 是给别处（评论风向标等）的竖排卡片调的——数字 b 单独一行、
+   label span 另起一行，两行叠起来天然比标题行里的按钮高一截。这里改横排，
+   数字和 label 同一行左右挨着，高度就跟旁边的 ⭳导出/ⓘ 按钮一样只取决于
+   一行文字 + padding，不用另外凑高度。 */
+.mx-head-stats .stat { display: flex; align-items: baseline; gap: 5px; padding: 7px 11px; border-radius: 8px; }
+/* 基础 .stat b/span 走 --mint/--dimmer——那是给弱化次要信息调的低对比度，
+   放在标题行这种一眼要看清的位置就是"深色不够白、浅色不够黑"。换成
+   --text（主文字，高对比）和 --dim（次级但可读，非 --dimmer 那档） */
+.mx-head-stats .stat b { display: inline; font-size: 13.5px; color: var(--text); }
+.mx-head-stats .stat span { font-size: 11px; white-space: nowrap; color: var(--dim); }
 
 .info-wrap { position: relative; }
 .info-btn {
@@ -466,6 +487,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .info-panel[hidden] { display: none; }
 .info-panel .rail-hint:last-child { margin-bottom: 0; }
+/* .rail-hint 的 --dim 是给旧侧栏底色调过的"静音"层级，够用但不是最高对比度。
+   挪进浮层 .info-panel 之后被反馈"深色不够白、浅色不够黑"——这段是唯一内容，
+   没有更显眼的标题/数字需要跟它拉开层级，直接提到主文字色最清楚。 */
+.info-panel .rail-hint { color: var(--text); }
 
 /* 新增品牌列：跟表头同一行的窄列加号 */
 .mx-add-brand {
@@ -505,7 +530,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .mx-corner, .mx-brand, .mx-band, .mx-cell { background: var(--paper-card); }
 
-.mx-corner { position: sticky; left: 0; top: 0; z-index: 5; }
+.mx-corner { position: sticky; left: 0; top: 0; z-index: 5; border-top-left-radius: 11px; overflow: hidden; }
 .mx-brand {
   position: sticky; top: 0; z-index: 4;
   padding: 11px 10px; text-align: center; border-bottom: 2px solid var(--ink);
@@ -700,11 +725,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cmp-brand.is-own { cursor: default; }
 
 /* 新增品牌列 / 新增参数分组：跟价格带沙盘同一套"就地加号"，不再靠侧栏按钮。
-   加号按钮不进表头那个网格（避免多一列挤压 minmax 1fr，跟下面数据行错位），
-   就近浮在表头行右边即可。 */
-.cmp-head-wrap { display: flex; align-items: center; gap: 8px; padding: 0 1px; }
+   加号按钮不进表头那个网格（避免多一列挤压 minmax 1fr，跟下面数据行错位）。
+   之前用 flex 兄弟的做法还是会错位：.compare 是单列 grid，会把"最宽的子项"
+   撑成公共列宽再分给所有子项——headWrap 因为多了这颗按钮的宽度，就比下面
+   数据行所在的 .cmp-group 宽，数据行的 1fr 轨道会把这部分多出来的宽度也
+   摊进品牌列，跟表头对不上。改成绝对定位，彻底不参与 headWrap 的内容宽度
+   计算，只是视觉上贴在表头行右边。 */
+.cmp-head-wrap { position: relative; }
 .cmp-add-brand {
-  flex: 0 0 44px; align-self: stretch; border: 1px dashed var(--hair-strong); background: none;
+  position: absolute; top: 0; bottom: 0; left: 100%; margin-left: 8px; width: 44px;
+  border: 1px dashed var(--hair-strong); background: none;
   color: var(--ink-dim); cursor: pointer; border-radius: 12px; font-size: 20px; font-weight: 700;
   transition: all var(--fast);
 }
@@ -1232,12 +1262,6 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 /* ═══════════════════════════════════════════════════════════
    评论风向标 —— 刻意不同于沙盘和对位：暗色、发光、数据感
    ═══════════════════════════════════════════════════════════ */
-.tab-rv { position: relative; }
-.tab-rv::after {
-  content: ""; position: absolute; top: 6px; right: 8px; width: 5px; height: 5px; border-radius: 50%;
-  background: var(--blue); box-shadow: 0 0 8px var(--blue);
-}
-
 .particle-intro { will-change: opacity; }
 
 .rv-canvas {
@@ -1256,12 +1280,26 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rv-head p { margin: 5px 0 0; font-size: 11.5px; letter-spacing: 3px; text-transform: uppercase; color: var(--dimmer); }
 .rv-scroll { flex: 1; overflow-y: auto; padding: 22px 34px 60px; transition: background var(--fast), box-shadow var(--fast); }
 .rv-scroll.drop-hot { background: var(--mint-dim); box-shadow: inset 0 0 0 2px var(--mint); }
+
+/* 本品分析的产品选择/导入：这套控件只服务这一个子页，不属于全局标题栏
+   （标题栏切到本品分析时反而该清爽），所以贴着这个子页自己的内容顶部放，
+   而不是塞进 .rv-head-tools 跟竞品对比的控件挤在一起。 */
+.rv-product-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 16px; margin-bottom: 18px; border-radius: 12px;
+  background: var(--overlay-weak); border: 1px solid var(--line-soft);
+}
 .rv-empty { color: var(--dimmer); padding: 60px 0; text-align: center; }
 
 /* 评论风向标/3D预览/报告管理去掉左侧工作台后，导入等操作都收进标题行这一排 */
 .rv-head-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
 .rv-head-tools .lang-switch { width: 168px; margin-bottom: 0; }
 .rv-head-import { display: flex; align-items: center; gap: 6px; }
+/* 光有 JS 设置的 hidden 属性不够——UA 样式表的 [hidden]{display:none} 优先级
+   比这条普通 class 选择器低，作者样式总会赢，于是 JS 把某套控件 hidden=true
+   之后它其实还是 display:flex 照样显示（评论风向标切子页/报告管理切公共
+   报告时按钮"关不掉"就是栽在这）。显式钉住 [hidden] 兜底。 */
+.rv-head-import[hidden] { display: none; }
 .rv-head-import input[type="text"] {
   width: 150px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
   padding: 7px 10px; border-radius: 8px; font-size: 12.5px;
@@ -1572,6 +1610,15 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 }
 .rpt-page-switch button.on { background: var(--mint-dim); color: var(--mint); }
 .rpt-page-switch button:not(.on):hover { color: var(--text); }
+/* .rpt-page-switch 的 margin-bottom:20px 是给独立页面里的分段控件（下面还跟着
+   内容）留的间距。评论风向标标题行的「竞品对比/本品分析」切换、3D预览标题行的
+   「气泡口径」切换都借用了这个类塞进横排的 flex 工具条里——那 20px 底边距会被
+   align-items:center 一起算进居中范围，把按钮往上顶偏，跟同排的输入框/图标/
+   按钮对不齐。这两处工具条内用不到这段间距，清零。 */
+.rv-head-tools .rpt-page-switch,
+.p3d-head-controls .rpt-page-switch {
+  margin-bottom: 0;
+}
 
 .rpt-sec-first { margin-top: 6px; }
 .rpt-sec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
@@ -1592,7 +1639,11 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 }
 
 .rpt-trend-wrap { position: relative; height: 400px; margin-top: 14px; }
-.rpt-trend-chart { width: 100%; height: 100%; }
+/* 这个图表盒子借用了 .p3d-chart 的布局类，但不能借它的背景色——.p3d-chart 的
+   background:var(--p3d-bg) 是给"整体钉死深色"的 3D 预览用的固定深色值，不
+   跟主题切换。这里单独覆盖成跟随主题的 --paper-card，否则浅色模式下这块图
+   表背景还是深色。（跟 .p3d-chart 同优先级，源码顺序在后面即可覆盖。） */
+.rpt-trend-chart { width: 100%; height: 100%; background: var(--paper-card); }
 .rpt-trend-wrap .rv-empty { padding-top: 140px; }
 
 .rpt-subhead { margin: 18px 0 0; font-size: 12px; font-weight: 700; color: var(--dim); letter-spacing: 0.3px; }

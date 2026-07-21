@@ -593,7 +593,9 @@ const Report = (() => {
     wireDrop('#rpt-personal-view', '#rpt-import-file');
     A.wireInfoPanel('#rpt-info-wrap', '#rpt-info-btn', '#rpt-info-panel');
 
-    A.$('#rpt-weimeng-btn').onclick = () => openWeimengForm();
+    // 标题栏这颗按钮固定填「当周」，不跟随下面选择器正在看的历史周——不然浏览完
+    // 某个旧周再点这里，数据会填错周，当周那格反而一直空着。
+    A.$('#rpt-weimeng-btn').onclick = () => openWeimengForm(todayStr());
     A.$('#rpt-wm-edit-btn').onclick = () => openWeimengForm(A.$('#rpt-wm-week-select').value);
     A.$('#rpt-wm-week-select').onchange = (e) => { wmSelectedWeek = e.target.value; renderWeimeng(); };
     A.$('#rpt-wm-close').onclick = closeWeimengForm;

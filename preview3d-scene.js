@@ -120,13 +120,13 @@ function create(container) {
   controls.maxDistance = 420;
 
   // 自动旋转的三层状态：用户开关（wantRotate）、交互临时接管（拖动/悬停）、
-  // 静置 3 秒恢复——恢复的前提永远是用户开关是开的
+  // 静置 1 秒恢复——恢复的前提永远是用户开关是开的
   let wantRotate = false;
   let idleTimer = null;
   const pauseRotate = () => { controls.autoRotate = false; clearTimeout(idleTimer); };
   const resumeSoon = () => {
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => { controls.autoRotate = wantRotate; }, 3000);
+    idleTimer = setTimeout(() => { controls.autoRotate = wantRotate; }, 1000);
   };
   controls.addEventListener('start', pauseRotate);
   controls.addEventListener('end', resumeSoon);
