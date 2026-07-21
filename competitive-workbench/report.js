@@ -48,6 +48,9 @@ const Report = (() => {
     ['clickVisitors', '点击人数', 'sum', 'count'],
     ['payAmount', '引导支付金额', 'sum', 'money']
   ];
+  // 12 项里最看重的 3 个口径——放映模式里单独加强调样式，避免 12 张卡
+  // 长得一样，会场里得逐张读完才知道该看哪个
+  const FEATURED_METRICS = new Set(['pageviews', 'visitors', 'payAmount']);
 
   /* ── 微盟数据（公众号/小程序/APP）：手动填表，按周环比 ── */
   const WM_METRICS = [
@@ -89,6 +92,22 @@ const Report = (() => {
   const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   const todayStr = () => ymd(new Date());
 
+  /** 把一个周一日期换算成"第几季度第几周"（QxWx，如 Q3W2＝第三季度第二周）——
+   *  周报口头汇报习惯按季度数周，不按 ISO-8601 的"年度第几周"（那套按周四
+   *  落在哪年分年，日常沟通没人这么读）。季度按自然月分（Q1=1-3月...），
+   *  季度内第 1 周＝季度首月 1 号所在自然周（周一起点），此后按周累加。 */
+  function quarterWeekLabel(weekMonday) {
+    const d = new Date(String(weekMonday || '').trim() + 'T00:00:00');
+    if (isNaN(d)) return '';
+    const q = Math.floor(d.getMonth() / 3);
+    const qStart = new Date(d.getFullYear(), q * 3, 1);
+    const qStartDow = (qStart.getDay() + 6) % 7;
+    const qStartMonday = new Date(qStart);
+    qStartMonday.setDate(qStart.getDate() - qStartDow);
+    const week = Math.round((d - qStartMonday) / (7 * 86400000)) + 1;
+    return `Q${q + 1}W${week}`;
+  }
+
   /** 周一为一周的起点，offset=0 是本周，-1 是上周 */
   function isoWeekRange(offset) {
     const now = new Date();
@@ -116,6 +135,8 @@ const Report = (() => {
     else if (mode === 'thisYear') { rangeStart = new Date().getFullYear() + '-01-01'; rangeEnd = null; granularity = 'week'; }
     updateRangeNote();
     renderTrend();
+    renderShopWeekCompare();
+    renderCompare();
   }
 
   function applyCustomRange() {
@@ -125,6 +146,31 @@ const Report = (() => {
     granularity = autoGranularity(rangeStart, rangeEnd);
     updateRangeNote();
     renderTrend();
+    renderShopWeekCompare();
+    renderCompare();
+  }
+
+  /** 某个周一日期对应的 [周一, 周日]——跟 isoWeekRange 同形状，方便复用 */
+  function weekRangeOf(monday) {
+    const d = new Date(monday + 'T00:00:00');
+    const sun = new Date(d);
+    sun.setDate(d.getDate() + 6);
+    return [monday, ymd(sun)];
+  }
+
+  /** 「更多指标」「浏览量/访客数」这两组对比卡当前应该看哪两周——
+   *  跟着标题栏的时间范围筛选联动：选"上周"就看上周 vs 上上周，选"本周"
+   *  就看本周 vs 上周，自定义范围就看范围终点所在周 vs 再往前一周；
+   *  只有停在默认的「本年」档位时才保留原来的安全默认——两个已经过完
+   *  的整周，不会被本周还没走完拉低。 */
+  function activeWeekPair() {
+    if (rangeMode === 'lastWeek') return [isoWeekRange(-1), isoWeekRange(-2)];
+    if (rangeMode === 'thisWeek') return [isoWeekRange(0), isoWeekRange(-1)];
+    if (rangeMode === 'custom' && rangeStart) {
+      const curMonday = weekMonday(rangeEnd || todayStr());
+      return [weekRangeOf(curMonday), weekRangeOf(weekBefore(curMonday))];
+    }
+    return [isoWeekRange(-1), isoWeekRange(-2)];
   }
 
   const GRANULARITY_LABEL = { day: '日', week: '周', month: '月' };
@@ -245,8 +291,8 @@ const Report = (() => {
         <div class="rpt-cmp-mark" style="left:${max ? (last / max) * 100 : 0}%"></div>
       </div>
       <div class="rpt-cmp-foot">
-        <span><b></b> ${curLabel}</span>
-        <span class="dim">${lastLabel} <b></b></span>
+        <span><b></b></span>
+        <span class="dim"><b></b></span>
       </div>`;
     card.querySelector('.rpt-cmp-label').textContent = label;
     card.querySelector('.rpt-cmp-delta').textContent = deltaTxt(delta);
@@ -256,45 +302,74 @@ const Report = (() => {
     return card;
   }
 
-  /** 店铺整体：上周 vs 上上周——两个都是过完的整周，不会被"本周还没过完"拉低 */
+  /** 店铺整体：跟标题栏时间范围筛选联动的两周对比，见 activeWeekPair() */
   function renderShopWeekCompare() {
     const box = A.$('#rpt-shop-compare');
+    const note = A.$('#rpt-shop-compare-note');
     box.innerHTML = '';
     const daily = data?.daily || [];
+
+    const [[lastStart, lastEnd], [prevStart, prevEnd]] = activeWeekPair();
+    const lastLabel = quarterWeekLabel(lastStart), prevLabel = quarterWeekLabel(prevStart);
+    if (note) note.textContent = `${lastLabel} vs ${prevLabel} · 两周环比`;
     if (!daily.length) return;
 
-    const [lastStart, lastEnd] = isoWeekRange(-1);
-    const [prevStart, prevEnd] = isoWeekRange(-2);
     const inWeek = (r, s, e) => r.date >= s && r.date <= e;
     const lastRows = daily.filter((r) => inWeek(r, lastStart, lastEnd));
     const prevRows = daily.filter((r) => inWeek(r, prevStart, prevEnd));
 
     if (!lastRows.length && !prevRows.length) {
-      box.innerHTML = '<p class="kw-empty">上周和上上周都还没有数据。</p>';
+      box.innerHTML = `<p class="kw-empty">${lastLabel} 和 ${prevLabel} 都还没有数据。</p>`;
       return;
     }
 
     const sum = (rows, field) => rows.reduce((s, r) => s + (r[field] || 0), 0);
     const grid = document.createElement('div');
     grid.className = 'rpt-cmp-grid';
-    grid.appendChild(buildCompareCard('浏览量', sum(lastRows, 'shopPageviews'), sum(prevRows, 'shopPageviews'), 'count', '上周', '上上周'));
-    grid.appendChild(buildCompareCard('访客数', sum(lastRows, 'shopVisitors'), sum(prevRows, 'shopVisitors'), 'count', '上周', '上上周'));
+    grid.appendChild(buildCompareCard('浏览量', sum(lastRows, 'shopPageviews'), sum(prevRows, 'shopPageviews'), 'count', lastLabel, prevLabel));
+    grid.appendChild(buildCompareCard('访客数', sum(lastRows, 'shopVisitors'), sum(prevRows, 'shopVisitors'), 'count', lastLabel, prevLabel));
     box.appendChild(grid);
   }
 
-  /* ── 生意参谋指标（首页）：上周 vs 本周 ───────────────── */
+  /** 12 项对比里挑最值得说的一条，拼成一句放映用的收尾点评——呼应第 2 页
+   *  微盟数据本来就有的 buildWeimengCommentary，两页收尾对称 */
+  function buildPage1Highlight(curLabel, deltas) {
+    const withDelta = deltas.filter((r) => r.delta !== null && r.delta !== Infinity);
+    if (!withDelta.length) return '';
+    const upCount = withDelta.filter((r) => r.delta > 0.5).length;
+    const downCount = withDelta.filter((r) => r.delta < -0.5).length;
+    const trend = downCount > upCount ? '普遍下滑' : upCount > downCount ? '普遍走高' : '涨跌互现';
+    let best = withDelta[0];
+    withDelta.forEach((r) => { if (Math.abs(r.delta) > Math.abs(best.delta)) best = r; });
+    const dirWord = best.delta > 0 ? '涨幅' : '跌幅';
+    return `${curLabel} 各项指标${trend}，其中${best.label}${dirWord}最大，达 ${Math.abs(best.delta).toFixed(1)}%，是本期最值得关注的变化。`;
+  }
+
+  /* ── 生意参谋指标（首页）：跟标题栏时间范围筛选联动的两周对比 ── */
   function renderCompare() {
     const box = A.$('#rpt-compare');
+    const rangeNote = A.$('#rpt-compare-range-note');
+    const highlightEl = A.$('#rpt-page1-highlight');
     box.innerHTML = '';
-    const daily = data?.daily || [];
-    if (!daily.length) { box.innerHTML = '<p class="rv-empty">还没有数据。用标题栏的「导入 / 更新 Excel」传一份进来。</p>'; return; }
 
-    const desc = [...daily].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-    const thisWeek = desc.slice(0, 7), lastWeek = desc.slice(7, 14);
-    if (lastWeek.length < 7) {
+    const [[curStart, curEnd], [lastStart, lastEnd]] = activeWeekPair();
+    const curLabel = quarterWeekLabel(curStart), lastLabel = quarterWeekLabel(lastStart);
+    if (rangeNote) rangeNote.textContent = `${curLabel} vs ${lastLabel}`;
+
+    const daily = data?.daily || [];
+    if (!daily.length) {
+      box.innerHTML = '<p class="rv-empty">还没有数据。用标题栏的「导入 / 更新 Excel」传一份进来。</p>';
+      if (highlightEl) { highlightEl.hidden = true; highlightEl.textContent = ''; }
+      return;
+    }
+
+    const inWeek = (r, s, e) => r.date >= s && r.date <= e;
+    const thisWeek = daily.filter((r) => inWeek(r, curStart, curEnd));
+    const lastWeek = daily.filter((r) => inWeek(r, lastStart, lastEnd));
+    if (thisWeek.length < 7 || lastWeek.length < 7) {
       const p = document.createElement('p');
       p.className = 'rv-note';
-      p.textContent = `目前只有 ${daily.length} 天的数据，不足两周（14 天）——下面的「上周」暂时只用 ${lastWeek.length} 天估算，数据攒够了会自动准确。`;
+      p.textContent = `${curLabel}（${thisWeek.length} 天）或 ${lastLabel}（${lastWeek.length} 天）数据不满 7 天，下面暂时按已有天数估算，数据攒够了会自动准确。`;
       box.appendChild(p);
     }
 
@@ -307,12 +382,22 @@ const Report = (() => {
     const grid = document.createElement('div');
     grid.className = 'rpt-cmp-grid';
 
+    const deltas = [];
     METRIC_FIELDS.forEach(([field, label, mode, unit]) => {
       const cur = rollup(thisWeek, field, mode), last = rollup(lastWeek, field, mode);
-      grid.appendChild(buildCompareCard(label, cur, last, unit, '本周', '上周'));
+      const card = buildCompareCard(label, cur, last, unit, curLabel, lastLabel);
+      if (FEATURED_METRICS.has(field)) card.classList.add('featured');
+      grid.appendChild(card);
+      deltas.push({ field, label, delta: deltaOf(cur, last) });
     });
 
     box.appendChild(grid);
+
+    if (highlightEl) {
+      const text = buildPage1Highlight(curLabel, deltas);
+      highlightEl.textContent = text;
+      highlightEl.hidden = !text;
+    }
   }
 
   /* ── 微盟数据：可以补填任意一周，环比按自然周查找上一周 ── */
@@ -352,7 +437,7 @@ const Report = (() => {
     return `${thu.getFullYear()}-W${String(week).padStart(2, '0')}`;
   }
 
-  function buildWeimengCommentary(cur, prev) {
+  function buildWeimengCommentary(cur, prev, curLabel) {
     const deltas = WM_METRICS.map(([field]) => deltaOf(cur[field], prev[field]));
     const upCount = deltas.filter((d) => d === Infinity || d > 0.5).length;
     const downCount = deltas.filter((d) => d !== null && d < -0.5).length;
@@ -373,7 +458,7 @@ const Report = (() => {
     if (worst && Math.abs(worst.d) > 5) {
       extra = `，其中${worst.label}${worst.d > 0 ? '涨幅' : '跌幅'}达 ${Math.abs(worst.d).toFixed(1)}%，是主要${worst.d > 0 ? '拉高' : '拉低'}项`;
     }
-    return `本周全渠道流量及互动${trend}${extra}。`;
+    return `${curLabel} 全渠道流量及互动${trend}${extra}。`;
   }
 
   function renderWeimeng() {
@@ -392,12 +477,15 @@ const Report = (() => {
 
     const desc = [...weeks].sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
     if (!wmSelectedWeek || !weeks.some((w) => w.weekStart === wmSelectedWeek)) wmSelectedWeek = desc[0].weekStart;
-    select.innerHTML = desc.map((w) => `<option value="${w.weekStart}">${w.weekStart} 那一周</option>`).join('');
+    select.innerHTML = desc.map((w) => `<option value="${w.weekStart}">${quarterWeekLabel(w.weekStart)} · ${w.weekStart} 起</option>`).join('');
     select.value = wmSelectedWeek;
 
     const cur = weeks.find((w) => w.weekStart === wmSelectedWeek);
     const prev = weimengByWeek().get(weekBefore(cur.weekStart)) || null;
-    sub.textContent = prev ? `${cur.weekStart} 那一周 · 环比上一周（${prev.weekStart}）` : `${cur.weekStart} 那一周 · 上一周还没有记录，暂时没法环比`;
+    const curLabel = quarterWeekLabel(cur.weekStart);
+    sub.textContent = prev
+      ? `${curLabel} · 环比 ${quarterWeekLabel(prev.weekStart)}`
+      : `${curLabel} · ${quarterWeekLabel(weekBefore(cur.weekStart))} 还没有记录，暂时没法环比`;
 
     WM_METRICS.forEach(([field, label, unit]) => {
       const d = prev ? deltaOf(cur[field], prev[field]) : null;
@@ -442,7 +530,7 @@ const Report = (() => {
 
     if (!prev) { note.hidden = true; return; }
     note.hidden = false;
-    note.textContent = buildWeimengCommentary(cur, prev);
+    note.textContent = buildWeimengCommentary(cur, prev, curLabel);
   }
 
   /** 把某一周的表单填好：已经有记录就是编辑（带出旧值），没有就是空白新建 */
@@ -451,13 +539,13 @@ const Report = (() => {
     const existing = weimengByWeek().get(monday);
     A.$('#wm-weekStart').value = mondayToIsoWeek(monday);
     const sunday = new Date(monday + 'T00:00:00'); sunday.setDate(sunday.getDate() + 6);
-    A.$('#wm-weekStart-hint').textContent = `即 ${monday} 至 ${ymd(sunday)} 这一周`;
+    A.$('#wm-weekStart-hint').textContent = `即 ${monday} 至 ${ymd(sunday)}（${quarterWeekLabel(monday)}）`;
     WM_METRICS.forEach(([field]) => { A.$('#wm-' + field).value = existing ? existing[field] : ''; });
     WM_CHANNELS.forEach(([key]) => {
       A.$(`#wm-ch-${key}-pv`).value = existing ? existing.channels[key].pv : '';
       A.$(`#wm-ch-${key}-uv`).value = existing ? existing.channels[key].uv : '';
     });
-    A.$('#rpt-wm-title').textContent = existing ? `编辑 ${monday} 那一周` : `记录 ${monday} 那一周`;
+    A.$('#rpt-wm-title').textContent = (existing ? '编辑 ' : '记录 ') + quarterWeekLabel(monday) + ` · ${monday} 起`;
   }
 
   function openWeimengForm(weekStart) {

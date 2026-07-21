@@ -279,14 +279,17 @@
               <p class="rv-empty" id="rpt-trend-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份访客/浏览趋势表进来。</p>
               <div class="p3d-chart rpt-trend-chart" id="rpt-trend-chart" hidden></div>
             </div>
-            <p class="rpt-subhead">上周 vs 上上周 · 两个完整周的对比，不受本周还没过完影响</p>
-            <div id="rpt-shop-compare"></div>
+            <div class="rpt-sidecol">
+              <p class="rpt-subhead" id="rpt-shop-compare-note">两个完整周的对比，不受本周还没过完影响</p>
+              <div id="rpt-shop-compare"></div>
+            </div>
           </section>
 
           <section class="rv-sec">
-            <h2>更多指标 · 上周 vs 本周 <span class="rpt-scope-badge alt">首页数据</span></h2>
+            <h2>更多指标 · <span id="rpt-compare-range-note"></span> <span class="rpt-scope-badge alt">首页数据</span></h2>
             <p class="rv-sub">取最近有数据的 14 天，按日期从新到旧切成两组各 7 天；计数类指标取两组各自的总和，比率类指标取两组各自的平均值。这些是店铺「首页」相关指标，范围比上面的天猫旗舰店整体数据要窄。</p>
             <div id="rpt-compare"></div>
+            <p class="rpt-highlight" id="rpt-page1-highlight" hidden></p>
           </section>
         </div>
 
@@ -299,7 +302,7 @@
               </div>
               <div class="rpt-wm-weekbar">
                 <select id="rpt-wm-week-select"></select>
-                <button class="ghost" id="rpt-wm-edit-btn">编辑这一周</button>
+                <button class="ghost" id="rpt-wm-edit-btn">编辑该周数据</button>
               </div>
             </div>
             <div class="rpt-wm-metrics" id="rpt-wm-metrics"></div>

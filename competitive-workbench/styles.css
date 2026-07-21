@@ -1721,8 +1721,17 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 
 .rpt-wm-note {
   margin: 20px 0 0; padding: 12px 15px; border-radius: 10px; background: var(--overlay-faint);
-  border: 1px solid var(--line-soft); font-size: 12.5px; color: var(--dim); line-height: 1.6;
+  border: 1px solid var(--line-soft); border-left: 3px solid var(--mint); font-size: 12.5px; color: var(--dim); line-height: 1.6;
 }
+
+/* 第 1 页收尾的一句话点评——跟上面 .rpt-wm-note 同一套视觉语言（左侧
+   强调线 + 弱底），两页收尾对称，都是"看完数据后这句话最值得记住" */
+.rpt-highlight {
+  margin: 20px 0 0; padding: 12px 15px; border-radius: 10px; background: var(--overlay-faint);
+  border: 1px solid var(--line-soft); border-left: 3px solid var(--mint); font-size: 12.5px; color: var(--dim); line-height: 1.6;
+}
+
+.rpt-cmp-card.featured { border-color: var(--mint-dim); }
 
 .rpt-wm-weekbar { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .rpt-wm-weekbar select {
@@ -1779,42 +1788,124 @@ body.rpt-presenting .rpt-page-switch button { padding: 6px 18px; font-size: 13px
 
 body.rpt-presenting .rpt-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 body.rpt-presenting .rpt-sec-first { margin-top: 0; }
-body.rpt-presenting .rv-sec { margin-top: 14px; }
+body.rpt-presenting .rv-sec { margin-top: 22px; }
 body.rpt-presenting .rv-sec:first-child { margin-top: 0; }
-
-body.rpt-presenting .rpt-sec-head h2 { font-size: clamp(18px, 2.2vw, 26px); }
-body.rpt-presenting .rv-sub,
-body.rpt-presenting .rail-hint { font-size: clamp(12px, 1.2vw, 14px); margin: 4px 0 0; }
-body.rpt-presenting .rpt-scope-badge { font-size: clamp(11px, 1.1vw, 13px); padding: 4px 12px; }
-body.rpt-presenting .rpt-subhead { margin-top: 10px; }
-
-body.rpt-presenting .rpt-trend-wrap { height: clamp(160px, 26vh, 380px); margin-top: 8px; }
-
-body.rpt-presenting .rv-sub { margin: 3px 0 0; line-height: 1.4; }
-
-body.rpt-presenting .rpt-cmp-grid { grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 8px; }
-body.rpt-presenting .rpt-wm-metrics { grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
-body.rpt-presenting .rpt-cmp-foot { flex-wrap: wrap; row-gap: 2px; }
-body.rpt-presenting .rpt-cmp-card,
-body.rpt-presenting .rpt-wm-stat { padding: 12px 14px; }
-body.rpt-presenting .rpt-cmp-top { margin-bottom: 6px; }
-body.rpt-presenting .rpt-cmp-label,
-body.rpt-presenting .rpt-wm-stat-label { font-size: clamp(11.5px, 1vw, 13px); }
-body.rpt-presenting .rpt-cmp-foot,
-body.rpt-presenting .rpt-cmp-delta,
-body.rpt-presenting .rpt-wm-stat-delta { font-size: clamp(11.5px, 1vw, 13.5px); }
-body.rpt-presenting .rpt-cmp-foot b { font-size: clamp(13px, 1.2vw, 15px); }
-body.rpt-presenting .rpt-wm-stat b { font-size: clamp(20px, 2.2vw, 28px); }
-
-body.rpt-presenting .rpt-wm-channels { gap: 24px; margin-top: 14px; }
-body.rpt-presenting .rpt-wm-chgroup h3 { font-size: clamp(12px, 1.1vw, 14px); margin-bottom: 6px; }
-body.rpt-presenting .rpt-wm-chrow { margin-bottom: 8px; }
-body.rpt-presenting .rpt-wm-chbar { height: 10px; }
-body.rpt-presenting .rpt-wm-chname,
-body.rpt-presenting .rpt-wm-chval { font-size: clamp(11.5px, 1vw, 13.5px); }
-
-body.rpt-presenting .rpt-wm-note { font-size: clamp(11.5px, 1vw, 13.5px); padding: 10px 14px; margin-top: 12px; }
+/* 放映时不需要现场调筛选范围/切换周——控件占的位置让给内容，会场里
+   到底看哪段数据由讲的人开讲前选好，标题旁的说明文字已经写清楚了 */
+body.rpt-presenting .rpt-range,
 body.rpt-presenting .rpt-wm-weekbar { display: none; }
+
+/* 标题字号统一按 .rpt-page 下所有 h2 选，不再局限于套了 .rpt-sec-head
+   壳的那个——之前只选中 .rpt-sec-head h2，第一页「更多指标」小节的标题
+   没套那层壳，放映时漏选，一直卡在 16px 的默认小字，跟同页第一个标题
+   的放映态大小对不上。
+   下面这批 clamp() 的 vw/vh 系数都是照 1920×1200（14 寸屏常见分辨率）
+   反算的——系数 ≈ max ÷ 19（留一点余量），保证在这个宽度下稳定封顶在
+   max 值，不是早早封顶在偏小的 max 上、大屏上还有一大截没用满。 */
+body.rpt-presenting .rpt-page h2 { font-size: clamp(20px, 1.6vw, 30px); }
+body.rpt-presenting .rv-sub,
+body.rpt-presenting .rail-hint { font-size: clamp(13px, 0.85vw, 16px); margin: 4px 0 0; line-height: 1.4; }
+body.rpt-presenting .rpt-scope-badge { font-size: clamp(12px, 0.75vw, 14px); padding: 4px 13px; }
+
+/* ── 第 1 页新排版：标题下方分两栏——左边趋势图是 hero，右边把「最近两
+   个完整周对比」那两张卡立起来做成侧栏卡组、拉到跟图表等高，不再是图
+   表下方一条不起眼的窄条；下方「更多指标」12 项换成 4 列 × 3 行的大卡
+   片网格，浏览量/访客数/引导支付金额这 3 个最看重的口径单独加强调样
+   式（.featured），一眼找到重点，不用 12 张卡逐个扫读；最下面新增一条
+   自动生成的收尾点评，呼应第 2 页原本就有的 .rpt-wm-note，两页首尾对
+   称。 */
+/* 只作用于第 1 页——第 2 页的首个 section 也顶着 .rpt-sec-first 这个类
+   （只为了复用「放映时首个 section 不用顶部外边距」那条通用规则），但
+   它内容是纵向的指标网格+点评，不是图表+侧栏的两栏布局。之前这条网
+   格规则没有限定页面范围，第 2 页的 section 也被强改成两列网格，
+   「更多指标」「渠道占比」「结论」这些没有指定 grid-area 的子元素就被
+   自动放进隐式生成的行里、且宽度只有窄的那一列（1fr），导致结论段落
+   看起来早早就换行——不是字号问题，是它被塞进了一个很窄的格子。 */
+body.rpt-presenting #rpt-page-1 > .rpt-sec-first {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
+  grid-template-areas: "head head" "chart side";
+  column-gap: clamp(20px, 2.6vw, 40px);
+  row-gap: 10px;
+}
+body.rpt-presenting #rpt-page-1 > .rpt-sec-first > .rpt-sec-head { grid-area: head; }
+body.rpt-presenting #rpt-page-1 > .rpt-sec-first > .rpt-trend-wrap { grid-area: chart; }
+body.rpt-presenting #rpt-page-1 > .rpt-sec-first > .rpt-sidecol { grid-area: side; display: flex; flex-direction: column; min-height: 0; }
+
+body.rpt-presenting .rpt-trend-wrap { height: clamp(240px, 40vh, 500px); margin-top: 6px; }
+
+body.rpt-presenting .rpt-subhead { font-size: clamp(12.5px, 0.75vw, 14px); margin: 0 0 10px; }
+body.rpt-presenting .rpt-sidecol .rpt-cmp-grid {
+  grid-template-columns: 1fr; grid-template-rows: repeat(2, 1fr); gap: 12px; flex: 1; margin-top: 0;
+}
+body.rpt-presenting .rpt-sidecol .rpt-cmp-card {
+  display: flex; flex-direction: column; justify-content: center;
+  padding: clamp(14px, 2vh, 24px) clamp(16px, 1.6vw, 24px);
+}
+body.rpt-presenting .rpt-sidecol .rpt-cmp-label { font-size: clamp(13px, 0.9vw, 16px); }
+body.rpt-presenting .rpt-sidecol .rpt-cmp-delta { font-size: clamp(13px, 0.95vw, 17px); }
+body.rpt-presenting .rpt-sidecol .rpt-cmp-track { height: 9px; }
+body.rpt-presenting .rpt-sidecol .rpt-cmp-foot { font-size: clamp(12.5px, 0.85vw, 15px); margin-top: 14px; }
+body.rpt-presenting .rpt-sidecol .rpt-cmp-foot b { font-size: clamp(20px, 1.7vw, 32px); }
+
+/* 「更多指标」：4 列 × 3 行，卡片本身变大，数字才立得住 */
+body.rpt-presenting .rpt-cmp-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 14px; }
+body.rpt-presenting .rpt-cmp-foot { flex-wrap: wrap; row-gap: 3px; }
+body.rpt-presenting .rpt-cmp-card { padding: clamp(14px, 1.8vh, 20px) clamp(16px, 1.6vw, 22px); }
+body.rpt-presenting .rpt-cmp-top { margin-bottom: 9px; }
+body.rpt-presenting .rpt-cmp-label { font-size: clamp(13px, 0.85vw, 15.5px); }
+body.rpt-presenting .rpt-cmp-foot,
+body.rpt-presenting .rpt-cmp-delta { font-size: clamp(13px, 0.85vw, 15.5px); }
+body.rpt-presenting .rpt-cmp-foot b { font-size: clamp(20px, 1.7vw, 30px); }
+
+/* 12 张卡里挑出来的 3 个重点口径——底色、边框、数字颜色整体提亮一档，
+   跟旁边 9 张普通卡一眼区分开 */
+body.rpt-presenting .rpt-cmp-card.featured {
+  background: linear-gradient(180deg, var(--mint-dim), var(--overlay-faint));
+  border-color: var(--mint);
+}
+body.rpt-presenting .rpt-cmp-card.featured .rpt-cmp-label { color: var(--mint); font-weight: 700; }
+body.rpt-presenting .rpt-cmp-card.featured .rpt-cmp-foot b { color: var(--mint); font-size: clamp(23px, 2vw, 36px); }
+
+/* 「结论」是放映时最需要一眼看清的一句话，字号不能只跟正文同级——
+   拉到接近标题的量级，会场里离屏幕远也读得清 */
+body.rpt-presenting .rpt-highlight {
+  margin-top: clamp(14px, 2.2vh, 24px); padding: clamp(16px, 2vh, 24px) clamp(20px, 2vw, 30px);
+  font-size: clamp(19px, 1.6vw, 31px); font-weight: 600; line-height: 1.55; border-left-width: 5px;
+}
+
+/* ── 第 2 页：微盟数据。内容天然比第 1 页少（8 个指标 + 2 组渠道占比 +
+   一句点评，没有图表）——前两项（浏览量/访客数）升格成整行大字的「头
+   条数字」，跟第 1 页侧栏那两张对比卡呼应；剩下 6 项降一档做次级网格。
+   整体字号/间距仍按比第 1 页更大的比例放，两页视觉密度才对得上。 */
+body.rpt-presenting .rpt-wm-metrics { grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 24px; }
+body.rpt-presenting .rpt-wm-stat { padding: clamp(14px, 1.8vh, 20px) clamp(16px, 1.6vw, 22px); }
+body.rpt-presenting .rpt-wm-stat-label { font-size: clamp(13px, 0.85vw, 15.5px); }
+body.rpt-presenting .rpt-wm-stat-delta { font-size: clamp(13px, 0.9vw, 16px); }
+body.rpt-presenting .rpt-wm-stat b { font-size: clamp(26px, 2.6vw, 44px); }
+
+body.rpt-presenting .rpt-wm-metrics > .rpt-wm-stat:nth-child(-n+2) {
+  grid-column: span 2;
+  background: linear-gradient(180deg, var(--mint-dim), var(--overlay-faint));
+  border-color: var(--mint);
+}
+body.rpt-presenting .rpt-wm-metrics > .rpt-wm-stat:nth-child(-n+2) .rpt-wm-stat-label {
+  color: var(--mint); font-weight: 700; font-size: clamp(14px, 0.95vw, 17px);
+}
+body.rpt-presenting .rpt-wm-metrics > .rpt-wm-stat:nth-child(-n+2) b { color: var(--mint); font-size: clamp(46px, 4.6vw, 84px); }
+
+body.rpt-presenting .rpt-wm-channels { gap: 32px; margin-top: 28px; }
+body.rpt-presenting .rpt-wm-chgroup h3 { font-size: clamp(14px, 0.95vw, 18px); margin-bottom: 10px; }
+body.rpt-presenting .rpt-wm-chrow { margin-bottom: 20px; }
+body.rpt-presenting .rpt-wm-chbar { height: 16px; }
+body.rpt-presenting .rpt-wm-chname,
+body.rpt-presenting .rpt-wm-chval { font-size: clamp(13px, 0.9vw, 16px); }
+
+body.rpt-presenting .rpt-wm-note {
+  font-size: clamp(19px, 1.6vw, 31px); font-weight: 600; line-height: 1.55;
+  padding: clamp(16px, 2vh, 24px) clamp(20px, 2vw, 30px);
+  margin-top: clamp(18px, 2.8vh, 32px); border-left-width: 5px;
+}
 
 /* ═══════════════════════════════════════════════════════════
    移动端

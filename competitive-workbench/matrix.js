@@ -726,10 +726,35 @@ const Matrix = (() => {
     el.dataset.baseFs = baseFs;
     el.dataset.baseLh = baseLh || baseFs * 1.3;
   }
+  /** 色块方块/图例间距同理——不跟着字号一起放大的话，字号涨上去之后
+   *  色块和行间距还是编辑态那个小尺寸，色块和留白比例失衡，图例看着
+   *  反而比放大前更小气（这才是"图例太小"反馈的真正原因，字号其实
+   *  已经在跟着放大了，色块和间距没跟上）。 */
+  function markScalableBox(el, base) {
+    el.dataset.baseBox = base;
+  }
+  function markScalableGap(el, baseX, baseY) {
+    el.dataset.baseGapX = baseX;
+    el.dataset.baseGapY = baseY == null ? baseX : baseY;
+  }
+  /** querySelectorAll 只找后代，找不到 root 自己——fitLegendScale() 会拿
+   *  legend 容器本身当 root 调用（它自己的行/列间距也标了 data-base-gap-x），
+   *  这里得把 root 自己也纳入候选，不然容器级别的属性会被静默漏掉。 */
+  function selfAndDescendants(root, sel) {
+    return root.matches?.(sel) ? [root, ...root.querySelectorAll(sel)] : [...root.querySelectorAll(sel)];
+  }
   function applyFontScale(root, scale) {
-    root.querySelectorAll('[data-base-fs]').forEach((el) => {
+    selfAndDescendants(root, '[data-base-fs]').forEach((el) => {
       el.style.fontSize = (parseFloat(el.dataset.baseFs) * scale).toFixed(2) + 'px';
       el.style.lineHeight = (parseFloat(el.dataset.baseLh) * scale).toFixed(2) + 'px';
+    });
+    selfAndDescendants(root, '[data-base-box]').forEach((el) => {
+      const s = (parseFloat(el.dataset.baseBox) * scale).toFixed(2) + 'px';
+      el.style.width = s; el.style.height = s;
+    });
+    selfAndDescendants(root, '[data-base-gap-x]').forEach((el) => {
+      el.style.columnGap = (parseFloat(el.dataset.baseGapX) * scale).toFixed(2) + 'px';
+      el.style.rowGap = (parseFloat(el.dataset.baseGapY) * scale).toFixed(2) + 'px';
     });
   }
 
@@ -788,6 +813,8 @@ const Matrix = (() => {
       const swatch = document.createElement('i');
       swatch.className = 'swatch';
       swatch.style.background = colorInput ? colorInput.value : '';
+      markScalableBox(swatch, 11); // 基准取自 .legend i.swatch 的 11px
+      markScalableGap(span, 7); // 基准取自 .legend span 的 gap:7px（色块到文字）
       const label = document.createElement('span');
       label.innerHTML = richOrLabel ? richOrLabel.innerHTML : '';
       if (cs) { label.style.color = cs.color; markScalable(label, parseFloat(cs.fontSize) || 12.5, parseFloat(cs.lineHeight)); }
@@ -795,6 +822,7 @@ const Matrix = (() => {
       cloneRow.replaceWith(span);
     });
     legend.querySelector('.legend-add')?.remove();
+    markScalableGap(legend, 10, 8); // 基准取自 .legend 的 gap:8px 10px（行/列间距），条目之间也要跟着一起放大，不然字大了反而挤在一起
   }
 
   function buildExportClone() {
@@ -808,6 +836,16 @@ const Matrix = (() => {
 
     head.querySelector('.matrix-head-tools')?.remove(); // 统计/说明图标/导出按钮都跟标题同一行，克隆时得先摘掉，不然会截进图里、也会打乱下面按 h1/p 顺序对应原节点的逻辑
     grid.querySelectorAll('.mx-add-brand, .mx-add-band, .mx-fill, .mx-band-handle, .mx-brand-handle').forEach((el) => el.remove()); // 新增品牌/价格带的加号、拖拽手柄、补位空格都是编辑态才有意义的东西，且 fitScaleAndColumns 重算列宽时不会给它们留位置，留着会把导出图挤歪
+    // .mx-corner/.mx-brand/.mx-band 在编辑态用 position:sticky 做首行/首列冻结，
+    // 是为了配合 .matrix-scroll 的滚动容器；导出克隆体离屏渲染、根本不滚动，
+    // 但 html2canvas（老库）不认识 sticky，会按它自己的规则乱摆——价格带那一列
+    // （.mx-band，本该在最左）实测被画到最右边，就是这个原因。导出用不到
+    // 冻结效果，直接去掉定位，让它们按网格自身的行列位置正常排布。
+    grid.querySelectorAll('.mx-corner, .mx-brand, .mx-band').forEach((el) => {
+      el.style.position = 'static';
+      el.style.left = 'auto';
+      el.style.top = 'auto';
+    });
     simplifyLegendForExport(origLegend, legend);
 
     freezeColors(origHead, head, HEAD_FREEZE);
@@ -869,9 +907,16 @@ const Matrix = (() => {
       return EXPORT_W / Math.max(1, EXPORT_H - extraH);
     };
 
+    // 图例字号现在由 fitLegendScale() 单独最大化（不跟着主表挡位走，见下方
+    // 函数注释），所以这里只对 head/grid 调字号——legend 这时还是基准尺寸，
+    // gridTarget() 拿它当前（偏小的）高度估算主表要让出的空间，等图例后续
+    // 独立放大之后总高度会比这个估算更高，成图可能会比 16:9 略"方"一点、
+    // 四周多一点点背景色留边，这是用户明确要的取舍：图例的可读性优先于
+    // 严丝合缝地贴满 16:9。
     let scale = FONT_SCALE_MAX, w = COL_START;
     for (;;) {
-      applyFontScale(wrap, scale);
+      applyFontScale(head, scale);
+      applyFontScale(grid, scale);
       w = COL_START;
       setCols(w);
       let target = gridTarget();
@@ -884,6 +929,32 @@ const Matrix = (() => {
     return { adjusted: w !== COL_START || scale !== FONT_SCALE_MAX, scale };
   }
 
+  const LEGEND_SCALE_MAX = 3.4, LEGEND_SCALE_MIN = 1, LEGEND_SCALE_STEP = 0.1;
+  const LEGEND_MAX_ROWS = 2; // 分类一般不多，最多允许折两行，再多就太占地方、反而不好读
+
+  /** 按 offsetTop 分组数行——同一行内 flex 项顶部会因为 gap/放大后的字号
+   *  产生几像素的抖动，用 4px 网格取整吸收掉，避免把同一行误判成两行。 */
+  function legendRowCount(legend) {
+    const items = [...legend.children];
+    if (!items.length) return 0;
+    const tops = new Set(items.map((el) => Math.round(el.offsetTop / 4) * 4));
+    return tops.size;
+  }
+
+  /** 图例不跟主表的字号绑在一起放大——主表要顾及列宽塞不塞得下，字号经常
+   *  被压得比较小；图例通常就几个分类，没有这层限制，应该在自己能占到的
+   *  宽度里独立放到尽量大、尽量好认，不用管是不是跟主表"比例一致"。
+   *  策略很直接：字号一档一档往上试，装到要折出第 3 行才收手退回一档。 */
+  function fitLegendScale(legend) {
+    let scale = LEGEND_SCALE_MAX;
+    for (; scale > LEGEND_SCALE_MIN + 1e-9; scale = +(scale - LEGEND_SCALE_STEP).toFixed(2)) {
+      applyFontScale(legend, scale);
+      if (legendRowCount(legend) <= LEGEND_MAX_ROWS) return scale;
+    }
+    applyFontScale(legend, LEGEND_SCALE_MIN);
+    return LEGEND_SCALE_MIN;
+  }
+
   async function exportPNG() {
     if (typeof html2canvas !== 'function') { A.toast('导出组件没加载成功，刷新页面再试一次', 'bad'); return; }
     const btn = A.$('#matrix-export-btn');
@@ -892,6 +963,14 @@ const Matrix = (() => {
     try {
       clone = buildExportClone();
       const fit = fitScaleAndColumns(clone.wrap, clone.head, clone.grid, clone.legend);
+      // 外层容器原来靠 width:max-content 撑宽度——但 flex-wrap 容器算"自然宽度"
+      // 是按不换行、摆成一整排来算的（CSS 规范如此，跟它实际会不会换行无关）。
+      // 图例字号一放大，这个"假装不换行"的自然宽度就可能比主表还宽，容器被
+      // 图例撑宽之后，主表右边空出一大截；整张图等比塞进 4K 画布时又要整体
+      // 缩小更多，上下也跟着空出大片留白。这里把容器宽度显式钉死成主表的
+      // 实际宽度，图例才会真的在这个宽度内换行，而不是把容器反过来撑宽。
+      clone.wrap.style.width = clone.grid.scrollWidth + 'px';
+      fitLegendScale(clone.legend); // 主表定型之后再把图例独立放大到最大最清晰
 
       const shot = await html2canvas(clone.wrap, { backgroundColor: clone.wrap.dataset.exportBg, scale: 2, useCORS: true, logging: false });
 
