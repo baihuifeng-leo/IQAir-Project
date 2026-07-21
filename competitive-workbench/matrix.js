@@ -969,7 +969,15 @@ const Matrix = (() => {
       // 图例撑宽之后，主表右边空出一大截；整张图等比塞进 4K 画布时又要整体
       // 缩小更多，上下也跟着空出大片留白。这里把容器宽度显式钉死成主表的
       // 实际宽度，图例才会真的在这个宽度内换行，而不是把容器反过来撑宽。
-      clone.wrap.style.width = clone.grid.scrollWidth + 'px';
+      // wrap 是 .paper，box-sizing:border-box 下自带左右 padding（styles.css
+      // 里是 30px+30px）。如果直接把 width 钉成 grid.scrollWidth，这段 padding
+      // 会从里面"抠"掉，content-box 比 grid 实际需要的宽度还窄 60px，网格右侧
+      // 最后一列就会溢出 wrap 自身的包围盒——而 html2canvas 截图时用的正是
+      // wrap.getBoundingClientRect() 来定尺寸，溢出包围盒的部分根本不在截图
+      // 范围内，导出图上看到的就是最后几列被整齐地切掉一块。这里把 wrap 自己
+      // 的左右 padding 加回宽度里，content-box 才会跟 grid.scrollWidth 对齐。
+      const wrapPadX = parseFloat(getComputedStyle(clone.wrap).paddingLeft) + parseFloat(getComputedStyle(clone.wrap).paddingRight);
+      clone.wrap.style.width = (clone.grid.scrollWidth + wrapPadX) + 'px';
       fitLegendScale(clone.legend); // 主表定型之后再把图例独立放大到最大最清晰
 
       const shot = await html2canvas(clone.wrap, { backgroundColor: clone.wrap.dataset.exportBg, scale: 2, useCORS: true, logging: false });

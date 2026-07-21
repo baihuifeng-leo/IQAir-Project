@@ -465,10 +465,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
    数字和 label 同一行左右挨着，高度就跟旁边的 ⭳导出/ⓘ 按钮一样只取决于
    一行文字 + padding，不用另外凑高度。 */
 .mx-head-stats .stat { display: flex; align-items: baseline; gap: 5px; padding: 7px 11px; border-radius: 8px; }
-/* 基础 .stat b/span 走 --mint/--dimmer——那是给弱化次要信息调的低对比度，
-   放在标题行这种一眼要看清的位置就是"深色不够白、浅色不够黑"。换成
-   --text（主文字，高对比）和 --dim（次级但可读，非 --dimmer 那档） */
-.mx-head-stats .stat b { display: inline; font-size: 13.5px; color: var(--text); }
+/* 数字沿用绿色主题 --mint（用户要求恢复），label 仍从 --dimmer 提到
+   --dim 这档，标题行里跟旁边按钮文字比不至于太糊 */
+.mx-head-stats .stat b { display: inline; font-size: 13.5px; color: var(--mint); }
 .mx-head-stats .stat span { font-size: 11px; white-space: nowrap; color: var(--dim); }
 
 .info-wrap { position: relative; }
