@@ -37,17 +37,21 @@
 - **SDD 账本（权威进度来源，跨会话恢复认这个）：** `.superpowers/sdd/progress.md`（git-ignored，本地文件系统里；本文件的勾选状态是给人看的摘要，冲突时以 SDD 账本 + `git log` 为准）
 
 ### 阶段 4：测试与验证
-- [ ] Task 1-3 的自动化测试全部通过（`node materialcheck.test.js`，跑完预期 36 passed, 0 failed）
-- [ ] Task 4 的 curl 手动验证（路由鉴权、产品库读写、唯一性冲突拒绝）
-- [ ] Task 6-8 的浏览器手动验证（无自动化前端测试，per CLAUDE.md）
-- [ ] Task 9 的干净 tarball 解包全链路冒烟测试
-- **状态：** pending
+- [x] Task 1-3 的自动化测试全部通过（`node materialcheck.test.js`，最终 36 passed, 0 failed —— 巧合地跟当初写错的预期数字撞了，但这次是真的对，多出来的 2 条是最终评审修复里补的并发限流测试+空产品名测试）
+- [x] Task 4 的 curl 手动验证（路由鉴权、产品库读写、唯一性冲突拒绝）
+- [x] Task 6-8 的浏览器手动验证 —— 受限于沙盒没有真实浏览器，改用 curl 尽力验证（服务器启动、页面标记、完整上传链路走通），视觉/点击交互未验证，已如实记录
+- [x] Task 9 的干净 tarball 解包全链路冒烟测试
+- [x] **全分支最终评审**（Opus，读完整 15 个提交的 diff）：发现 1 条 Important（设计文档要求的服务端 OCR 并发队列，9 个任务全部漏做——写计划时的疏漏，单任务评审看不出这种跨任务缺口）+ 5 条 Minor。已修复 Important + 3 条低风险 Minor，修复复审 Approved。剩 2 条 Minor 是范围取舍问题，留给用户决定（见下方阶段 5）
+- **状态：** complete
 
 ### 阶段 5：交付
-- [ ] 确认 `competitive-workbench.tar.gz` 与散装文件内容一致
+- [x] 确认 `competitive-workbench.tar.gz` 与散装文件内容一致（Task 9 + 后续 ocrConcurrency 加固各打包验证一次）
 - [ ] 推送分支 `design/deepspace-polish`
 - [ ] 按 CLAUDE.md 描述的部署流程走：rsync 到 `EC-Workbench/Product/` → 再到 `/opt/workbench`（**这一步需要用户确认后再做，不要自作主张跑生产部署**）
-- **状态：** pending
+- **状态：** in_progress
+- **待用户决定的两处范围取舍**（不是 bug，是设计文档要求了但计划/实现阶段缩了水，最终评审标为 Minor）：
+  1. 历史记录视图的过滤维度比设计文档少——现在只有产品/状态两个筛选，设计文档还要求按上传人、日期范围筛选、按批次折叠展示；store 层已经支持 `uploadedBy` 过滤，只是前端没接出来。
+  2. 上传的素材图片全程没有在界面上显示出来——存了、也能通过 `/uploads/materialcheck/` 访问到，但检测台、人工选择产品那一步、历史记录详情里都没有 `<img>` 展示，人工选择产品时只能看 OCR 文字，看不到图。设计文档里"人工选择时把图和文字放一起给人看"这个诉求目前打了折扣。
 
 ## 关键问题
 1. ~~执行方式选哪种~~ — 用户已选 1（Subagent-Driven），正在按这个方式执行。
