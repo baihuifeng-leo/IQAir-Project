@@ -15,79 +15,42 @@ const tAsync = async (name, fn) => {
   catch (e) { fail++; console.log('✗', name, '-', e.message); }
 };
 
-// 模拟 convert + tesseract 两个外部命令的桩函数：按 cmd 名字分流，
-// tesseract 按 --psm 后面的值返回不同文字，方便断言"取并集"的行为。
-function makeStubExec({ convertOk = true, psmResults = {} } = {}) {
-  const calls = [];
-  const exec = (cmd, args, opts, cb) => {
-    calls.push({ cmd, args });
-    if (cmd === 'convert') {
-      if (!convertOk) return cb(new Error('convert 不存在'), '', 'command not found');
-      return cb(null, '', '');
-    }
-    if (cmd === 'tesseract') {
-      const psm = args[args.indexOf('--psm') + 1];
-      const result = psmResults[psm];
-      if (result && result.fail) return cb(new Error('spawn failed'), '', result.stderr || '识别失败');
-      return cb(null, (result && result.text) || '', '');
-    }
-    cb(new Error('未知命令 ' + cmd));
-  };
-  return { exec, calls };
-}
-
 async function run() {
   // ── materialcheck-ocr.js ──────────────────────────────
-  await tAsync('runOcr 先预处理图片，再用默认三个 PSM 各跑一次取并集', async () => {
-    const { exec, calls } = makeStubExec({
-      psmResults: { 3: { text: 'A段文字' }, 6: { text: 'B段文字' }, 11: { text: 'C段文字' } }
-    });
-    const text = await runOcr('/tmp/x.jpg', { exec });
-    assert.strictEqual(calls[0].cmd, 'convert');
-    const preprocessedPath = calls[0].args[calls[0].args.length - 1];
-    const tesseractCalls = calls.filter((c) => c.cmd === 'tesseract');
-    assert.deepStrictEqual(tesseractCalls.map((c) => c.args[c.args.indexOf('--psm') + 1]), ['3', '6', '11']);
-    tesseractCalls.forEach((c) => assert.strictEqual(c.args[0], preprocessedPath));
-    assert.ok(text.includes('A段文字') && text.includes('B段文字') && text.includes('C段文字'));
+  await tAsync('runOcr 用正确的命令调用 tesseract', async () => {
+    let calledWith = null;
+    const stubExec = (cmd, args, opts, cb) => { calledWith = { cmd, args, opts }; cb(null, '识别出的文字\n', ''); };
+    const text = await runOcr('/tmp/x.jpg', { exec: stubExec });
+    assert.strictEqual(calledWith.cmd, 'tesseract');
+    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'chi_sim+eng', '--psm', '11']);
+    assert.strictEqual(text, '识别出的文字');
   });
 
-  await tAsync('runOcr 预处理失败时退回用原图识别，不阻断', async () => {
-    const { exec, calls } = makeStubExec({ convertOk: false, psmResults: { 3: { text: 'x' }, 6: { text: 'x' }, 11: { text: 'x' } } });
-    const text = await runOcr('/tmp/x.jpg', { exec });
-    const tesseractCalls = calls.filter((c) => c.cmd === 'tesseract');
-    tesseractCalls.forEach((c) => assert.strictEqual(c.args[0], '/tmp/x.jpg'));
-    assert.strictEqual(text, 'x\nx\nx');
+  await tAsync('runOcr 支持自定义语言参数', async () => {
+    let calledWith = null;
+    const stubExec = (cmd, args, opts, cb) => { calledWith = { cmd, args }; cb(null, 'text', ''); };
+    await runOcr('/tmp/x.jpg', { exec: stubExec, lang: 'eng' });
+    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'eng', '--psm', '11']);
   });
 
-  await tAsync('runOcr 部分 PSM 失败时仍返回成功那些的并集', async () => {
-    const { exec } = makeStubExec({
-      psmResults: { 3: { text: '成功的文字' }, 6: { fail: true }, 11: { text: '也成功' } }
-    });
-    const text = await runOcr('/tmp/x.jpg', { exec });
-    assert.ok(text.includes('成功的文字') && text.includes('也成功'));
+  await tAsync('runOcr 支持自定义 PSM 参数', async () => {
+    let calledWith = null;
+    const stubExec = (cmd, args, opts, cb) => { calledWith = { cmd, args }; cb(null, 'text', ''); };
+    await runOcr('/tmp/x.jpg', { exec: stubExec, psm: '6' });
+    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'chi_sim+eng', '--psm', '6']);
   });
 
-  await tAsync('runOcr 全部 PSM 都失败时 reject 出有意义的错误', async () => {
-    const { exec } = makeStubExec({
-      psmResults: { 3: { fail: true, stderr: '图片格式不支持' }, 6: { fail: true }, 11: { fail: true } }
-    });
-    await assert.rejects(runOcr('/tmp/bad.jpg', { exec }), /OCR 识别失败.*图片格式不支持/);
+  await tAsync('runOcr 命令失败时 reject 出有意义的错误', async () => {
+    const stubExec = (cmd, args, opts, cb) => cb(new Error('spawn failed'), '', '图片格式不支持');
+    await assert.rejects(runOcr('/tmp/bad.jpg', { exec: stubExec }), /OCR 识别失败.*图片格式不支持/);
   });
 
-  await tAsync('runOcr 支持自定义语言参数和自定义 PSM 列表', async () => {
-    const { exec, calls } = makeStubExec({ psmResults: { 6: { text: 'text' } } });
-    await runOcr('/tmp/x.jpg', { exec, lang: 'eng', psms: ['6'] });
-    const tc = calls.filter((c) => c.cmd === 'tesseract');
-    assert.strictEqual(tc.length, 1);
-    assert.deepStrictEqual(tc[0].args, [calls[0].args[calls[0].args.length - 1], 'stdout', '-l', 'eng', '--psm', '6']);
-  });
-
-  await tAsync('checkAvailable tesseract 和 convert 都存在时返回 true', async () => {
-    const stubExec = (cmd, args, opts, cb) => cb(null, 'ok', '');
+  await tAsync('checkAvailable 二进制存在时返回 true', async () => {
+    const stubExec = (cmd, args, opts, cb) => cb(null, 'tesseract 5.3.0', '');
     assert.strictEqual(await checkAvailable({ exec: stubExec }), true);
   });
 
-  await tAsync('checkAvailable tesseract 缺失时返回 false（不抛出，convert 缺不缺不影响这个返回值）', async () => {
+  await tAsync('checkAvailable 二进制缺失时返回 false（不抛出）', async () => {
     const stubExec = (cmd, args, opts, cb) => cb(new Error('command not found'));
     assert.strictEqual(await checkAvailable({ exec: stubExec }), false);
   });

@@ -54,28 +54,13 @@ else
   info "tesseract 安装完成：$(tesseract --version 2>&1 | head -1)"
 fi
 
-# ── 3. 图片预处理（ImageMagick，非硬依赖）──────────────────
-# 装不上不 die：materialcheck-ocr.js 里预处理失败会自动退回用原图识别，
-# 缺了它顶多是识别率打折，不影响功能本身能不能跑起来。
-if command -v convert >/dev/null 2>&1; then
-  info "ImageMagick 已就绪：$(convert -version | head -1)"
-else
-  info "安装 ImageMagick…"
-  apt-get update -qq
-  if apt-get install -y -qq imagemagick >/dev/null 2>&1 && command -v convert >/dev/null 2>&1; then
-    info "ImageMagick 安装完成：$(convert -version | head -1)"
-  else
-    warn "ImageMagick 安装失败，素材质检的识别前预处理会自动跳过（不影响其它功能）"
-  fi
-fi
-
-# ── 4. 专用用户，不给登录 shell ────────────────────────────
+# ── 3. 专用用户，不给登录 shell ────────────────────────────
 if ! id -u "$SVC_USER" >/dev/null 2>&1; then
   info "创建系统用户 $SVC_USER"
   useradd --system --no-create-home --shell /usr/sbin/nologin "$SVC_USER"
 fi
 
-# ── 5. 代码 ────────────────────────────────────────────────
+# ── 4. 代码 ────────────────────────────────────────────────
 info "部署代码到 $APP_DIR"
 mkdir -p "$APP_DIR"
 rm -rf "$APP_DIR/public"
@@ -88,13 +73,13 @@ cp -r "$SRC_DIR/public" "$APP_DIR/public"
 chown -R root:root "$APP_DIR"
 chmod -R a+rX "$APP_DIR"
 
-# ── 6. 数据目录（服务唯一可写的地方）─────────────────────
+# ── 5. 数据目录（服务唯一可写的地方）─────────────────────
 info "准备数据目录 $DATA_DIR"
 mkdir -p "$DATA_DIR" "$DATA_DIR/reviews" "$DATA_DIR/products3d" "$DATA_DIR/reports" "$DATA_DIR/materialcheck" "$DATA_DIR/uploads/materialcheck"
 chown -R "$SVC_USER:$SVC_USER" "$DATA_DIR"
 chmod 750 "$DATA_DIR"
 
-# ── 7. systemd ─────────────────────────────────────────────
+# ── 6. systemd ─────────────────────────────────────────────
 if [[ -f /etc/systemd/system/workbench.service ]]; then
   warn "已存在 workbench.service，保留你改过的配置（端口、PIN 等没动）"
 else
