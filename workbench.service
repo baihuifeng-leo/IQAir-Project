@@ -1,0 +1,49 @@
+[Unit]
+Description=竞品作战台 Competitive Workbench
+Documentation=file:/opt/workbench/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=workbench
+Group=workbench
+WorkingDirectory=/opt/workbench
+ExecStart=/usr/bin/node /opt/workbench/server.js
+
+Environment=NODE_ENV=production
+Environment=PORT=8090
+Environment=DATA_DIR=/var/lib/workbench
+Environment=TZ=Asia/Shanghai
+# 只在第一次启动、还没有 users.json 时用来创建管理员
+Environment=ADMIN_USER=admin
+Environment=ADMIN_PIN=123456
+Environment=SESSION_DAYS=30
+
+Restart=always
+RestartSec=3
+
+# 崩了自动拉起，但如果 60 秒内连崩 5 次就停下来，别把日志刷爆
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# 安全加固：这个进程只需要读代码、写数据目录，别的什么都不给
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/workbench
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=workbench
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,1848 @@
+{
+ "version": 1,
+ "updatedAt": "2026-07-09T03:42:15.026Z",
+ "matrix": {
+  "title": "品牌价格带沙盘矩阵",
+  "subtitle": "Air Purifier · Price Band Sandbox",
+  "brands": [
+   {
+    "id": "b_x92017c",
+    "name": "IQAir"
+   },
+   {
+    "id": "b_x24ef9c",
+    "name": "AirProce"
+   },
+   {
+    "id": "b_x000b5a",
+    "name": "Dyson"
+   },
+   {
+    "id": "b_xb37373",
+    "name": "Soleusair"
+   },
+   {
+    "id": "b_xf9270e",
+    "name": "Blueair"
+   },
+   {
+    "id": "b_x5275c6",
+    "name": "Honeywell"
+   },
+   {
+    "id": "b_x371bce",
+    "name": "352"
+   },
+   {
+    "id": "b_xa5b72e",
+    "name": "Treeow"
+   },
+   {
+    "id": "b_x41dff7",
+    "name": "IAM"
+   },
+   {
+    "id": "b_xbb1f8b",
+    "name": "Dreame"
+   }
+  ],
+  "bands": [
+   {
+    "id": "p_xc7f874",
+    "name": "15K+"
+   },
+   {
+    "id": "p_xfd9874",
+    "name": "10-15K"
+   },
+   {
+    "id": "p_x015b70",
+    "name": "7-10K"
+   },
+   {
+    "id": "p_x4ecec1",
+    "name": "5-7K"
+   },
+   {
+    "id": "p_xd0dbb1",
+    "name": "3-5K"
+   },
+   {
+    "id": "p_xdc5aba",
+    "name": "0-3K"
+   }
+  ],
+  "products": [
+   {
+    "id": "i_1",
+    "brandId": "b_x92017c",
+    "bandId": "p_xc7f874",
+    "name": "GCX XE",
+    "price": "¥28,188",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_2",
+    "brandId": "b_x92017c",
+    "bandId": "p_xc7f874",
+    "name": "GC XE",
+    "price": "¥16,328",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_3",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xc7f874",
+    "name": "CV-280",
+    "price": "¥35,800",
+    "tag": "ventilation",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_4",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xc7f874",
+    "name": "CV-250",
+    "price": "¥28,800",
+    "tag": "ventilation",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_5",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xc7f874",
+    "name": "AI-970",
+    "price": "¥18,300",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_6",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xc7f874",
+    "name": "AC-500",
+    "price": "¥15,580",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_7",
+    "brandId": "b_xb37373",
+    "bandId": "p_xc7f874",
+    "name": "S10",
+    "price": "¥15,999",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_8",
+    "brandId": "b_x92017c",
+    "bandId": "p_xfd9874",
+    "name": "AtemX 3in1",
+    "price": "¥14,400",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_9",
+    "brandId": "b_x92017c",
+    "bandId": "p_xfd9874",
+    "name": "HP250 XE",
+    "price": "¥14,328",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_10",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xfd9874",
+    "name": "AC-360",
+    "price": "¥13,280",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_11",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xfd9874",
+    "name": "AC-260",
+    "price": "¥10,290",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_12",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xfd9874",
+    "name": "AI-730",
+    "price": "¥10,285",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_13",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xfd9874",
+    "name": "AI-700",
+    "price": "¥10,285",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_14",
+    "brandId": "b_x92017c",
+    "bandId": "p_x015b70",
+    "name": "HP100 XE",
+    "price": "¥9,399",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_15",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_x015b70",
+    "name": "AI-660",
+    "price": "¥9,490",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_16",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_x015b70",
+    "name": "AI-600",
+    "price": "¥8,398",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_17",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_x015b70",
+    "name": "AI-500",
+    "price": "¥7,199",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_18",
+    "brandId": "b_xb37373",
+    "bandId": "p_x015b70",
+    "name": "G20",
+    "price": "¥7,399",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_19",
+    "brandId": "b_x5275c6",
+    "bandId": "p_x015b70",
+    "name": "H-mate",
+    "price": "¥8,699",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_20",
+    "brandId": "b_x5275c6",
+    "bandId": "p_x015b70",
+    "name": "H-max",
+    "price": "¥7,599",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_21",
+    "brandId": "b_x371bce",
+    "bandId": "p_x015b70",
+    "name": "Z120",
+    "price": "¥7,799",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_22",
+    "brandId": "b_x41dff7",
+    "bandId": "p_x015b70",
+    "name": "X8",
+    "price": "¥7,999",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_23",
+    "brandId": "b_x41dff7",
+    "bandId": "p_x015b70",
+    "name": "X5 Ultra",
+    "price": "¥7,999",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_24",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_x4ecec1",
+    "name": "AC-160",
+    "price": "¥6,968",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_25",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_x4ecec1",
+    "name": "AI-370",
+    "price": "¥5,524",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_26",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_x4ecec1",
+    "name": "AI-300",
+    "price": "¥5,320",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_27",
+    "brandId": "b_x000b5a",
+    "bandId": "p_x4ecec1",
+    "name": "TP09",
+    "price": "¥6,199",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_28",
+    "brandId": "b_x000b5a",
+    "bandId": "p_x4ecec1",
+    "name": "TP12",
+    "price": "¥6,199",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_29",
+    "brandId": "b_x000b5a",
+    "bandId": "p_x4ecec1",
+    "name": "BP04",
+    "price": "¥5,990",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_30",
+    "brandId": "b_x000b5a",
+    "bandId": "p_x4ecec1",
+    "name": "PH05",
+    "price": "¥5,779",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_31",
+    "brandId": "b_x000b5a",
+    "bandId": "p_x4ecec1",
+    "name": "HP12",
+    "price": "¥5,779",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_32",
+    "brandId": "b_xb37373",
+    "bandId": "p_x4ecec1",
+    "name": "A10",
+    "price": "¥6,999",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_33",
+    "brandId": "b_xb37373",
+    "bandId": "p_x4ecec1",
+    "name": "B01",
+    "price": "¥5,399",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_34",
+    "brandId": "b_xf9270e",
+    "bandId": "p_x4ecec1",
+    "name": "8880i",
+    "price": "¥5,949",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_35",
+    "brandId": "b_x5275c6",
+    "bandId": "p_x4ecec1",
+    "name": "H-speed pro",
+    "price": "¥5,998",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_36",
+    "brandId": "b_x371bce",
+    "bandId": "p_x4ecec1",
+    "name": "Z90",
+    "price": "¥5,599",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_37",
+    "brandId": "b_x41dff7",
+    "bandId": "p_x4ecec1",
+    "name": "M9 pro",
+    "price": "¥6,999",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_38",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_x4ecec1",
+    "name": "PM30",
+    "price": "¥6,999",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_39",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_x4ecec1",
+    "name": "PM20",
+    "price": "¥5,199",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_40",
+    "brandId": "b_x92017c",
+    "bandId": "p_xd0dbb1",
+    "name": "Atem car",
+    "price": "¥3,300",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_41",
+    "brandId": "b_x92017c",
+    "bandId": "p_xd0dbb1",
+    "name": "Atem desk",
+    "price": "¥2,805",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_42",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xd0dbb1",
+    "name": "AI-200",
+    "price": "¥4,999",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_43",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xd0dbb1",
+    "name": "S9",
+    "price": "¥4,338",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_44",
+    "brandId": "b_x000b5a",
+    "bandId": "p_xd0dbb1",
+    "name": "HJ10",
+    "price": "¥3,499",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_45",
+    "brandId": "b_xb37373",
+    "bandId": "p_xd0dbb1",
+    "name": "C02",
+    "price": "¥3,299",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_46",
+    "brandId": "b_xb37373",
+    "bandId": "p_xd0dbb1",
+    "name": "C02 plus",
+    "price": "¥3,299",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_47",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xd0dbb1",
+    "name": "8660i",
+    "price": "¥4,929",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_48",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xd0dbb1",
+    "name": "KJ700F",
+    "price": "¥4,799",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_49",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xd0dbb1",
+    "name": "CP9i",
+    "price": "¥3,999",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_50",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xd0dbb1",
+    "name": "Blue4.0",
+    "price": "¥3,599",
+    "tag": "fan",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_51",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xd0dbb1",
+    "name": "KJ820F",
+    "price": "¥3,398",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_52",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xd0dbb1",
+    "name": "H-cat hub",
+    "price": "¥3,998",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_53",
+    "brandId": "b_x371bce",
+    "bandId": "p_xd0dbb1",
+    "name": "X89C",
+    "price": "¥4,599",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_54",
+    "brandId": "b_x371bce",
+    "bandId": "p_xd0dbb1",
+    "name": "H500",
+    "price": "¥4,399",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_55",
+    "brandId": "b_x371bce",
+    "bandId": "p_xd0dbb1",
+    "name": "Q80",
+    "price": "¥4,299",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_56",
+    "brandId": "b_x371bce",
+    "bandId": "p_xd0dbb1",
+    "name": "Z70",
+    "price": "¥3,799",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_57",
+    "brandId": "b_x371bce",
+    "bandId": "p_xd0dbb1",
+    "name": "H301",
+    "price": "¥3,499",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_58",
+    "brandId": "b_x41dff7",
+    "bandId": "p_xd0dbb1",
+    "name": "M9",
+    "price": "¥4,999",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_59",
+    "brandId": "b_x41dff7",
+    "bandId": "p_xd0dbb1",
+    "name": "M8 pro",
+    "price": "¥4,299",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_60",
+    "brandId": "b_x41dff7",
+    "bandId": "p_xd0dbb1",
+    "name": "U7",
+    "price": "¥4,299",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_61",
+    "brandId": "b_x41dff7",
+    "bandId": "p_xd0dbb1",
+    "name": "M8",
+    "price": "¥4,299",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_62",
+    "brandId": "b_x41dff7",
+    "bandId": "p_xd0dbb1",
+    "name": "U7 pro",
+    "price": "¥3,999",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_63",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_xd0dbb1",
+    "name": "PM10",
+    "price": "¥4,399",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_64",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_xd0dbb1",
+    "name": "FP10",
+    "price": "¥3,499",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_65",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xdc5aba",
+    "name": "AX-90",
+    "price": "¥2,039",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_66",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xdc5aba",
+    "name": "AH-800",
+    "price": "¥1,417",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_67",
+    "brandId": "b_x24ef9c",
+    "bandId": "p_xdc5aba",
+    "name": "AX-30",
+    "price": "¥1,189",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_68",
+    "brandId": "b_xb37373",
+    "bandId": "p_xdc5aba",
+    "name": "C01",
+    "price": "¥2,199",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_69",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xdc5aba",
+    "name": "D26i",
+    "price": "¥2,999",
+    "tag": "fan",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_70",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xdc5aba",
+    "name": "DH5i",
+    "price": "¥2,899",
+    "tag": "fan",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_71",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xdc5aba",
+    "name": "5440i",
+    "price": "¥2,399",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_72",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xdc5aba",
+    "name": "CP 7i",
+    "price": "¥2,549",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_73",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xdc5aba",
+    "name": "PetAir",
+    "price": "¥2,549",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_74",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xdc5aba",
+    "name": "3650i",
+    "price": "¥1,999",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_75",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xdc5aba",
+    "name": "T10i",
+    "price": "¥1,999",
+    "tag": "launch",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_76",
+    "brandId": "b_xf9270e",
+    "bandId": "p_xdc5aba",
+    "name": "Bluejoy",
+    "price": "¥579",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_77",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xdc5aba",
+    "name": "H-cat pro",
+    "price": "¥3,198",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_78",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xdc5aba",
+    "name": "H-cat 2.0",
+    "price": "¥2,999",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_79",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xdc5aba",
+    "name": "H-cat 2.0 pro",
+    "price": "¥2,999",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_80",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xdc5aba",
+    "name": "H-cat",
+    "price": "¥2,598",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_81",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xdc5aba",
+    "name": "H-speed",
+    "price": "¥2,298",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_82",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xdc5aba",
+    "name": "KJ205",
+    "price": "¥1,328",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_83",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xdc5aba",
+    "name": "KJ45F",
+    "price": "¥898",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_84",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xdc5aba",
+    "name": "HWC05",
+    "price": "¥664",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_85",
+    "brandId": "b_x5275c6",
+    "bandId": "p_xdc5aba",
+    "name": "HWC20",
+    "price": "¥498",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_86",
+    "brandId": "b_x371bce",
+    "bandId": "p_xdc5aba",
+    "name": "X63",
+    "price": "¥2,399",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_87",
+    "brandId": "b_xa5b72e",
+    "bandId": "p_xdc5aba",
+    "name": "T3",
+    "price": "¥3,299",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_88",
+    "brandId": "b_xa5b72e",
+    "bandId": "p_xdc5aba",
+    "name": "T2 pro",
+    "price": "¥2,499",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_89",
+    "brandId": "b_xa5b72e",
+    "bandId": "p_xdc5aba",
+    "name": "T2",
+    "price": "¥2,099",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_90",
+    "brandId": "b_xa5b72e",
+    "bandId": "p_xdc5aba",
+    "name": "G2 pro",
+    "price": "¥1,999",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_91",
+    "brandId": "b_xa5b72e",
+    "bandId": "p_xdc5aba",
+    "name": "K3",
+    "price": "¥1,499",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_92",
+    "brandId": "b_xa5b72e",
+    "bandId": "p_xdc5aba",
+    "name": "K2",
+    "price": "¥1,099",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_93",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_xdc5aba",
+    "name": "DZ40",
+    "price": "¥2,999",
+    "tag": "dehumid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_94",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_xdc5aba",
+    "name": "MF10",
+    "price": "¥2,199",
+    "tag": "dehumid",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_95",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_xdc5aba",
+    "name": "AP10",
+    "price": "¥2,099",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_96",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_xdc5aba",
+    "name": "AP20",
+    "price": "¥2,099",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_97",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_xdc5aba",
+    "name": "KP500",
+    "price": "¥999",
+    "tag": "default",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_98",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_xdc5aba",
+    "name": "FurryPure",
+    "price": "¥799",
+    "tag": "pet",
+    "italic": false,
+    "underline": false
+   },
+   {
+    "id": "i_99",
+    "brandId": "b_xbb1f8b",
+    "bandId": "p_xdc5aba",
+    "name": "H40",
+    "price": "¥699",
+    "tag": "humid",
+    "italic": false,
+    "underline": false
+   }
+  ],
+  "tags": {
+   "pet": {
+    "label": "Pet Purification 宠物",
+    "color": "#c00000",
+    "italic": false,
+    "underline": false
+   },
+   "humid": {
+    "label": "Humidification and Purification 加湿净化",
+    "color": "#009966",
+    "italic": false,
+    "underline": false
+   },
+   "ventilation": {
+    "label": "VENTILATION SYSTEMS 新风",
+    "color": "#03527c",
+    "italic": false,
+    "underline": false
+   },
+   "fan": {
+    "label": "Purification Fan 净风风扇",
+    "color": "#0066cc",
+    "italic": false,
+    "underline": false
+   },
+   "dehumid": {
+    "label": "Dehumidification and Purification 净化除湿",
+    "color": "#7030a0",
+    "italic": false,
+    "underline": false
+   },
+   "launch": {
+    "label": "Y26 New Product Launch 新品",
+    "color": "#e38424",
+    "italic": false,
+    "underline": false
+   }
+  },
+  "defaultColor": "#1e293b"
+ },
+ "compare": {
+  "title": "Competitive Challenge",
+  "subtitle": "空气净化器 · 竞品对位",
+  "ownBrandId": "c_iqa",
+  "brands": [
+   {
+    "id": "c_hon",
+    "name": "Honeywell",
+    "model": "H-MAX",
+    "logo": "",
+    "image": "",
+    "image34": ""
+   },
+   {
+    "id": "c_352",
+    "name": "352",
+    "model": "Z120",
+    "logo": "",
+    "image": "",
+    "image34": ""
+   },
+   {
+    "id": "c_mid",
+    "name": "Midea 美的",
+    "model": "U8",
+    "logo": "",
+    "image": "",
+    "image34": ""
+   },
+   {
+    "id": "c_iqa",
+    "name": "IQAir",
+    "model": "HP250",
+    "logo": "",
+    "image": "",
+    "image34": ""
+   }
+  ],
+  "groups": [
+   {
+    "id": "g1",
+    "name": "核心性能",
+    "rows": [
+     {
+      "id": "r_2pt5dr",
+      "label": "CADR 参数",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "1000",
+          "s": "CADR颗粒物",
+          "mark": "none",
+          "ev": "1000",
+          "es": "P-CADR",
+          "stale": false
+         },
+         {
+          "v": "700",
+          "s": "CADR甲醛",
+          "mark": "none",
+          "ev": "700",
+          "es": "F-CADR",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "1343",
+          "s": "CADR颗粒物",
+          "mark": "none",
+          "ev": "1343",
+          "es": "P-CADR",
+          "stale": false
+         },
+         {
+          "v": "812",
+          "s": "CADR甲醛",
+          "mark": "none",
+          "ev": "812",
+          "es": "F-CADR",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "1443",
+          "s": "CADR颗粒物",
+          "mark": "none",
+          "ev": "1443",
+          "es": "P-CADR",
+          "stale": false
+         },
+         {
+          "v": "1044",
+          "s": "CADR甲醛",
+          "mark": "none",
+          "ev": "1044",
+          "es": "F-CADR",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "500",
+          "s": "CADR颗粒物",
+          "mark": "bad",
+          "ev": "500",
+          "es": "P-CADR",
+          "stale": false
+         },
+         {
+          "v": "150",
+          "s": "CADR甲醛",
+          "mark": "bad",
+          "ev": "150",
+          "es": "F-CADR",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "CADR Spec."
+     },
+     {
+      "id": "r_ux2v5k",
+      "label": "CCM 参数",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "≥12,000",
+          "s": "CCM颗粒物",
+          "mark": "none",
+          "ev": "≥12,000",
+          "es": "P-CCM",
+          "stale": false
+         },
+         {
+          "v": ">1,500",
+          "s": "CCM甲醛",
+          "mark": "none",
+          "ev": ">1,500",
+          "es": "F-CCM",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": ">20,000",
+          "s": "CCM颗粒物",
+          "mark": "none",
+          "ev": ">20,000",
+          "es": "P-CCM",
+          "stale": false
+         },
+         {
+          "v": ">2,000",
+          "s": "CCM甲醛",
+          "mark": "none",
+          "ev": ">2,000",
+          "es": "F-CCM",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": ">20,000",
+          "s": "CCM颗粒物",
+          "mark": "none",
+          "ev": ">20,000",
+          "es": "P-CCM",
+          "stale": false
+         },
+         {
+          "v": ">2,500",
+          "s": "CCM甲醛",
+          "mark": "none",
+          "ev": ">2,500",
+          "es": "F-CCM",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": ">1,000,000",
+          "s": "CCM颗粒物",
+          "mark": "good",
+          "ev": ">1,000,000",
+          "es": "P-CCM",
+          "stale": false
+         },
+         {
+          "v": ">1,500",
+          "s": "CCM甲醛",
+          "mark": "bad",
+          "ev": ">1,500",
+          "es": "F-CCM",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "CCM Spec."
+     },
+     {
+      "id": "r_my3geu",
+      "label": "数显",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "PM2.5｜VOC检测",
+          "s": "",
+          "mark": "none",
+          "ev": "PM2.5 | VOC…",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "PM2.5｜甲醛｜TVOC等检测",
+          "s": "",
+          "mark": "none",
+          "ev": "PM2.5 | FA | TVOC…",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "PM2.5｜甲醛｜VOC检测",
+          "s": "",
+          "mark": "none",
+          "ev": "PM2.5 | FA | VOC…",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "None",
+          "s": "",
+          "mark": "bad",
+          "ev": "None",
+          "es": "",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "Detection"
+     }
+    ],
+    "name_en": "Core Performance"
+   },
+   {
+    "id": "g2",
+    "name": "资质背书",
+    "rows": [
+     {
+      "id": "r_m9fgup",
+      "label": "国内认证",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "消毒认证｜0臭氧认证｜睡眠静音认证",
+          "s": "",
+          "mark": "none",
+          "ev": "Disinfection | Zero-Ozone | Quiet Sleep",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "医护级认证｜母婴级认证｜0臭氧认证",
+          "s": "",
+          "mark": "none",
+          "ev": "Medical-Grade | Maternal & Infant Grade | Zero-Ozone",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "医护级认证｜母婴级认证｜静享优品认证",
+          "s": "",
+          "mark": "none",
+          "ev": "Medical-Grade | Maternal & Infant Grade | Premium Quiet Product",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "None",
+          "s": "",
+          "mark": "bad",
+          "ev": "None",
+          "es": "",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "Cert.(CN)"
+     },
+     {
+      "id": "r_d8vo59",
+      "label": "国际认证",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "SGS｜Intertek｜TUV认证",
+          "s": "",
+          "mark": "none",
+          "ev": "SGS | Intertek | TÜV",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "None",
+          "s": "",
+          "mark": "none",
+          "ev": "None",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "瑞士Bluesign｜美国EPA｜欧洲BPR认证",
+          "s": "",
+          "mark": "none",
+          "ev": "Bluesign | EPA | BPR",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "EN1822 标准",
+          "s": "",
+          "mark": "bad",
+          "ev": "EN1822 Standard",
+          "es": "",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "Cert.(Global)"
+     },
+     {
+      "id": "r_ceb93u",
+      "label": "奖项",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "红点奖",
+          "s": "",
+          "mark": "none",
+          "ev": "Red Dot Design",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "红点奖｜IF设计奖",
+          "s": "",
+          "mark": "none",
+          "ev": "Red Dot | iF",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "沸腾质量奖",
+          "s": "",
+          "mark": "none",
+          "ev": "Boiling Quality",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "None",
+          "s": "",
+          "mark": "bad",
+          "ev": "None",
+          "es": "",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "Awards"
+     }
+    ],
+    "name_en": "Certifications"
+   },
+   {
+    "id": "g3",
+    "name": "促销权益",
+    "rows": [
+     {
+      "id": "r_2je079",
+      "label": "权益",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "晒单赠复合滤网 *3个",
+          "s": "",
+          "mark": "none",
+          "ev": "Review & Get a set of filters",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "晒单赠中层滤芯",
+          "s": "价值 499 元",
+          "mark": "none",
+          "ev": "Review & Get a Free Mid-layer Filter",
+          "es": "(¥499)",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "下单赠水洗除醛滤网",
+          "s": "价值 299 元",
+          "mark": "none",
+          "ev": "Review & Get a Formaldehyde Filter",
+          "es": "(¥299)",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "晒单赠粗筛滤网",
+          "s": "价值 399 元",
+          "mark": "none",
+          "ev": "Review & Get a Prescreen Filter",
+          "es": "(¥399)",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "Benefits"
+     }
+    ],
+    "name_en": "Benefits"
+   },
+   {
+    "id": "g4",
+    "name": "品牌心智",
+    "rows": [
+     {
+      "id": "r_9b28kq",
+      "label": "附加心智",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "中国高端空净品牌销额 TOP1",
+          "s": "",
+          "mark": "none",
+          "ev": "No.1 Sales Revenue in China's Premium Air Purifier Market",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "空气净化器国家标准起草单位",
+          "s": "",
+          "mark": "none",
+          "ev": "Drafting Unit of China's National Air Purifier Standards",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "全球智能家电销量 TOP1",
+          "s": "",
+          "mark": "none",
+          "ev": "No.1 Globally in Smart Home Appliance Sales",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "热销 70+ 国家地区",
+          "s": "",
+          "mark": "none",
+          "ev": "Top-selling in 70+Regions",
+          "es": "",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "Extra Highlights"
+     },
+     {
+      "id": "r_casz9l",
+      "label": "产地",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "国内生产",
+          "s": "",
+          "mark": "none",
+          "ev": "Made in China",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "国内生产",
+          "s": "",
+          "mark": "none",
+          "ev": "Made in China",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "国内生产",
+          "s": "",
+          "mark": "none",
+          "ev": "Made in China",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "瑞士精工 原装进口",
+          "s": "",
+          "mark": "good",
+          "ev": "Swiss Precision Originally Imported from Switzerland",
+          "es": "",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "Origin"
+     },
+     {
+      "id": "r_7adm5l",
+      "label": "检测方式",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "统一检测",
+          "s": "",
+          "mark": "none",
+          "ev": "Standardized",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "统一检测",
+          "s": "",
+          "mark": "none",
+          "ev": "Standardized",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "统一检测",
+          "s": "",
+          "mark": "none",
+          "ev": "Standardized",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "每台独立检测",
+          "s": "",
+          "mark": "good",
+          "ev": "Individual Unit",
+          "es": "",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "Testing Method"
+     },
+     {
+      "id": "r_2698vh",
+      "label": "售后",
+      "cells": {
+       "c_hon": {
+        "lines": [
+         {
+          "v": "两年质保｜首年只换不修",
+          "s": "",
+          "mark": "none",
+          "ev": "2-Year | RP Only in the 1st Year",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_352": {
+        "lines": [
+         {
+          "v": "三年质保｜风机十年",
+          "s": "",
+          "mark": "none",
+          "ev": "3-Year | 10-Year Fan Motor",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_mid": {
+        "lines": [
+         {
+          "v": "两年质保｜首年只换不修",
+          "s": "",
+          "mark": "none",
+          "ev": "3-Year | RP Only in the 1st Year",
+          "es": "",
+          "stale": false
+         }
+        ]
+       },
+       "c_iqa": {
+        "lines": [
+         {
+          "v": "一年质保",
+          "s": "",
+          "mark": "bad",
+          "ev": "1-Year",
+          "es": "",
+          "stale": false
+         }
+        ]
+       }
+      },
+      "label_en": "Warranty"
+     }
+    ],
+    "name_en": "Brand Equity"
+   }
+  ],
+  "title_en": "Selling points compare",
+  "subtitle_en": "Air Purifier · Competitive Comparison",
+  "lang": "zh"
+ }
+}

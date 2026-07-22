@@ -1,0 +1,25 @@
+services:
+  workbench:
+    build: .
+    # 已经 build 好镜像的话，把上面一行换成：
+    # image: competitive-workbench:latest
+    container_name: competitive-workbench
+    restart: unless-stopped
+    ports:
+      - "8090:8080"          # 宿主机 8090 → 容器 8080，Lucky 反代指向这里
+    environment:
+      TZ: Asia/Shanghai
+      # 只在第一次启动、还没有 users.json 时用来创建管理员
+      ADMIN_USER: "admin"
+      ADMIN_PIN: "123456"    # 6 位数字。登录后在「⋯ → 用户管理」里改掉
+      SESSION_DAYS: "30"
+    volumes:
+      - workbench-data:/data # db.json、users.json、uploads/、backups/
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 4s
+      retries: 3
+
+volumes:
+  workbench-data:
