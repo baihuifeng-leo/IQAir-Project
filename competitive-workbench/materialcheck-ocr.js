@@ -6,9 +6,12 @@ const { execFile } = require('child_process');
  * 调用系统级 tesseract 二进制识别图片文字。
  * exec 可注入桩函数用于测试，默认用真实的 child_process.execFile。
  */
-function runOcr(imagePath, { exec = execFile, lang = 'chi_sim+eng' } = {}) {
+function runOcr(imagePath, { exec = execFile, lang = 'chi_sim+eng', psm = '11' } = {}) {
   return new Promise((resolve, reject) => {
-    exec('tesseract', [imagePath, 'stdout', '-l', lang], { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    // PSM 11（稀疏文本，不假设有序版面）：电商海报是拼贴式版面，不是规整文档，
+    // 默认的 PSM 3 整页版式分析会把标题文字连同旁边的产品图一起判成"图片区域"整段跳过。
+    // 关键词匹配是无序子串比对，PSM 11 打乱阅读顺序换来更全的文字覆盖，没有副作用。
+    exec('tesseract', [imagePath, 'stdout', '-l', lang, '--psm', psm], { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) return reject(new Error('OCR 识别失败：' + (stderr || err.message || '未知错误')));
       resolve(String(stdout || '').trim());
     });

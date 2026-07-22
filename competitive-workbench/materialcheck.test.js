@@ -22,7 +22,7 @@ async function run() {
     const stubExec = (cmd, args, opts, cb) => { calledWith = { cmd, args, opts }; cb(null, '识别出的文字\n', ''); };
     const text = await runOcr('/tmp/x.jpg', { exec: stubExec });
     assert.strictEqual(calledWith.cmd, 'tesseract');
-    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'chi_sim+eng']);
+    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'chi_sim+eng', '--psm', '11']);
     assert.strictEqual(text, '识别出的文字');
   });
 
@@ -30,7 +30,14 @@ async function run() {
     let calledWith = null;
     const stubExec = (cmd, args, opts, cb) => { calledWith = { cmd, args }; cb(null, 'text', ''); };
     await runOcr('/tmp/x.jpg', { exec: stubExec, lang: 'eng' });
-    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'eng']);
+    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'eng', '--psm', '11']);
+  });
+
+  await tAsync('runOcr 支持自定义 PSM 参数', async () => {
+    let calledWith = null;
+    const stubExec = (cmd, args, opts, cb) => { calledWith = { cmd, args }; cb(null, 'text', ''); };
+    await runOcr('/tmp/x.jpg', { exec: stubExec, psm: '6' });
+    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'chi_sim+eng', '--psm', '6']);
   });
 
   await tAsync('runOcr 命令失败时 reject 出有意义的错误', async () => {
