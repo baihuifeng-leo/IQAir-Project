@@ -22,7 +22,9 @@ class MaterialCheckStore {
     // 服务端并发队列：单台 VM 是单进程 Node，OCR 是 CPU 密集操作，
     // 这里跨所有请求、所有用户地限制同时在跑的 tesseract 进程数，
     // 避免一次性起太多进程拖垮机器（见设计文档「技术前提与约束」）。
-    this._ocrConcurrency = ocrConcurrency;
+    // 防御式下限：并发数配成 0 或负数会让队列永远排不空（第一个任务
+    // 排进队列后再没有任何东西触发 drain），静默卡死整条检测流水线。
+    this._ocrConcurrency = Math.max(1, ocrConcurrency);
     this._ocrActive = 0;
     this._ocrQueue = [];
   }
