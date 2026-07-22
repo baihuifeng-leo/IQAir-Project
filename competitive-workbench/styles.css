@@ -1954,6 +1954,21 @@ body.rpt-presenting .rpt-wm-note {
 .mc-ocr-text { white-space: pre-wrap; background: var(--field-bg); padding: 14px; border-radius: 10px; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.6; max-height: 320px; overflow-y: auto; margin-top: 12px; }
 .mc-mark-bad { background: var(--bad); color: #fff; padding: 0 2px; border-radius: 3px; }
 
+.mc-lib { display: grid; grid-template-columns: 220px 1fr; gap: 24px; }
+.mc-lib-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.mc-product-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; font-size: 13px; }
+.mc-product-item:hover { background: var(--surface-2); }
+.mc-product-item.is-active { background: var(--mint-dim); color: var(--mint); }
+.mc-product-item small { color: var(--dimmer); }
+
+.mc-kw-editor label { display: block; margin: 14px 0 6px; font-size: 12px; color: var(--dim); }
+.mc-kw-editor input, .mc-kw-add input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+.mc-kw-add { display: flex; gap: 8px; margin-top: 8px; }
+.mc-chip-editor { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+
+.mc-universal { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--line-soft); }
+.mc-lib-error { color: var(--bad-text); font-size: 12.5px; margin-top: 8px; }
+
 /* ═══════════════════════════════════════════════════════════
    移动端
    对位表是 5 列 × 11 行的二维表，手机上不可能不横滚。

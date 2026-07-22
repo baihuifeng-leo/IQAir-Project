@@ -82,7 +82,7 @@ const MaterialCheck = (() => {
   function renderResult(row, result) {
     if (result.needsManualPick) {
       row.className = 'mc-row mc-row-pick';
-      const options = products.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+      const options = products.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
       row.innerHTML = `
         <span class="mc-row-name">${escapeHtml(result.filename)}</span>
         <span class="mc-row-status">需要选择产品：
@@ -139,7 +139,7 @@ const MaterialCheck = (() => {
 
     el.innerHTML = `
       <div class="mc-filter-bar">
-        <select id="mc-f-product"><option value="">全部产品</option>${products.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+        <select id="mc-f-product"><option value="">全部产品</option>${products.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')}</select>
         <select id="mc-f-status"><option value="">全部状态</option><option value="pass">通过</option><option value="fail">不通过</option><option value="ocr_failed">识别失败</option></select>
       </div>
       <div class="mc-history-list" id="mc-history-list"></div>`;
@@ -198,9 +198,113 @@ const MaterialCheck = (() => {
     detailMask.hidden = false;
   }
 
-  // ── 关键词库（Task 8 填充） ────────────────────────────
+  // ── 关键词库 ────────────────────────────────────────
   async function renderLibrary() {
-    A.$('#mc-library-view').innerHTML = '<p class="rv-empty">开发中…</p>';
+    const el = A.$('#mc-library-view');
+    if (!A.me.admin) { el.innerHTML = '<p class="rv-empty">只有管理员能管理关键词库</p>'; return; }
+
+    el.innerHTML = `
+      <div class="mc-lib">
+        <div class="mc-lib-products">
+          <div class="mc-lib-head"><h3>产品</h3><button class="mc-btn" id="mc-add-product">+ 新增产品</button></div>
+          <div id="mc-product-list"></div>
+        </div>
+        <div class="mc-lib-detail" id="mc-lib-detail"></div>
+      </div>
+      <div class="mc-universal">
+        <h3>通用词（任何产品图上出现都不算问题）</h3>
+        <div class="mc-chip-editor" id="mc-universal-chips"></div>
+        <div class="mc-kw-add"><input placeholder="输入通用词，回车添加" id="mc-universal-input"><button class="mc-btn" id="mc-universal-add-btn">添加</button></div>
+        <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
+        <p class="mc-lib-error" id="mc-lib-error" hidden></p>
+      </div>`;
+
+    let selected = products[0]?.id || null;
+
+    const drawProductList = () => {
+      A.$('#mc-product-list').innerHTML = products.map((p) => `
+        <div class="mc-product-item ${p.id === selected ? 'is-active' : ''}" data-id="${escapeHtml(p.id)}">
+          <span>${escapeHtml(p.name)}</span><small>${p.keywords.length} 词</small>
+        </div>`).join('') || '<p class="rv-empty">还没有产品</p>';
+      A.$$('#mc-product-list .mc-product-item').forEach((it) => {
+        it.onclick = () => { selected = it.dataset.id; drawProductList(); drawDetail(); };
+      });
+    };
+
+    const drawDetail = () => {
+      const detail = A.$('#mc-lib-detail');
+      const p = products.find((x) => x.id === selected);
+      if (!p) { detail.innerHTML = '<p class="rv-empty">选一个产品</p>'; return; }
+      detail.innerHTML = `
+        <div class="mc-kw-editor">
+          <label>产品名称 / 型号</label>
+          <input class="mc-kw-name" value="${escapeHtml(p.name)}">
+          <label>专属关键词</label>
+          <div class="mc-chip-editor" id="mc-kw-chips"></div>
+          <div class="mc-kw-add"><input placeholder="输入关键词，回车添加" id="mc-kw-input"><button class="mc-btn" id="mc-kw-add-btn">添加</button></div>
+          <button class="mc-btn mc-btn-danger" id="mc-del-product">删除这个产品</button>
+        </div>`;
+
+      const drawChips = () => {
+        A.$('#mc-kw-chips').innerHTML = p.keywords.map((k, i) => `<span class="mc-chip">${escapeHtml(k)}<i data-i="${i}">×</i></span>`).join('');
+        A.$$('#mc-kw-chips i').forEach((x) => (x.onclick = () => { p.keywords.splice(Number(x.dataset.i), 1); drawChips(); drawProductList(); }));
+      };
+      drawChips();
+
+      A.$('.mc-kw-name').oninput = (e) => { p.name = e.target.value; };
+
+      const addKw = () => {
+        const input = A.$('#mc-kw-input');
+        const v = input.value.trim();
+        if (!v) return;
+        p.keywords.push(v); input.value = ''; drawChips(); drawProductList();
+      };
+      A.$('#mc-kw-add-btn').onclick = addKw;
+      A.$('#mc-kw-input').onkeydown = (e) => { if (e.key === 'Enter') addKw(); };
+
+      A.$('#mc-del-product').onclick = () => {
+        products = products.filter((x) => x.id !== p.id);
+        selected = products[0]?.id || null;
+        drawProductList(); drawDetail();
+      };
+    };
+
+    A.$('#mc-add-product').onclick = () => {
+      const p = { id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', keywords: [] };
+      products.push(p); selected = p.id; drawProductList(); drawDetail();
+    };
+
+    const drawUniversal = () => {
+      A.$('#mc-universal-chips').innerHTML = universalKeywords.map((k, i) => `<span class="mc-chip">${escapeHtml(k)}<i data-i="${i}">×</i></span>`).join('');
+      A.$$('#mc-universal-chips i').forEach((x) => (x.onclick = () => { universalKeywords.splice(Number(x.dataset.i), 1); drawUniversal(); }));
+    };
+    const addUniversal = () => {
+      const input = A.$('#mc-universal-input');
+      const v = input.value.trim();
+      if (!v) return;
+      universalKeywords.push(v); input.value = ''; drawUniversal();
+    };
+    A.$('#mc-universal-add-btn').onclick = addUniversal;
+    A.$('#mc-universal-input').onkeydown = (e) => { if (e.key === 'Enter') addUniversal(); };
+
+    A.$('#mc-lib-save').onclick = async () => {
+      const errEl = A.$('#mc-lib-error');
+      errEl.hidden = true;
+      try {
+        const saved = await call('/api/materialcheck/products', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ products, universalKeywords })
+        });
+        products = saved.products; universalKeywords = saved.universalKeywords;
+        A.toast('关键词库已保存');
+        drawProductList(); drawDetail(); drawUniversal();
+      } catch (e) {
+        errEl.hidden = false; errEl.textContent = e.message;
+      }
+    };
+
+    drawProductList(); drawDetail(); drawUniversal();
   }
 
   function init(api) {
