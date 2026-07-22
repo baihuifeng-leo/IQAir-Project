@@ -12,7 +12,7 @@ const { diffSummary } = require('./audit.js');
 const { ReviewStore } = require('./reviews-store.js');
 const { Preview3DStore } = require('./preview3d-store.js');
 const { ReportStore } = require('./report-store.js');
-const { MaterialCheckStore } = require('./materialcheck-store.js');
+const { MaterialCheckStore, PLATFORMS: MATERIALCHECK_PLATFORMS } = require('./materialcheck-store.js');
 const materialcheckOcr = require('./materialcheck-ocr.js');
 const { pipeline } = require('stream/promises');
 
@@ -104,7 +104,9 @@ async function loadUsers() {
   }
 }
 const saveUsers = () => writeAtomic(USERS_FILE, JSON.stringify(users, null, 1));
-const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [], theme: u.theme === 'light' ? 'light' : 'dark', p3dAxis: u.p3dAxis || null });
+const MATERIAL_LIBRARY_ROLES = ['edit', 'view', 'none'];
+// admin 永远隐式拥有词库编辑权限，不看这个字段；非 admin 用户没设置过就当 view（现有默认体验的延伸）
+const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [], theme: u.theme === 'light' ? 'light' : 'dark', p3dAxis: u.p3dAxis || null, materialLibraryRole: u.admin ? 'edit' : (MATERIAL_LIBRARY_ROLES.includes(u.materialLibraryRole) ? u.materialLibraryRole : 'view') });
 const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports', 'materialcheck'];
 const P3D_DIMS = ['pmCadr', 'hchoCadr', 'price'];
 /** 坐标轴设置合法性：x/y/z 三个轴必须凑齐 P3D_DIMS 这三个维度、不重不漏；
@@ -390,7 +392,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'PATCH') {
         const isSelf = u.id === me.id;
         if (!isSelf && !me.admin) return json(res, 403, { error: '只能改自己的 PIN' });
-        const { pin, name, admin, hiddenModules, theme, p3dAxis } = await body(req, 4096);
+        const { pin, name, admin, hiddenModules, theme, p3dAxis, materialLibraryRole } = await body(req, 4096);
         if (pin !== undefined) {
           if (!validPin(pin)) return json(res, 400, { error: 'PIN 必须是 6 位数字' });
           u.pin = hashPin(pin);
@@ -405,6 +407,11 @@ const server = http.createServer(async (req, res) => {
         if (admin !== undefined && me.admin) {
           if (u.id === me.id && !admin) return json(res, 400, { error: '不能取消自己的管理员身份' });
           u.admin = !!admin;
+        }
+        // 词库查看/编辑权限，只有管理员能改别人的；admin 用户永远隐式 edit，设这个字段对他们没有实际效果
+        if (materialLibraryRole !== undefined && me.admin) {
+          if (!MATERIAL_LIBRARY_ROLES.includes(materialLibraryRole)) return json(res, 400, { error: '词库权限只能是 edit/view/none' });
+          u.materialLibraryRole = materialLibraryRole;
         }
         // 界面显示偏好，只能改自己的——就算是管理员也不能帮别人关模块，这跟账号安全无关
         if (hiddenModules !== undefined) {
@@ -433,6 +440,7 @@ const server = http.createServer(async (req, res) => {
         if (pin !== undefined) what.push(u.id === me.id ? '改了自己的 PIN' : `重置了「${u.name}」的 PIN`);
         if (name !== undefined) what.push(`改名为「${u.name}」`);
         if (admin !== undefined) what.push(`${u.name} ${u.admin ? '设为' : '取消'}管理员`);
+        if (materialLibraryRole !== undefined) what.push(`${u.name} 词库权限改为 ${materialLibraryRole}`);
         if (what.length) audit(me, 'user.update', { detail: what }); // hiddenModules 是个人偏好，不进变更日志
         return json(res, 200, pubUser(u));
       }
@@ -662,17 +670,26 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/api/materialcheck/products' && req.method === 'GET') {
-      return json(res, 200, { products: materialcheck.products, universalKeywords: materialcheck.universalKeywords });
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      return json(res, 200, materialcheck.getLibrary(platform));
     }
 
     if (p === '/api/materialcheck/products' && req.method === 'PUT') {
-      if (!me.admin) return json(res, 403, { error: '只有管理员能改关键词库' });
-      const { products, universalKeywords } = await body(req, 1024 * 1024);
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const { products, universalKeywords, machineSharedKeywords, filterSharedKeywords, accessorySharedKeywords } = await body(req, 1024 * 1024);
       if (!Array.isArray(products) || !Array.isArray(universalKeywords)) return json(res, 400, { error: '数据格式不对' });
       let saved;
-      try { saved = await materialcheck.saveProducts(products, universalKeywords); }
+      try {
+        saved = await materialcheck.saveProducts(platform, products, universalKeywords, {
+          machine: machineSharedKeywords, filter: filterSharedKeywords, accessory: accessorySharedKeywords
+        });
+      }
       catch (e) { return json(res, 400, { error: e.message }); }
-      audit(me, 'materialcheck.products.update', { detail: [`关键词库已更新：${saved.products.length} 个产品，${saved.universalKeywords.length} 个通用词`] });
+      const platformLabel = platform === 'tmall' ? '天猫' : '京东';
+      audit(me, 'materialcheck.products.update', { detail: [`${platformLabel}关键词库已更新：${saved.products.length} 个产品，${saved.universalKeywords.length} 个通用词`] });
       return json(res, 200, saved);
     }
 
@@ -680,15 +697,17 @@ const server = http.createServer(async (req, res) => {
       const ct = (req.headers['content-type'] || '').split(';')[0].trim();
       const ext = IMAGE_EXT[ct];
       if (!ext) return json(res, 415, { error: '只支持 PNG、JPG、WebP 三种格式' });
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
       const filename = decodeURIComponent(url.searchParams.get('filename') || ('upload' + ext));
       const batchId = url.searchParams.get('batchId') || ('b_' + crypto.randomBytes(6).toString('hex'));
       const buf = await readBinary(req, MAX_IMAGE);
       if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
       let result;
-      try { result = await materialcheck.detectFile({ buf, ext, filename, batchId, uploadedBy: me.name }); }
+      try { result = await materialcheck.detectFile({ buf, ext, filename, batchId, uploadedBy: me.name, platform }); }
       catch (e) { return json(res, 400, { error: e.message }); }
       if (!result.needsManualPick) {
-        const label = result.status === 'pass' ? '通过' : result.status === 'ocr_failed' ? '识别失败' : '不通过';
+        const label = { pass: '通过', warn: '提醒', error: '报错', ocr_failed: '识别失败' }[result.status] || result.status;
         audit(me, 'materialcheck.detect', { detail: [`${filename} · ${result.productName || ''} · ${label}`] });
       }
       return json(res, 200, result);
@@ -700,16 +719,18 @@ const server = http.createServer(async (req, res) => {
       let result;
       try { result = await materialcheck.resolvePending(pendingId, productId, me.name); }
       catch (e) { return json(res, 400, { error: e.message }); }
-      audit(me, 'materialcheck.detect', { detail: [`${result.filename} · ${result.productName} · 人工选择 · ${result.status === 'pass' ? '通过' : '不通过'}`] });
+      const label = { pass: '通过', warn: '提醒', error: '报错' }[result.status] || result.status;
+      audit(me, 'materialcheck.detect', { detail: [`${result.filename} · ${result.productName} · 人工选择 · ${label}`] });
       return json(res, 200, result);
     }
 
     if (p === '/api/materialcheck/records' && req.method === 'GET') {
+      const platform = url.searchParams.get('platform') || undefined;
       const productId = url.searchParams.get('productId') || undefined;
       const status = url.searchParams.get('status') || undefined;
       const uploadedBy = url.searchParams.get('uploadedBy') || undefined;
       const limit = Math.min(2000, Number(url.searchParams.get('limit')) || 500);
-      return json(res, 200, { records: materialcheck.listRecords({ productId, status, uploadedBy, limit }) });
+      return json(res, 200, { records: materialcheck.listRecords({ platform, productId, status, uploadedBy, limit }) });
     }
 
     if (p.startsWith('/uploads/')) return serveStatic(res, UPLOAD_DIR, p.slice('/uploads/'.length), true);

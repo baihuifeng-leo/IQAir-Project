@@ -1923,8 +1923,15 @@ body.rpt-presenting .rpt-wm-note {
 .mc-row-ok .mc-row-status { color: var(--ok-text); }
 .mc-row-bad { border-color: var(--bad); }
 .mc-row-bad .mc-row-status { color: var(--bad-text); }
+.mc-row-warn { border-color: var(--warn); }
+.mc-row-warn .mc-row-status { color: var(--warn-text); }
 .mc-row-error { border-color: var(--warn); }
 .mc-row-pick { border-color: var(--blue); }
+
+.mc-platform-switch { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; margin-right: 10px; }
+
+.mc-progress { height: 6px; border-radius: 999px; background: var(--field-bg); overflow: hidden; margin: 4px 0 14px; }
+.mc-progress-bar { height: 100%; width: 0; background: var(--mint); transition: width 0.25s var(--ease); }
 
 .mc-spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--line-soft); border-top-color: var(--mint); border-radius: 50%; animation: mc-spin 0.7s linear infinite; }
 @keyframes mc-spin { to { transform: rotate(360deg); } }
@@ -1932,8 +1939,10 @@ body.rpt-presenting .rpt-wm-note {
 .mc-chip-row { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .mc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: var(--field-bg); font-size: 11.5px; }
 .mc-chip-bad { background: var(--bad); color: #fff; }
+.mc-chip-warn { background: var(--warn); color: #04140f; }
 .mc-chip i { cursor: pointer; opacity: 0.7; font-style: normal; }
 .mc-chip i:hover { opacity: 1; }
+.mc-kw-cat { color: var(--dimmer); font-size: 10px; }
 
 .mc-warning { width: 100%; color: var(--warn-text); font-size: 12px; margin-top: 4px; }
 
@@ -1963,11 +1972,14 @@ body.rpt-presenting .rpt-wm-note {
 
 .mc-kw-editor label { display: block; margin: 14px 0 6px; font-size: 12px; color: var(--dim); }
 .mc-kw-editor input, .mc-kw-add input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+.mc-type-select, .mc-cat-select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-kw-add { display: flex; gap: 8px; margin-top: 8px; }
 .mc-chip-editor { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
 
 .mc-universal { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--line-soft); }
 .mc-lib-error { color: var(--bad-text); font-size: 12.5px; margin-top: 8px; }
+
+.mc-lib-disabled input, .mc-lib-disabled select, .mc-lib-disabled button { opacity: 0.6; pointer-events: none; }
 
 /* ═══════════════════════════════════════════════════════════
    移动端

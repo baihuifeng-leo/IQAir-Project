@@ -90,14 +90,65 @@
 | 2026-07-22 | 反色/字符白名单/tessdata_best/Sauvola 二值化四个新思路依次实测，全部 50-90 秒跑不完 | 每个思路 1-2 次 | 判断是 tesseract 在这几种用法下的已知性能短板，放弃这个方向 |
 | 2026-07-22 | PaddleOCR 默认配置报 `ConvertPirAttribute2RuntimeAttribute not support` | 2（先试换模型版本，同样报错；再试降级 paddlepaddle 到 2.6.2，结果 paddleocr 3.x 需要新 API，报另一个错） | 显式 `enable_mkldnn=False` 关闭 MKLDNN 加速解决 |
 
-## 五问重启检查（截至 2026-07-22 会话结束）
+## 会话：2026-07-22（阶段 7：v2 —— 权限/平台/分类/状态/进度条）
+
+背景：仓库这天早些时候做过一次大重构（`test/`嵌套仓库+tarball 打包退休，`EC-Workbench/` 直接是可运行仓库根），本会话在新结构下、`.claude/worktrees/materialcheck-v2` worktree 里（分支从 `feature/materialcheck-paddleocr-ocr` 分出）继续做。用户用 `/grill-me` 提出 4 点优化需求，逐题梳理（每题给推荐项、用户逐一拍板），完整方案记在 `docs/superpowers/specs/2026-07-22-materialcheck-v2-design.md`，然后动手实现。
+
+### 需求 1+2：词库权限 + 天猫/京东平台隔离 + 关键词分类 + 机器/滤芯/附件组内通用词
+- 用户对象新增 `materialLibraryRole: edit/view/none`（全局一份），admin 隐式 edit，非 admin 默认 view；`public/users.js` 给非 admin 用户加了个下拉框，`server.js` 的 `PATCH /api/users/:id` 只有 admin 能改这个字段
+- `products.json` 从扁平结构改成 `{tmall:{...}, jd:{...}}` 命名空间隔离；`load()` 检测到旧扁平结构自动一次性迁移到天猫、京东留空，随后立刻落盘
+- 关键词从纯字符串变成 `{text, category}` 对象（8 个分类），纯组织元数据，不影响判定逻辑
+- 机器/滤芯/附件通过 `type` 字段 + 三套独立的组内通用词列表（`machineSharedKeywords`/`filterSharedKeywords`/`accessorySharedKeywords`）实现——**关键技术发现**：`matchAgainstProduct` 完全不需要知道 `product.type` 或任何通用词列表，"组内共享"效果是 `validateLibrary` 唯一性约束的自然推论（组内通用词永远不会同时是某产品的专属词，所以永远不会被当成"别人的专属词"触发串词），匹配算法一行没改
+
+### 需求 3：检测状态三态化
+- `status` 从 `pass/fail` 改成 `pass/warn/error`，固定规则：串词→error，缺词→warn，都没有→pass，两者都有→error 优先（详情仍分列缺词/串词）
+- 旧记录 `status:'fail'` 不迁移，历史筛选下拉框里保留这个选项
+
+### 需求 4：上传整批进度条
+- `mc-check-view` 加了个 `<div class="mc-progress">` 填充条，按"(已完成+待选择)/总数"算百分比（待人工选择的图算"识别已经跑完"，不算"处理中"）
+
+### 实现规模
+- 后端：`materialcheck-match.js`（关键词表示 + 三态状态）、`materialcheck-store.js`（平台命名空间 + 迁移 + platform 贯穿所有方法）、`server.js`（5 个 materialcheck 路由 + users PATCH + pubUser）
+- 前端：`public/materialcheck.js`（几乎整个重写：平台切换器、type/分类编辑、三套组内通用词编辑区、三态徽章、平台历史筛选、进度条）、`public/users.js`（权限下拉框）、`public/index.html`（平台切换器 DOM）、`public/styles.css`（新增 `.mc-row-warn`/`.mc-platform-switch`/`.mc-progress`/`.mc-lib-disabled` 等样式）
+
+### 真机验证（本会话的重点改进）
+过去几轮受限于沙盒没有真实浏览器，只能靠 curl 验证前端改动。这次在 `$CLAUDE_JOB_DIR/tmp`（不进仓库）临时装了 Playwright，起 headless Chromium 跑通完整交互链路：
+- 登录 → 素材质检 tab → 词库管理页（admin 可见）→ 新增产品设 type=机器 + 两个带分类的关键词 → 加机器组内通用词/全局通用词 → 保存成功
+- 切京东平台词库为空（验证平台隔离）→ 切回天猫产品还在
+- 上传测试图片、进度条正确显示（因沙盒没装 PaddleOCR venv，识别结果如预期是"识别失败"，属已知环境限制不是新 bug）
+- 历史记录页平台筛选下拉框存在
+- 单独验证用户管理面板：非 admin 用户行有词库权限下拉框、admin 行没有、选 edit 后 PATCH 成功持久化
+- 全程 0 个真实 console/page error
+- 另外用 curl 单独验证了服务端权限闸门：view 权限 403、admin 授权 edit 后能 PUT 成功、非 admin 不能改别人的角色
+
+### 测试
+`node materialcheck.test.js` 从 43 扩到 56 个用例，全部通过（新增用例覆盖：keywordText/keywordCategory 表示兼容性、组内通用词唯一性校验、天猫京东数据隔离、按平台过滤历史记录、旧扁平数据自动迁移、三态 status 的各种组合）。
+
+## 测试结果（阶段 7）
+| 测试 | 输入 | 预期结果 | 实际结果 | 状态 |
+|------|------|---------|---------|------|
+| `node materialcheck.test.js` | - | 全部通过 | 56 passed, 0 failed | ✅ |
+| curl：view 权限用户 PUT 词库 | 默认 view 权限的非 admin 用户 | 403 | `{"error":"没有编辑关键词库的权限"}` | ✅ |
+| curl：admin 授权后该用户再 PUT | 授权 edit 后同一用户重试 | 200 保存成功 | 保存成功 | ✅ |
+| Playwright：平台隔离 | 天猫存 1 个产品后切到京东 | 京东产品数为 0 | 0 | ✅ |
+| Playwright：切回天猫 | - | 产品还在 | 1 | ✅ |
+| Playwright：上传进度条 | 上传 1 张图 | 进度条可见 | `true` | ✅ |
+| Playwright：用户管理权限下拉框 | 非 admin 行 vs admin 行 | 非 admin 有下拉框，admin 没有 | 符合预期 | ✅ |
+
+## 错误日志（阶段 7）
+| 时间戳 | 错误 | 尝试次数 | 解决方案 |
+|--------|------|---------|---------|
+| 2026-07-22 | worktree 首次创建时分支从错误的 base 分出（`origin/HEAD` 指向不相关的 `redesign/preview3d-deepspace`，不是 `main`） | 1 | 工作区还没做任何真实改动，直接 `git reset --hard origin/feature/materialcheck-paddleocr-ocr` 纠正到正确的起点，不是破坏性操作（没有丢失任何工作） |
+| 2026-07-22 | Playwright 浏览器测试脚本重复用同一个 DATA_DIR 跑第二次，报关键词唯一性冲突 | 1 | 排查后发现是测试方法论问题（同名产品被脚本创建了两次），不是应用 bug；改为每次测试前清空 DATA_DIR |
+
+## 五问重启检查（截至 2026-07-22 会话结束，阶段 7）
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 6（OCR精度优化）complete；PaddleOCR 方案已部署 8080，等用户反馈 |
-| 我要去哪里？ | 等用户测完这版效果和稳定性；如果满意，下一步是阶段5遗留的生产发布（需用户明确指令）和两处待决策的范围取舍项（历史筛选维度、图片展示） |
-| 目标是什么？ | 素材文案关键词检测标签页：批量上传→OCR→关键词比对→缺词/串词提示→历史留档；当前子目标是把 OCR 精度做到用户认可"能投产" |
-| 我学到了什么？ | 见 findings.md「阶段6新增」部分：PaddleOCR 明显优于 tesseract 在这类装饰性电商海报上的表现；速度/精度取舍必须让用户看到具体数字（"慢一点"和"1.5-3分钟"是两回事）；新方向落地前先用真实失败样本做免费脚本实验，比直接写正式代码省成本 |
-| 我做了什么？ | 见上方「阶段6」三轮记录；4个提交 `fe442c3`→`8aff9de`→`7eaa0c9`→`e6acf8b` 都在 `design/deepspace-polish`，另建 `feature/materialcheck-paddleocr-ocr` 分支固定保留这条工作线 |
+| 我在哪里？ | 阶段 7（v2：权限/平台/分类/状态/进度条）complete；本地 worktree 里已实现+真机验证，尚未部署到任何测试/生产环境 |
+| 我要去哪里？ | 提交后按项目约定推送分支、开 PR；等用户在实际环境里测试这批新功能（词库权限、天猫/京东切换、三态状态、进度条），根据反馈决定下一步（部署到 8080/8090 需要用户明确指令） |
+| 目标是什么？ | 素材文案关键词检测标签页的持续打磨；这一阶段的子目标是用户提出的 4 点具体优化（权限管理、平台隔离、关键词分类、三态状态）+ 附带的进度条小需求 |
+| 我学到了什么？ | "组内可共享关键词"这类看似需要感知产品分组的逻辑，很多时候可以通过唯一性约束自然获得，不需要在匹配算法里加分支——设计时先想清楚"这个效果是不是别的约束的推论"能省很多代码；沙盒里能装 Playwright 做真实浏览器验证时应该优先用，比只靠 curl 猜前端行为可靠得多；浏览器测试脚本要注意每次清空测试数据目录，否则会把测试残留误判成应用 bug |
+| 我做了什么？ | 见上方「阶段 7」记录；改了 8 个文件（match/store/server 三个核心模块 + users.js/materialcheck.js/index.html/styles.css 前端 + task_plan/findings/progress 三个规划文件）+ 新增 1 份设计文档，`node materialcheck.test.js` 56/56 通过，真机 Playwright 验证通过 |
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*

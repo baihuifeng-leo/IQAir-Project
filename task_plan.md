@@ -4,6 +4,9 @@
 在电商工作台新增第六个标签页：批量上传素材图片，服务端 OCR 识别文字，跟后台配置的产品专属关键词比对，检测出"缺词"（漏了本该出现的关键词）和"串词"（混入了别的产品的关键词），并留存历史记录供回看。
 
 ## 当前阶段
+阶段 7（v2：权限/平台/分类/状态/进度条）— complete。仓库已在 2026-07-22 做过一次大重构：`test/` 嵌套仓库 + tarball 打包整体退休，`EC-Workbench/` 本身现在就是 git 仓库根目录、可直接 `node server.js` 运行，不再需要打包/解包。本阶段在 worktree `materialcheck-v2` 里开发。
+
+## 当前阶段
 阶段 6（OCR 识别精度优化，用户实测反馈驱动）— complete。功能本体（阶段 1-5）早已上线到 8080 测试环境；这一阶段是用户拿真实素材图实测后，反复反馈"识别有误"，驱动了三轮 OCR 引擎迭代（tesseract 参数调优 → tesseract 多路并集+预处理 → 换成 PaddleOCR），当前落地在 PaddleOCR 常驻子进程方案，已推送 `design/deepspace-polish` 分支并另建 `feature/materialcheck-paddleocr-ocr` 分支保留这条工作线（原因见下方"备注"）。
 
 ## 各阶段
@@ -68,6 +71,19 @@
 - **状态：** complete —— 已部署到 8080 测试环境（含真实创建的 venv，非临时符号链接），server.log 确认常驻 worker 进程正常运行；用户尚未反馈这版的实测结果
 - **已知局限（如实告知用户过，非隐藏问题）：** "士/十"这类形近字偶尔仍会认错（如"瑞士精工"被认成"瑞十精工"）；这套常驻子进程架构是全新代码，比之前调参数风险更高，用户还没来得及验证长时间运行的稳定性
 - **产出**：4 个提交在 `design/deepspace-polish`（`fe442c3`→`8aff9de`→`7eaa0c9`→`e6acf8b`），另建 `feature/materialcheck-paddleocr-ocr` 分支固定在 `e6acf8b`，防止 `design/deepspace-polish`（项目约定里"唯一保留的测试分支，每次覆盖"）未来被其它任务复用时把这条工作线冲掉
+
+### 阶段 7：v2 —— 权限 / 平台隔离 / 分类 / 三态状态 / 进度条
+用户实测后提出 4 点优化需求，用 `/grill-me` 逐题梳理确认，完整方案见 `docs/superpowers/specs/2026-07-22-materialcheck-v2-design.md`。任务拆解：
+
+- [x] **Task A：`materialcheck-match.js` 改造** —— 关键词从字符串变 `{text, category}`（`keywordText`/`keywordCategory` 兼容两种写法）；`matchAgainstProduct` 输出三态 `status`（串词优先于缺词，固定规则不可配置）；`validateLibrary` 唯一性校验扩大到三套组内通用词（第三参数 `sharedPools` 可选，不传时行为跟老版本一致）。**关键发现**：机器/滤芯/附件"组内可共享"这个效果不需要 `matchAgainstProduct` 感知 `product.type` 或任何通用词列表——只要 `validateLibrary` 保证组内通用词永远不会同时也是某产品的专属词，"组内共享"就是唯一性约束的自然推论，不用在匹配算法里加特殊分支。
+- [x] **Task B：`materialcheck-store.js` 改造** —— `products.json` 改按平台命名空间存储（`{tmall:{...}, jd:{...}}`）；`load()` 检测旧扁平结构自动一次性迁移到天猫命名空间、京东留空，随后立刻落盘；`saveProducts`/`detectFile`/`resolvePending`/`listRecords` 全部加 `platform` 参数（`resolvePending` 从 pending 缓存里记的 platform 读，不用调用方重传）；`records.jsonl` 新记录加 `platform` 字段，旧记录不回填。
+- [x] **Task C：`server.js` 路由改造** —— materialcheck 5 个路由全部加 `?platform=` 支持；`PUT /api/materialcheck/products` 权限检查改成 `me.admin || me.materialLibraryRole === 'edit'`；`PATCH /api/users/:id` 新增 `materialLibraryRole` 字段（仅 admin 能改别人的，校验取值只能是 edit/view/none）；`pubUser()` 暴露 `materialLibraryRole`（admin 用户永远显示为 'edit'，非 admin 默认 'view'）。
+- [x] **Task D：`public/users.js` 前端** —— 非 admin 用户行里加一个 `materialLibraryRole` 三选一下拉框（仅 admin 可见可操作，admin 自己的行不出这个下拉框）。
+- [x] **Task E：`public/materialcheck.js` 前端** —— 平台切换器（`index.html` 头部新增 `#mc-platform-switch`，选择记在 sessionStorage）；词库编辑页加产品 type 单选 + 关键词分类下拉 + 三套组内通用词编辑区（`wireChipList` 抽了个通用小函数，四个 chip 编辑器共用）；`role==='view'` 时整个词库面板套一层 `.mc-lib-disabled`（CSS `pointer-events:none`）；检测结果/历史记录三态徽章（通过/提醒/报错，`STATUS_META` 表驱动，兼容旧 `fail` 值）；历史记录加平台筛选（含"未知平台/旧记录"选项）；上传区加整批进度条（按"已完成+待选择"/总数算百分比，待人工选择的图算"OCR 已经跑完"而非"处理中"）。
+- [x] **Task F：真机验证** —— 本地临时装了 Playwright（装在 `$CLAUDE_JOB_DIR/tmp` 下，不进仓库，装完即弃），起真实 headless Chromium 跑通了完整链路：登录 → 开素材质检 tab → 建词库管理页可见 → 新增产品设 type=机器 + 两个带分类的专属关键词 → 加机器组内通用词/全局通用词 → 保存成功 → 切到京东平台词库为空（验证平台隔离）→ 切回天猫产品还在 → 上传测试图片、进度条正确显示 → 历史记录页平台筛选下拉框存在。另外单独验证了用户管理面板：非 admin 用户行出现词库权限下拉框、admin 行不出现、下拉选 edit 后 PATCH 成功持久化。全程 0 个真实的 console/page error（唯一出现的 `ERR_ABORTED` 是页面跳转打断了在途请求的正常现象，不是 bug）。也用 curl 单独验证过服务端权限闸门（view 权限 403、admin 授权后 edit 权限可以 PUT 成功、非 admin 用户不能改别人的角色）。
+- [x] **Task G：`node materialcheck.test.js` 全绿** —— 从 43 扩到 56 个用例全部通过（新增：keywordText/keywordCategory 兼容性、组内通用词唯一性校验、平台隔离、平台过滤、旧数据自动迁移、三态 status 等）+ 更新 findings.md/progress.md + 提交。
+
+**状态：** complete
 
 ## 关键问题
 1. ~~执行方式选哪种~~ — 用户已选 1（Subagent-Driven），正在按这个方式执行。
