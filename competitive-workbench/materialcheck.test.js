@@ -217,6 +217,18 @@ async function run() {
     assert.deepStrictEqual(result.missingKeywords, ['抗菌滤网认证号XXX']);
   });
 
+  await tAsync('detectFile OCR 失败时判定为 ocr_failed', async () => {
+    const store = await freshStore();
+    const stubOcrFail = () => async () => { throw new Error('识别失败：图片损坏'); };
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0001.jpg',
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcrFail()
+    });
+    assert.strictEqual(result.status, 'ocr_failed');
+    assert.strictEqual(store.records.length, 1);
+    assert.strictEqual(store.pending.size, 0);
+  });
+
   await tAsync('detectFile 文件名和 OCR 都无法判定时返回待人工选择，不写入历史记录', async () => {
     const store = await freshStore();
     const result = await store.detectFile({
