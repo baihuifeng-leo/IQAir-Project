@@ -105,7 +105,7 @@ async function loadUsers() {
 }
 const saveUsers = () => writeAtomic(USERS_FILE, JSON.stringify(users, null, 1));
 const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [], theme: u.theme === 'light' ? 'light' : 'dark', p3dAxis: u.p3dAxis || null });
-const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports'];
+const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports', 'materialcheck'];
 const P3D_DIMS = ['pmCadr', 'hchoCadr', 'price'];
 /** 坐标轴设置合法性：x/y/z 三个轴必须凑齐 P3D_DIMS 这三个维度、不重不漏；
  *  文字可以留白（留白代表用回默认文案，前端 preview3d.js 里处理），
