@@ -23,33 +23,44 @@
 - 创建/修改的文件：
   - 创建 `docs/superpowers/plans/2026-07-21-material-keyword-check.md`（约 1800 行，含完整代码）
   - Git commit `c12bce8`
-- 向用户展示了执行方式的选择（Subagent-Driven vs Inline Execution），**尚未收到回复**
+- 向用户展示了执行方式的选择（Subagent-Driven vs Inline Execution），用户选了 Subagent-Driven
 
-### 阶段 3：实现
-- **状态：** pending（尚未开始，等用户选执行方式）
+### 阶段 3：实现（subagent-driven-development）
+- **状态：** in_progress
 - 执行的操作：
-  -（无）
+  - 初始化 SDD 账本 `.superpowers/sdd/progress.md`（git-ignored，权威进度来源）
+  - Task 1（`materialcheck-ocr.js`）：haiku 实现子代理 → commit `17c5d16`，5/5 测试通过 → sonnet 评审子代理 → Approved（1 条 Important 由控制者核实为"计划 Global Constraints 里明确写的 tarball 打包延后到 Task 9"，非真实缺口；1 条 Minor 未处理的死代码，留着以后顺手清）
+  - Task 2（`materialcheck-match.js`）：haiku 实现子代理 → 发现实际测试数是 24 而不是计划里写的 23（计划文档算错了）→ 用 Edit 修正计划文档（commit `530a65c`）→ 实现子代理 commit `6a695c9`，24/24 通过 → sonnet 评审 → Approved（2 条 Minor：`resolveProduct` 的 candidates 在 3 个以上产品打平时不够精确，但没有任何后续任务的前端用到这个字段，不用管；一条测试跟邻近测试有点重复）
+  - Task 3（`materialcheck-store.js`）：haiku 实现子代理 → commit `75afc5b`，33/33 通过（同步修正了计划里 Task 3 的预期数 36→33）→ sonnet 评审 → Approved 但有 1 条 Important（标了 plan-mandated）：计划里给 Task 3 列的测试用例本身漏了一条覆盖 `ocr_failed` 分支的测试，代码逻辑评审子代理手动验证过是对的，只是没有自动化回归测试。判断这不是"计划要求了错误做法需要人裁决"的情况，只是计划漏列了一个测试用例，直接派修复子代理去补，不升级给用户
+  - 补测试的修复子代理第一次派发时 Agent 工具报错「claude-sonnet-5 is temporarily unavailable」，中断在这里；随后 `/compact` 因周额度用尽失败，会话经历上下文压缩问题；用户要求"继续之前中断的任务"后，重新核实 git 状态（HEAD 仍是 `75afc5b`，测试仍是 33/33，SDD 账本仍显示 Task 1/2 complete、Task 3 未登记完成），确认没有任何东西丢失，原样重新派发修复子代理
 - 创建/修改的文件：
-  -（无）
+  - 创建 `materialcheck-ocr.js`、`materialcheck-match.js`、`materialcheck-store.js`、`materialcheck.test.js`
+  - 修改 `docs/superpowers/plans/2026-07-21-material-keyword-check.md`（测试数量笔误修正）
+  - Git commits：`17c5d16`、`6a695c9`、`530a65c`、`75afc5b`（详见 `.superpowers/sdd/progress.md` 账本）
 
 ## 测试结果
 | 测试 | 输入 | 预期结果 | 实际结果 | 状态 |
 |------|------|---------|---------|------|
-| （尚未开始编码，暂无实际测试运行记录） | - | - | - | - |
+| `node materialcheck.test.js`（Task 1 后） | - | 5 passed | 5 passed | ✅ |
+| `node materialcheck.test.js`（Task 2 后） | - | 24 passed（计划原写 23，已订正） | 24 passed | ✅ |
+| `node materialcheck.test.js`（Task 3 后） | - | 33 passed（计划原写 36，已订正） | 33 passed | ✅ |
+| `node materialcheck.test.js`（Task 3 补测试后，进行中） | - | 34 passed | 等修复子代理跑完确认 | ⏳ |
 
 ## 错误日志
 | 时间戳 | 错误 | 尝试次数 | 解决方案 |
 |--------|------|---------|---------|
 | 2026-07-21 | 计划文档内部两处步骤编号引用不一致（Task 5 提到"Task 6 Step 5"实为 Step 4） | 1 | 用 Edit 工具直接修正两处引用文字，问题已解决 |
+| 2026-07-21 | 计划文档 Task 2/3 的"预期测试通过数"算错（23/36，实际应为 24/33） | 1 | 用 Edit 修正，另开 commit `530a65c`，并提前告知后续任务的子代理这是已知文档笔误 |
+| 2026-07-21 | 派发 Task 3 补测试的修复子代理时 Agent 工具报 `claude-sonnet-5 is temporarily unavailable`，随后会话又遇到 `/compact` 因周额度耗尽失败 | 1 | 核实 git 状态和 SDD 账本均完好无损（HEAD `75afc5b`，33/33 测试通过，Task 1/2 账本记录都在），原样重新派发修复子代理，无需任何补救性改动 |
 
 ## 五问重启检查
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 3（实现）尚未开始，设计和计划都已完成并提交 git |
-| 我要去哪里？ | 按 `docs/superpowers/plans/2026-07-21-material-keyword-check.md` 的 9 个任务顺序实现，每个任务都有 TDD 步骤或手动验证步骤 |
+| 我在哪里？ | 阶段 3（实现）进行中：Task 1/2 完成且评审通过；Task 3 已实现+评审 Approved，正在补一条缺失的回归测试（修复子代理执行中）；Task 4-9 未开始 |
+| 我要去哪里？ | 补完 Task 3 的测试→重新走一遍 Task 3 评审确认→按 `docs/superpowers/plans/2026-07-21-material-keyword-check.md` 继续 Task 4-9，每个任务实现子代理+评审子代理的模式不变 |
 | 目标是什么？ | 新增素材文案关键词检测标签页：批量上传→OCR→关键词比对→缺词/串词提示→历史留档 |
-| 我学到了什么？ | 见 findings.md（服务端/前端既有模式、零依赖约束、测试风格、已做的技术决策） |
-| 我做了什么？ | 见上方「阶段 1」「阶段 2」记录；两次 git commit（`7abf546` 设计文档、`c12bce8` 实施计划） |
+| 我学到了什么？ | 见 findings.md（服务端/前端既有模式、零依赖约束、测试风格、已做的技术决策）；新增：写计划时人工数测试用例数量容易算错，以后应该让脚本数而不是手数 |
+| 我做了什么？ | 见上方「阶段 1」「阶段 2」「阶段 3」记录；git commits `7abf546`→`c12bce8`→`79869af`→`17c5d16`→`6a695c9`→`530a65c`→`75afc5b`，权威账本在 `.superpowers/sdd/progress.md` |
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*

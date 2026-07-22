@@ -4,7 +4,7 @@
 在电商工作台新增第六个标签页：批量上传素材图片，服务端 OCR 识别文字，跟后台配置的产品专属关键词比对，检测出"缺词"（漏了本该出现的关键词）和"串词"（混入了别的产品的关键词），并留存历史记录供回看。
 
 ## 当前阶段
-阶段 3（实现）— 尚未开始写代码，计划已就绪，等待用户选择执行方式
+阶段 3（实现）— 用 subagent-driven-development 执行中。Task 1-3 已实现+评审通过，Task 3 的一条 Important 评审意见（补 ocr_failed 分支回归测试）修复中。Task 4 未开始。
 
 ## 各阶段
 
@@ -23,17 +23,18 @@
 - **产出：** `docs/superpowers/plans/2026-07-21-material-keyword-check.md`（已提交，commit `c12bce8`）
 
 ### 阶段 3：实现
-- [ ] Task 1：`materialcheck-ocr.js`（tesseract child_process 封装，桩函数测试）
-- [ ] Task 2：`materialcheck-match.js`（纯函数：产品归属三级识别 + 缺词/串词判定）
-- [ ] Task 3：`materialcheck-store.js`（products.json + records.jsonl + pending 缓存）
-- [ ] Task 4：`server.js` 接入 5 个 `/api/materialcheck/*` 路由
-- [ ] Task 5：`index.html`/`core.js`/`settings.js` 接入第六个标签页外壳
-- [ ] Task 6：`materialcheck.js` 检测台（批量上传 + 结果展示 + 人工选择产品）
-- [ ] Task 7：`materialcheck.js` 历史记录（过滤 + 详情高亮）
-- [ ] Task 8：`materialcheck.js` 关键词库管理面板（管理员专属）
+- [x] Task 1：`materialcheck-ocr.js`（tesseract child_process 封装，桩函数测试）—— commit `17c5d16`，评审 Approved
+- [x] Task 2：`materialcheck-match.js`（纯函数：产品归属三级识别 + 缺词/串词判定）—— commit `6a695c9`，评审 Approved
+- [x] Task 3：`materialcheck-store.js`（products.json + records.jsonl + pending 缓存）—— commit `75afc5b` + 补测试 commit `7f284c8`，复审 Approved
+- [x] Task 4：`server.js` 接入 5 个 `/api/materialcheck/*` 路由 —— commit `f071739`，评审 Approved
+- [x] Task 5：`index.html`/`core.js`/`settings.js` 接入第六个标签页外壳 —— 与 Task 6 合并提交
+- [x] Task 6：`materialcheck.js` 检测台（批量上传 + 结果展示 + 人工选择产品）—— commit `8f41678` + 修复 `0fc9c28`（补了个计划漏掉的 server.js MODULES 白名单缺口），评审 Approved
+- [x] Task 7：`materialcheck.js` 历史记录（过滤 + 详情高亮）—— commit `282cd43`，评审 Approved
+- [x] Task 8：`materialcheck.js` 关键词库管理面板（管理员专属）—— commit `ac6789e`，评审 Approved，前端六个任务(1-8)全部完成
 - [ ] Task 9：`install.sh` + `scripts/repack-tarball.sh` 接入部署，重新打包 tarball
-- **状态：** pending
+- **状态：** in_progress
 - **详细步骤见：** `docs/superpowers/plans/2026-07-21-material-keyword-check.md`（每个任务都有完整代码和验证命令，不要在这里重复内容，照着那份计划一步步做）
+- **SDD 账本（权威进度来源，跨会话恢复认这个）：** `.superpowers/sdd/progress.md`（git-ignored，本地文件系统里；本文件的勾选状态是给人看的摘要，冲突时以 SDD 账本 + `git log` 为准）
 
 ### 阶段 4：测试与验证
 - [ ] Task 1-3 的自动化测试全部通过（`node materialcheck.test.js`，跑完预期 36 passed, 0 failed）
@@ -49,7 +50,7 @@
 - **状态：** pending
 
 ## 关键问题
-1. 执行方式选哪种：Subagent-Driven（每个 task 一个新 subagent）还是 Inline Execution（本会话内批量执行）？— 已经问过用户，等待回复。
+1. ~~执行方式选哪种~~ — 用户已选 1（Subagent-Driven），正在按这个方式执行。
 2. 当前开发/沙盒环境里有没有装 `tesseract-ocr` + `tesseract-ocr-chi-sim`？没有的话 Task 1 的自动化测试仍能过（用了桩函数），但 Task 6/9 的手动验证里真实 OCR 那部分会退化成 `ocr_failed` 分支——这是预期行为，不是 bug，但需要提前告知用户别误判。
 
 ## 已做决策
@@ -68,7 +69,8 @@
 ## 遇到的错误
 | 错误 | 尝试次数 | 解决方案 |
 |------|---------|---------|
-| （尚未开始编码，暂无） | - | - |
+| 计划文档 Task 2/3 的"预期测试通过数"算错（写的 23/36，实际应为 24/33） | 1 | 写计划时手算漏项。发现于 Task 2 实现子代理跑出 24 而非 23 时。用 Edit 直接修正计划文档两处，另开 commit `530a65c`，并在后续任务派发时提前告知子代理这是已知文档笔误，不用当成自己的错 |
+| Task 3 评审后派"补 ocr_failed 测试"的修复子代理时，Agent 工具报 `claude-sonnet-5 is temporarily unavailable`（分类器暂时不可用） | 1 | 等待后原样重新派发即可，不是任务本身的问题 |
 
 ## 备注
 - 随着进度更新阶段状态：pending → in_progress → complete
