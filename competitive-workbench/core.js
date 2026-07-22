@@ -3,7 +3,7 @@
    ═══════════════════════════════════════════════════════════ */
 const App = (() => {
   const DOCS = ['matrix', 'compare'];
-  const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports'];
+  const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports', 'materialcheck'];
   let state = { matrix: null, compare: null };
   let base = {};   // 上一次和服务器对齐的版本，合并时当共同祖先
   let revs = {};
@@ -596,6 +596,7 @@ const App = (() => {
     Reviews.init(api);
     Preview3D.init(api);
     Report.init(api);
+    MaterialCheck.init(api);
     Users.init(api);
     Admin.init(api);
     Settings.init(api);
@@ -610,7 +611,7 @@ const App = (() => {
     refreshModuleVisibility();
     const hash = location.hash.slice(1);
     const hiddenSet = new Set(me.hiddenModules || []);
-    let target = ['compare', 'reviews', 'preview3d', 'reports'].includes(hash) ? hash : 'matrix';
+    let target = ['compare', 'reviews', 'preview3d', 'reports', 'materialcheck'].includes(hash) ? hash : 'matrix';
     if (hiddenSet.has(target)) target = MODULES.find((k) => !hiddenSet.has(k)) || 'matrix';
     go(target);
     window.addEventListener('resize', moveInk);

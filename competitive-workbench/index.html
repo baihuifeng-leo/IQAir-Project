@@ -33,6 +33,7 @@
     <button class="tab tab-rv" role="tab" data-view="reviews">评论风向标</button>
     <button class="tab" role="tab" data-view="preview3d">竞品3D预览</button>
     <button class="tab" role="tab" data-view="reports">报告管理</button>
+    <button class="tab" role="tab" data-view="materialcheck">素材质检</button>
     <i class="tab-ink" aria-hidden="true"></i>
   </nav>
 
@@ -321,6 +322,30 @@
     </div>
   </section>
 
+  <!-- ══════════════ 视图六：素材质检 ══════════════ -->
+  <section class="view view-mc" id="view-materialcheck" data-view="materialcheck" data-theme-ready="true" hidden>
+    <div class="canvas rv-canvas">
+      <div class="rv-head rpt-head">
+        <div>
+          <h1>素材质检</h1>
+          <p>Material Keyword Check · 文案关键词合规检测</p>
+        </div>
+        <div class="rv-head-tools">
+          <div class="mc-subview-switch" id="mc-subview-switch">
+            <button class="mc-subtab is-active" data-sub="check">检测台</button>
+            <button class="mc-subtab" data-sub="history">历史记录</button>
+            <button class="mc-subtab" data-sub="library" id="mc-tab-library" hidden>关键词库</button>
+          </div>
+        </div>
+      </div>
+      <div class="rv-scroll" id="mc-scroll">
+        <div id="mc-check-view"></div>
+        <div id="mc-history-view" hidden></div>
+        <div id="mc-library-view" hidden></div>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <div class="marquee" id="marquee" hidden></div>
@@ -341,6 +366,7 @@
 <input type="file" id="rv-product-file" accept=".xlsx" hidden>
 <input type="file" id="p3d-file" accept=".xlsx" hidden>
 <input type="file" id="rpt-import-file" accept=".xlsx" hidden>
+<input type="file" id="mc-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
 
 <div class="sheet-mask" id="rpt-wm-mask" hidden>
   <div class="sheet">
@@ -401,6 +427,7 @@
 <script src="/reviews.js"></script>
 <script src="/preview3d.js"></script>
 <script src="/report.js"></script>
+<script src="/materialcheck.js"></script>
 <script>App.boot();</script>
 </body>
 </html>
