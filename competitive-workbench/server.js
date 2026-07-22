@@ -12,11 +12,15 @@ const { diffSummary } = require('./audit.js');
 const { ReviewStore } = require('./reviews-store.js');
 const { Preview3DStore } = require('./preview3d-store.js');
 const { ReportStore } = require('./report-store.js');
+const { MaterialCheckStore } = require('./materialcheck-store.js');
+const materialcheckOcr = require('./materialcheck-ocr.js');
 const { pipeline } = require('stream/promises');
 
 const PORT = Number(process.env.PORT || 8080);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+const MATERIALCHECK_DIR = path.join(DATA_DIR, 'materialcheck');
+const MATERIALCHECK_UPLOAD_DIR = path.join(UPLOAD_DIR, 'materialcheck');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -657,6 +661,57 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, result);
     }
 
+    if (p === '/api/materialcheck/products' && req.method === 'GET') {
+      return json(res, 200, { products: materialcheck.products, universalKeywords: materialcheck.universalKeywords });
+    }
+
+    if (p === '/api/materialcheck/products' && req.method === 'PUT') {
+      if (!me.admin) return json(res, 403, { error: '只有管理员能改关键词库' });
+      const { products, universalKeywords } = await body(req, 1024 * 1024);
+      if (!Array.isArray(products) || !Array.isArray(universalKeywords)) return json(res, 400, { error: '数据格式不对' });
+      let saved;
+      try { saved = await materialcheck.saveProducts(products, universalKeywords); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'materialcheck.products.update', { detail: [`关键词库已更新：${saved.products.length} 个产品，${saved.universalKeywords.length} 个通用词`] });
+      return json(res, 200, saved);
+    }
+
+    if (p === '/api/materialcheck/upload' && req.method === 'POST') {
+      const ct = (req.headers['content-type'] || '').split(';')[0].trim();
+      const ext = IMAGE_EXT[ct];
+      if (!ext) return json(res, 415, { error: '只支持 PNG、JPG、WebP 三种格式' });
+      const filename = decodeURIComponent(url.searchParams.get('filename') || ('upload' + ext));
+      const batchId = url.searchParams.get('batchId') || ('b_' + crypto.randomBytes(6).toString('hex'));
+      const buf = await readBinary(req, MAX_IMAGE);
+      if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
+      let result;
+      try { result = await materialcheck.detectFile({ buf, ext, filename, batchId, uploadedBy: me.name }); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      if (!result.needsManualPick) {
+        const label = result.status === 'pass' ? '通过' : result.status === 'ocr_failed' ? '识别失败' : '不通过';
+        audit(me, 'materialcheck.detect', { detail: [`${filename} · ${result.productName || ''} · ${label}`] });
+      }
+      return json(res, 200, result);
+    }
+
+    if (p === '/api/materialcheck/resolve' && req.method === 'POST') {
+      const { pendingId, productId } = await body(req, 4096);
+      if (!pendingId || !productId) return json(res, 400, { error: '缺少必要参数' });
+      let result;
+      try { result = await materialcheck.resolvePending(pendingId, productId, me.name); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'materialcheck.detect', { detail: [`${result.filename} · ${result.productName} · 人工选择 · ${result.status === 'pass' ? '通过' : '不通过'}`] });
+      return json(res, 200, result);
+    }
+
+    if (p === '/api/materialcheck/records' && req.method === 'GET') {
+      const productId = url.searchParams.get('productId') || undefined;
+      const status = url.searchParams.get('status') || undefined;
+      const uploadedBy = url.searchParams.get('uploadedBy') || undefined;
+      const limit = Math.min(2000, Number(url.searchParams.get('limit')) || 500);
+      return json(res, 200, { records: materialcheck.listRecords({ productId, status, uploadedBy, limit }) });
+    }
+
     if (p.startsWith('/uploads/')) return serveStatic(res, UPLOAD_DIR, p.slice('/uploads/'.length), true);
 
     if (req.method === 'GET' || req.method === 'HEAD')
@@ -672,6 +727,7 @@ const server = http.createServer(async (req, res) => {
 const reviews = new ReviewStore(REVIEWS_DIR);
 const preview3d = new Preview3DStore(PRODUCTS3D_DIR);
 const reports = new ReportStore(REPORTS_DIR);
+const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UPLOAD_DIR);
 
 (async () => {
   for (const d of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, REVIEWS_DIR, PRODUCTS3D_DIR, REPORTS_DIR]) await fsp.mkdir(d, { recursive: true });
@@ -681,6 +737,8 @@ const reports = new ReportStore(REPORTS_DIR);
   await loadDb();
   await reviews.load();
   await preview3d.load();
+  await materialcheck.load();
+  await materialcheckOcr.checkAvailable();
   scheduleNightly();
   server.listen(PORT, '0.0.0.0', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
 })();
