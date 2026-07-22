@@ -31,8 +31,8 @@
 - [x] Task 6：`materialcheck.js` 检测台（批量上传 + 结果展示 + 人工选择产品）—— commit `8f41678` + 修复 `0fc9c28`（补了个计划漏掉的 server.js MODULES 白名单缺口），评审 Approved
 - [x] Task 7：`materialcheck.js` 历史记录（过滤 + 详情高亮）—— commit `282cd43`，评审 Approved
 - [x] Task 8：`materialcheck.js` 关键词库管理面板（管理员专属）—— commit `ac6789e`，评审 Approved，前端六个任务(1-8)全部完成
-- [ ] Task 9：`install.sh` + `scripts/repack-tarball.sh` 接入部署，重新打包 tarball
-- **状态：** in_progress
+- [x] Task 9：`install.sh` + `scripts/repack-tarball.sh` 接入部署，重新打包 tarball —— commit `a553ed6`，评审 Approved（零发现）
+- **状态：** complete —— 9 个任务全部完成并评审通过，进入全分支最终评审
 - **详细步骤见：** `docs/superpowers/plans/2026-07-21-material-keyword-check.md`（每个任务都有完整代码和验证命令，不要在这里重复内容，照着那份计划一步步做）
 - **SDD 账本（权威进度来源，跨会话恢复认这个）：** `.superpowers/sdd/progress.md`（git-ignored，本地文件系统里；本文件的勾选状态是给人看的摘要，冲突时以 SDD 账本 + `git log` 为准）
 
