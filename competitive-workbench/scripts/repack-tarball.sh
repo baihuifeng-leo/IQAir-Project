@@ -22,6 +22,7 @@ tar xzf competitive-workbench.tar.gz -C "$WORK"
 cp server.js xlsx-lite.js reviews-nlp.js reviews-ingest.js \
    reviews-store.js preview3d-store.js report-store.js \
    materialcheck-ocr.js materialcheck-match.js materialcheck-store.js \
+   materialcheck-paddleocr-worker.py \
    install.sh README.md \
    "$WORK/competitive-workbench/"
 

@@ -43,16 +43,21 @@ else
   info "Node 安装完成：$(node -v)"
 fi
 
-# ── 2. OCR 引擎（tesseract） ─────────────────────────────
-if command -v tesseract >/dev/null 2>&1; then
-  info "tesseract 已就绪：$(tesseract --version 2>&1 | head -1)"
-else
-  info "安装 tesseract-ocr…"
-  apt-get update -qq
-  apt-get install -y -qq tesseract-ocr tesseract-ocr-chi-sim >/dev/null
-  command -v tesseract >/dev/null 2>&1 || die "tesseract 安装失败，素材质检功能需要它才能跑"
-  info "tesseract 安装完成：$(tesseract --version 2>&1 | head -1)"
+# ── 2. OCR 引擎（PaddleOCR，跑在独立的 Python venv 里）──────
+# 素材质检需要 Python3 + PaddlePaddle + PaddleOCR。装进 $APP_DIR/venv 这个专用
+# 虚拟环境，不碰系统 Python（Ubuntu 24.04 默认不让直接 pip install 到系统环境）。
+info "准备 Python 环境…"
+apt-get update -qq
+apt-get install -y -qq python3 python3-venv python3-pip >/dev/null
+mkdir -p "$APP_DIR"
+if [[ ! -x "$APP_DIR/venv/bin/python3" ]]; then
+  python3 -m venv "$APP_DIR/venv"
 fi
+info "安装 PaddlePaddle + PaddleOCR（体积较大，第一次装可能要几分钟）…"
+"$APP_DIR/venv/bin/pip" install --quiet --upgrade pip
+"$APP_DIR/venv/bin/pip" install --quiet paddlepaddle paddleocr
+command -v "$APP_DIR/venv/bin/python3" >/dev/null 2>&1 || die "PaddleOCR 环境安装失败，素材质检功能需要它才能跑"
+info "Python 环境安装完成"
 
 # ── 3. 专用用户，不给登录 shell ────────────────────────────
 if ! id -u "$SVC_USER" >/dev/null 2>&1; then
@@ -64,7 +69,7 @@ fi
 info "部署代码到 $APP_DIR"
 mkdir -p "$APP_DIR"
 rm -rf "$APP_DIR/public"
-for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js preview3d-store.js report-store.js materialcheck-ocr.js materialcheck-match.js materialcheck-store.js; do
+for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js preview3d-store.js report-store.js materialcheck-ocr.js materialcheck-match.js materialcheck-store.js materialcheck-paddleocr-worker.py; do
   [[ -f "$SRC_DIR/$f" ]] || die "源码目录里缺少 $f"
   install -m 0644 "$SRC_DIR/$f" "$APP_DIR/"
 done
@@ -72,6 +77,15 @@ done
 cp -r "$SRC_DIR/public" "$APP_DIR/public"
 chown -R root:root "$APP_DIR"
 chmod -R a+rX "$APP_DIR"
+# venv 是装机时生成的运行环境，不是代码，跳过上面这次 chown/chmod 遗留的所有权问题：
+# 一起 chown/chmod 没关系，重新走一遍权限（world-readable+execute）venv 也能正常跑。
+
+info "预热 PaddleOCR 模型（第一次跑要下载模型文件，需要联网，可能要一两分钟）…"
+if "$APP_DIR/venv/bin/python3" "$APP_DIR/materialcheck-paddleocr-worker.py" --warmup >/dev/null 2>&1; then
+  info "PaddleOCR 模型预热完成"
+else
+  warn "PaddleOCR 模型预热失败（可能是没联网），素材质检功能启动时会自动重试，不影响其它功能"
+fi
 
 # ── 5. 数据目录（服务唯一可写的地方）─────────────────────
 info "准备数据目录 $DATA_DIR"

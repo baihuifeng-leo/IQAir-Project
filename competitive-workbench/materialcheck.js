@@ -99,9 +99,10 @@ const MaterialCheck = (() => {
     if (result.needsManualPick) {
       row.className = 'mc-row mc-row-pick';
       const options = products.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+      const pickLabel = result.lowConfidence ? '识别置信度低，请核对：' : '需要选择产品：';
       row.innerHTML = `
         <span class="mc-row-name">${escapeHtml(result.filename)}</span>
-        <span class="mc-row-status">需要选择产品：
+        <span class="mc-row-status">${pickLabel}
           <select class="mc-pick-select"><option value="">— 选择产品 —</option>${options}</select>
           <button class="mc-btn mc-btn-primary mc-pick-confirm">确定</button>
         </span>

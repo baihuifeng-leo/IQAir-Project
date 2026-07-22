@@ -1,9 +1,10 @@
 const assert = require('assert');
-const { runOcr, checkAvailable } = require('./materialcheck-ocr.js');
+const { runOcr, checkAvailable, PaddleOcrWorker } = require('./materialcheck-ocr.js');
 const fs = require('fs');
 const fsp = fs.promises;
 const os = require('os');
 const path = require('path');
+const EventEmitter = require('events');
 
 let pass = 0, fail = 0;
 const t = (name, fn) => {
@@ -15,44 +16,119 @@ const tAsync = async (name, fn) => {
   catch (e) { fail++; console.log('✗', name, '-', e.message); }
 };
 
+// 伪造一个 child_process 长得像的对象：stdout/stdin/exit 都能模拟，
+// 用来测试 PaddleOcrWorker 的 stdin/stdout 按行 JSON 协议，不需要真的起进程。
+function makeFakeProc() {
+  const proc = new EventEmitter();
+  proc.stdout = new EventEmitter();
+  proc.stdout.setEncoding = () => {};
+  proc.written = [];
+  proc.stdin = { write: (chunk) => proc.written.push(chunk) };
+  return proc;
+}
+
 async function run() {
-  // ── materialcheck-ocr.js ──────────────────────────────
-  await tAsync('runOcr 用正确的命令调用 tesseract', async () => {
-    let calledWith = null;
-    const stubExec = (cmd, args, opts, cb) => { calledWith = { cmd, args, opts }; cb(null, '识别出的文字\n', ''); };
-    const text = await runOcr('/tmp/x.jpg', { exec: stubExec });
-    assert.strictEqual(calledWith.cmd, 'tesseract');
-    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'chi_sim+eng', '--psm', '11']);
-    assert.strictEqual(text, '识别出的文字');
+  // ── materialcheck-ocr.js：PaddleOcrWorker 的 stdin/stdout 协议 ──────────
+  await tAsync('PaddleOcrWorker 收到 ready 信号后 start() 才 resolve', async () => {
+    const proc = makeFakeProc();
+    const worker = new PaddleOcrWorker({ spawnFn: () => proc });
+    const startPromise = worker.start();
+    proc.stdout.emit('data', '{"ready": true}\n');
+    await startPromise;
   });
 
-  await tAsync('runOcr 支持自定义语言参数', async () => {
-    let calledWith = null;
-    const stubExec = (cmd, args, opts, cb) => { calledWith = { cmd, args }; cb(null, 'text', ''); };
-    await runOcr('/tmp/x.jpg', { exec: stubExec, lang: 'eng' });
-    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'eng', '--psm', '11']);
+  await tAsync('PaddleOcrWorker.recognize 发送带 id 的请求，按 id 匹配响应', async () => {
+    const proc = makeFakeProc();
+    const worker = new PaddleOcrWorker({ spawnFn: () => proc });
+    const startPromise = worker.start();
+    proc.stdout.emit('data', '{"ready": true}\n');
+    await startPromise;
+
+    const recognizePromise = worker.recognize('/tmp/x.jpg');
+    await Promise.resolve();
+    const sent = JSON.parse(proc.written[0]);
+    assert.strictEqual(sent.path, '/tmp/x.jpg');
+    proc.stdout.emit('data', JSON.stringify({ id: sent.id, ok: true, lines: [{ text: 'A', score: 0.9 }] }) + '\n');
+    const lines = await recognizePromise;
+    assert.deepStrictEqual(lines, [{ text: 'A', score: 0.9 }]);
   });
 
-  await tAsync('runOcr 支持自定义 PSM 参数', async () => {
-    let calledWith = null;
-    const stubExec = (cmd, args, opts, cb) => { calledWith = { cmd, args }; cb(null, 'text', ''); };
-    await runOcr('/tmp/x.jpg', { exec: stubExec, psm: '6' });
-    assert.deepStrictEqual(calledWith.args, ['/tmp/x.jpg', 'stdout', '-l', 'chi_sim+eng', '--psm', '6']);
+  await tAsync('PaddleOcrWorker 能处理跨多个 data 事件拆开的一行 JSON', async () => {
+    const proc = makeFakeProc();
+    const worker = new PaddleOcrWorker({ spawnFn: () => proc });
+    const startPromise = worker.start();
+    proc.stdout.emit('data', '{"read');
+    proc.stdout.emit('data', 'y": true}\n');
+    await startPromise;
+
+    const recognizePromise = worker.recognize('/tmp/x.jpg');
+    await Promise.resolve();
+    const sent = JSON.parse(proc.written[0]);
+    const full = JSON.stringify({ id: sent.id, ok: true, lines: [] });
+    proc.stdout.emit('data', full.slice(0, 5));
+    proc.stdout.emit('data', full.slice(5) + '\n');
+    await recognizePromise;
   });
 
-  await tAsync('runOcr 命令失败时 reject 出有意义的错误', async () => {
-    const stubExec = (cmd, args, opts, cb) => cb(new Error('spawn failed'), '', '图片格式不支持');
-    await assert.rejects(runOcr('/tmp/bad.jpg', { exec: stubExec }), /OCR 识别失败.*图片格式不支持/);
+  await tAsync('PaddleOcrWorker 识别失败时 reject 出有意义的错误', async () => {
+    const proc = makeFakeProc();
+    const worker = new PaddleOcrWorker({ spawnFn: () => proc });
+    const startPromise = worker.start();
+    proc.stdout.emit('data', '{"ready": true}\n');
+    await startPromise;
+
+    const recognizePromise = worker.recognize('/tmp/bad.jpg');
+    await Promise.resolve();
+    const sent = JSON.parse(proc.written[0]);
+    proc.stdout.emit('data', JSON.stringify({ id: sent.id, ok: false, error: '图片打不开' }) + '\n');
+    await assert.rejects(recognizePromise, /OCR 识别失败.*图片打不开/);
   });
 
-  await tAsync('checkAvailable 二进制存在时返回 true', async () => {
-    const stubExec = (cmd, args, opts, cb) => cb(null, 'tesseract 5.3.0', '');
-    assert.strictEqual(await checkAvailable({ exec: stubExec }), true);
+  await tAsync('PaddleOcrWorker 子进程意外退出时，所有排队中的请求都 reject', async () => {
+    const proc = makeFakeProc();
+    const worker = new PaddleOcrWorker({ spawnFn: () => proc });
+    const startPromise = worker.start();
+    proc.stdout.emit('data', '{"ready": true}\n');
+    await startPromise;
+
+    const recognizePromise = worker.recognize('/tmp/x.jpg');
+    await Promise.resolve();
+    proc.emit('exit', 1);
+    await assert.rejects(recognizePromise, /PaddleOCR 子进程退出了/);
   });
 
-  await tAsync('checkAvailable 二进制缺失时返回 false（不抛出）', async () => {
-    const stubExec = (cmd, args, opts, cb) => cb(new Error('command not found'));
-    assert.strictEqual(await checkAvailable({ exec: stubExec }), false);
+  // ── materialcheck-ocr.js：runOcr 的置信度过滤逻辑 ──────────
+  await tAsync('runOcr 丢弃低置信度的行，返回剩余行的平均置信度', async () => {
+    const stubWorker = { recognize: async () => [
+      { text: '真实文案A', score: 0.95 },
+      { text: '图标噪声', score: 0.2 },
+      { text: '真实文案B', score: 0.85 }
+    ] };
+    const { text, confidence } = await runOcr('/tmp/x.jpg', { worker: stubWorker });
+    assert.strictEqual(text, '真实文案A\n真实文案B');
+    assert.ok(Math.abs(confidence - 0.9) < 1e-9);
+  });
+
+  await tAsync('runOcr 全部行都低置信度时返回空文字和 0 置信度', async () => {
+    const stubWorker = { recognize: async () => [{ text: '噪声', score: 0.1 }] };
+    const { text, confidence } = await runOcr('/tmp/x.jpg', { worker: stubWorker });
+    assert.strictEqual(text, '');
+    assert.strictEqual(confidence, 0);
+  });
+
+  await tAsync('runOcr 识别失败时把错误原样抛出', async () => {
+    const stubWorker = { recognize: async () => { throw new Error('OCR 识别失败：模型没加载好'); } };
+    await assert.rejects(runOcr('/tmp/bad.jpg', { worker: stubWorker }), /模型没加载好/);
+  });
+
+  await tAsync('checkAvailable worker 启动成功时返回 true', async () => {
+    const stubWorker = { start: async () => {} };
+    assert.strictEqual(await checkAvailable({ worker: stubWorker }), true);
+  });
+
+  await tAsync('checkAvailable worker 启动失败时返回 false（不抛出）', async () => {
+    const stubWorker = { start: async () => { throw new Error('spawn ENOENT'); } };
+    assert.strictEqual(await checkAvailable({ worker: stubWorker }), false);
   });
 
   // ── materialcheck-match.js ────────────────────────────
@@ -177,7 +253,7 @@ async function run() {
 
   // ── materialcheck-store.js ────────────────────────────
   const { MaterialCheckStore } = require('./materialcheck-store.js');
-  const stubOcr = (text) => async () => text;
+  const stubOcr = (text, confidence = 1) => async () => ({ text, confidence });
 
   async function freshStore() {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
@@ -264,6 +340,26 @@ async function run() {
     assert.strictEqual(store.records.length, 2); // pending 本身没落库，resolvePending 后 + 上面那条 filename 判定的
   });
 
+  await tAsync('detectFile 整体识别置信度低时转人工核对，即便文件名本可判定产品', async () => {
+    const store = await freshStore();
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg',
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX', 0.4)
+    });
+    assert.strictEqual(result.needsManualPick, true);
+    assert.strictEqual(result.lowConfidence, true);
+    assert.strictEqual(store.records.length, 0); // 待人工核对不落历史记录，跟其它 pending 情况一致
+  });
+
+  await tAsync('resolvePending 完成判定后记录里带着识别置信度', async () => {
+    const store = await freshStore();
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg',
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX 7天无理由退换', 0.93)
+    });
+    assert.ok(Math.abs(result.ocrConfidence - 0.93) < 1e-9);
+  });
+
   await tAsync('resolvePending 对不存在的 pendingId 抛出错误', async () => {
     const store = await freshStore();
     await assert.rejects(store.resolvePending('mcp_不存在', 'pa', 'li'), /过期|不存在/);
@@ -298,7 +394,7 @@ async function run() {
     const controlledOcr = () => new Promise((resolve) => {
       active++;
       maxActive = Math.max(maxActive, active);
-      setTimeout(() => { active--; resolve('GC-Multi'); }, 20);
+      setTimeout(() => { active--; resolve({ text: 'GC-Multi', confidence: 1 }); }, 20);
     });
 
     await Promise.all([

@@ -8,6 +8,10 @@ const match = require('./materialcheck-match.js');
 const { runOcr } = require('./materialcheck-ocr.js');
 
 const PENDING_TTL_MS = 30 * 60 * 1000;
+// PaddleOCR 给每行识别结果打分，这是整张图（过滤噪声后剩下的行）的平均置信度
+// 低于这个数就当"识别本身不可靠"处理，跟"文件名/OCR 都判断不出产品"走同一套
+// 转人工核对的流程，而不是拿一份不可靠的文字去判定缺词/串词，可能把好素材冤枉了。
+const OVERALL_MIN_CONFIDENCE = 0.7;
 
 class MaterialCheckStore {
   constructor(dir, uploadDir, { ocrConcurrency = 2 } = {}) {
@@ -125,34 +129,40 @@ class MaterialCheckStore {
     await fsp.writeFile(imagePath, buf);
     const url = '/uploads/materialcheck/' + name;
 
-    let ocrText;
+    let ocrText, ocrConfidence;
     try {
-      ocrText = await this._runOcrQueued(imagePath, ocr);
+      const result = await this._runOcrQueued(imagePath, ocr);
+      ocrText = result.text;
+      ocrConfidence = result.confidence;
     } catch (e) {
       const record = {
         id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy,
         filename, imagePath: url, productId: null, productName: null, matchMethod: null,
-        ocrText: '', missingKeywords: [], crossedKeywords: [], status: 'ocr_failed', warning: e.message
+        ocrText: '', ocrConfidence: null, missingKeywords: [], crossedKeywords: [], status: 'ocr_failed', warning: e.message
       };
       await this.append(record);
       return record;
     }
 
-    const resolution = match.resolveProductForUpload(filename, ocrText, this.products);
+    const lowConfidence = ocrConfidence < OVERALL_MIN_CONFIDENCE;
+    const resolution = lowConfidence
+      ? { product: null, candidates: [] }
+      : match.resolveProductForUpload(filename, ocrText, this.products);
+
     if (!resolution.product) {
       this._cleanupPending();
       const pendingId = 'mcp_' + crypto.randomBytes(6).toString('hex');
       this.pending.set(pendingId, {
-        imagePath: url, filename, ocrText, batchId, uploadedBy, expiresAt: Date.now() + PENDING_TTL_MS
+        imagePath: url, filename, ocrText, ocrConfidence, batchId, uploadedBy, expiresAt: Date.now() + PENDING_TTL_MS
       });
-      return { needsManualPick: true, pendingId, ocrText, filename, candidates: resolution.candidates };
+      return { needsManualPick: true, pendingId, ocrText, filename, candidates: resolution.candidates, lowConfidence };
     }
 
     const warning = resolution.method === 'filename'
       ? match.crossCheckWarning(resolution.product, ocrText, this.products)
       : null;
 
-    return this._finish({ product: resolution.product, method: resolution.method, ocrText, imagePath: url, filename, batchId, uploadedBy, warning });
+    return this._finish({ product: resolution.product, method: resolution.method, ocrText, ocrConfidence, imagePath: url, filename, batchId, uploadedBy, warning });
   }
 
   async resolvePending(pendingId, productId, uploadedBy) {
@@ -163,17 +173,17 @@ class MaterialCheckStore {
     if (!product) throw new Error('选的这个产品不存在');
     this.pending.delete(pendingId);
     return this._finish({
-      product, method: 'manual', ocrText: p.ocrText, imagePath: p.imagePath,
+      product, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence, imagePath: p.imagePath,
       filename: p.filename, batchId: p.batchId, uploadedBy: p.uploadedBy || uploadedBy, warning: null
     });
   }
 
-  async _finish({ product, method, ocrText, imagePath, filename, batchId, uploadedBy, warning }) {
+  async _finish({ product, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning }) {
     const { missingKeywords, crossedKeywords, status } = match.matchAgainstProduct(ocrText, product, this.products);
     const record = {
       id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy,
       filename, imagePath, productId: product.id, productName: product.name, matchMethod: method,
-      ocrText, missingKeywords, crossedKeywords, status, warning
+      ocrText, ocrConfidence, missingKeywords, crossedKeywords, status, warning
     };
     await this.append(record);
     return record;
