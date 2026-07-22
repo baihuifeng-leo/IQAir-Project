@@ -126,9 +126,76 @@ const MaterialCheck = (() => {
       ${detail}`;
   }
 
-  // ── 历史记录（Task 7 填充） ────────────────────────────
+  // ── 历史记录 ────────────────────────────────────────
+  let historyRows = [], detailMask, detailBody;
+
   async function renderHistory() {
-    A.$('#mc-history-view').innerHTML = '<p class="rv-empty">开发中…</p>';
+    const el = A.$('#mc-history-view');
+    el.innerHTML = '<p class="rv-empty">读取中…</p>';
+    try {
+      const j = await call('/api/materialcheck/records?limit=1000');
+      historyRows = j.records;
+    } catch (e) { el.innerHTML = ''; return A.toast(e.message, 'bad'); }
+
+    el.innerHTML = `
+      <div class="mc-filter-bar">
+        <select id="mc-f-product"><option value="">全部产品</option>${products.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>
+        <select id="mc-f-status"><option value="">全部状态</option><option value="pass">通过</option><option value="fail">不通过</option><option value="ocr_failed">识别失败</option></select>
+      </div>
+      <div class="mc-history-list" id="mc-history-list"></div>`;
+
+    const draw = () => {
+      const pf = A.$('#mc-f-product').value, sf = A.$('#mc-f-status').value;
+      const shown = historyRows.filter((r) => (!pf || r.productId === pf) && (!sf || r.status === sf));
+      const list = A.$('#mc-history-list');
+      if (!shown.length) { list.innerHTML = '<p class="rv-empty">没有匹配的记录</p>'; return; }
+      list.innerHTML = shown.map((r, i) => historyRowHtml(r, i)).join('');
+      shown.forEach((r, i) => { list.querySelector(`[data-hi="${i}"]`).onclick = () => openHistoryDetail(r); });
+    };
+    A.$('#mc-f-product').onchange = draw;
+    A.$('#mc-f-status').onchange = draw;
+    draw();
+  }
+
+  function historyRowHtml(r, i) {
+    const badge = r.status === 'pass' ? '✓ 通过' : r.status === 'ocr_failed' ? '⚠ 识别失败' : '✕ 不通过';
+    const cls = r.status === 'pass' ? 'mc-row-ok' : r.status === 'ocr_failed' ? 'mc-row-error' : 'mc-row-bad';
+    return `<div class="mc-history-row ${cls}" data-hi="${i}">
+      <span class="mc-row-name">${escapeHtml(r.filename)}</span>
+      <span class="mc-row-status">${badge} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')} · ${escapeHtml(r.uploadedBy)}</span>
+    </div>`;
+  }
+
+  function buildDetailSheet() {
+    detailMask = document.createElement('div');
+    detailMask.className = 'sheet-mask';
+    detailMask.hidden = true;
+    detailMask.innerHTML = `
+      <div class="sheet sheet-wide" role="dialog">
+        <div class="sheet-head"><h2>检测详情</h2><button class="kill" id="mc-detail-close" title="关闭">×</button></div>
+        <div class="sheet-body" id="mc-detail-body"></div>
+      </div>`;
+    document.body.appendChild(detailMask);
+    detailBody = detailMask.querySelector('#mc-detail-body');
+    detailMask.querySelector('#mc-detail-close').onclick = () => (detailMask.hidden = true);
+    detailMask.onclick = (e) => { if (e.target === detailMask) detailMask.hidden = true; };
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !detailMask.hidden) detailMask.hidden = true; });
+  }
+
+  function openHistoryDetail(r) {
+    if (!detailMask) buildDetailSheet();
+    let html = escapeHtml(r.ocrText || '（没有识别到文字）');
+    (r.crossedKeywords || []).forEach((c) => {
+      html = html.split(escapeHtml(c.keyword)).join(`<mark class="mc-mark-bad">${escapeHtml(c.keyword)}</mark>`);
+    });
+    const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('') || '（无缺词）';
+    const crossed = (r.crossedKeywords || []).map((c) => `<span class="mc-chip mc-chip-bad">${escapeHtml(c.keyword)} · 属于「${escapeHtml(c.fromProductName)}」</span>`).join('') || '（无串词）';
+    detailBody.innerHTML = `
+      <p><b>${escapeHtml(r.filename)}</b> · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')}</p>
+      <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
+      <div class="mc-chip-row"><b>串词：</b>${crossed}</div>
+      <pre class="mc-ocr-text">${html}</pre>`;
+    detailMask.hidden = false;
   }
 
   // ── 关键词库（Task 8 填充） ────────────────────────────

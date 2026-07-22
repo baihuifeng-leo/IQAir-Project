@@ -1945,6 +1945,15 @@ body.rpt-presenting .rpt-wm-note {
 .mc-btn-primary { background: var(--mint); color: #04140f; border-color: var(--mint); font-weight: 600; }
 .mc-btn-danger { color: var(--bad-text); border-color: var(--bad); }
 
+.mc-filter-bar { display: flex; gap: 10px; margin-bottom: 16px; }
+.mc-filter-bar select { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+
+.mc-history-row { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-soft); margin-bottom: 6px; cursor: pointer; transition: background var(--fast); }
+.mc-history-row:hover { background: var(--surface-2); }
+
+.mc-ocr-text { white-space: pre-wrap; background: var(--field-bg); padding: 14px; border-radius: 10px; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.6; max-height: 320px; overflow-y: auto; margin-top: 12px; }
+.mc-mark-bad { background: var(--bad); color: #fff; padding: 0 2px; border-radius: 3px; }
+
 /* ═══════════════════════════════════════════════════════════
    移动端
    对位表是 5 列 × 11 行的二维表，手机上不可能不横滚。
