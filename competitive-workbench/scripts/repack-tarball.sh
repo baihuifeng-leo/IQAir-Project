@@ -20,11 +20,13 @@ trap 'rm -rf "$WORK"' EXIT
 tar xzf competitive-workbench.tar.gz -C "$WORK"
 
 cp server.js xlsx-lite.js reviews-nlp.js reviews-ingest.js \
-   reviews-store.js preview3d-store.js report-store.js install.sh README.md \
+   reviews-store.js preview3d-store.js report-store.js \
+   materialcheck-ocr.js materialcheck-match.js materialcheck-store.js \
+   install.sh README.md \
    "$WORK/competitive-workbench/"
 
 cp index.html login.html core.js matrix.js compare.js reviews.js preview3d.js \
-   preview3d-scene.js report.js admin.js users.js settings.js styles.css \
+   preview3d-scene.js report.js admin.js users.js settings.js materialcheck.js styles.css \
    echarts.min.js html2canvas.min.js iqair-logo.webp \
    three.module.min.js three-orbitcontrols.js three-effectcomposer.js \
    three-renderpass.js three-unrealbloompass.js three-outputpass.js \

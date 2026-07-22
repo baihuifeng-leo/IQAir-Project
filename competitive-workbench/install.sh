@@ -43,17 +43,28 @@ else
   info "Node 安装完成：$(node -v)"
 fi
 
-# ── 2. 专用用户，不给登录 shell ────────────────────────────
+# ── 2. OCR 引擎（tesseract） ─────────────────────────────
+if command -v tesseract >/dev/null 2>&1; then
+  info "tesseract 已就绪：$(tesseract --version 2>&1 | head -1)"
+else
+  info "安装 tesseract-ocr…"
+  apt-get update -qq
+  apt-get install -y -qq tesseract-ocr tesseract-ocr-chi-sim >/dev/null
+  command -v tesseract >/dev/null 2>&1 || die "tesseract 安装失败，素材质检功能需要它才能跑"
+  info "tesseract 安装完成：$(tesseract --version 2>&1 | head -1)"
+fi
+
+# ── 3. 专用用户，不给登录 shell ────────────────────────────
 if ! id -u "$SVC_USER" >/dev/null 2>&1; then
   info "创建系统用户 $SVC_USER"
   useradd --system --no-create-home --shell /usr/sbin/nologin "$SVC_USER"
 fi
 
-# ── 3. 代码 ────────────────────────────────────────────────
+# ── 4. 代码 ────────────────────────────────────────────────
 info "部署代码到 $APP_DIR"
 mkdir -p "$APP_DIR"
 rm -rf "$APP_DIR/public"
-for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js preview3d-store.js report-store.js; do
+for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js preview3d-store.js report-store.js materialcheck-ocr.js materialcheck-match.js materialcheck-store.js; do
   [[ -f "$SRC_DIR/$f" ]] || die "源码目录里缺少 $f"
   install -m 0644 "$SRC_DIR/$f" "$APP_DIR/"
 done
@@ -62,13 +73,13 @@ cp -r "$SRC_DIR/public" "$APP_DIR/public"
 chown -R root:root "$APP_DIR"
 chmod -R a+rX "$APP_DIR"
 
-# ── 4. 数据目录（服务唯一可写的地方）─────────────────────
+# ── 5. 数据目录（服务唯一可写的地方）─────────────────────
 info "准备数据目录 $DATA_DIR"
-mkdir -p "$DATA_DIR" "$DATA_DIR/reviews" "$DATA_DIR/products3d" "$DATA_DIR/reports"
+mkdir -p "$DATA_DIR" "$DATA_DIR/reviews" "$DATA_DIR/products3d" "$DATA_DIR/reports" "$DATA_DIR/materialcheck" "$DATA_DIR/uploads/materialcheck"
 chown -R "$SVC_USER:$SVC_USER" "$DATA_DIR"
 chmod 750 "$DATA_DIR"
 
-# ── 5. systemd ─────────────────────────────────────────────
+# ── 6. systemd ─────────────────────────────────────────────
 if [[ -f /etc/systemd/system/workbench.service ]]; then
   warn "已存在 workbench.service，保留你改过的配置（端口、PIN 等没动）"
 else
