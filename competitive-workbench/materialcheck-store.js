@@ -10,7 +10,7 @@ const { runOcr } = require('./materialcheck-ocr.js');
 const PENDING_TTL_MS = 30 * 60 * 1000;
 
 class MaterialCheckStore {
-  constructor(dir, uploadDir) {
+  constructor(dir, uploadDir, { ocrConcurrency = 2 } = {}) {
     this.dir = dir;
     this.uploadDir = uploadDir;
     this.productsFile = path.join(dir, 'products.json');
@@ -19,6 +19,34 @@ class MaterialCheckStore {
     this.universalKeywords = [];
     this.records = [];
     this.pending = new Map();
+    // 服务端并发队列：单台 VM 是单进程 Node，OCR 是 CPU 密集操作，
+    // 这里跨所有请求、所有用户地限制同时在跑的 tesseract 进程数，
+    // 避免一次性起太多进程拖垮机器（见设计文档「技术前提与约束」）。
+    this._ocrConcurrency = ocrConcurrency;
+    this._ocrActive = 0;
+    this._ocrQueue = [];
+  }
+
+  _runOcrQueued(imagePath, ocr) {
+    return new Promise((resolve, reject) => {
+      const task = () => {
+        this._ocrActive++;
+        ocr(imagePath)
+          .then(resolve, reject)
+          .finally(() => {
+            this._ocrActive--;
+            this._drainOcrQueue();
+          });
+      };
+      if (this._ocrActive < this._ocrConcurrency) task();
+      else this._ocrQueue.push(task);
+    });
+  }
+
+  _drainOcrQueue() {
+    while (this._ocrActive < this._ocrConcurrency && this._ocrQueue.length) {
+      this._ocrQueue.shift()();
+    }
   }
 
   async load() {
@@ -46,6 +74,9 @@ class MaterialCheckStore {
   }
 
   async saveProducts(products, universalKeywords) {
+    if ((products || []).some((p) => !String(p.name || '').trim())) {
+      throw new Error('产品名称不能为空');
+    }
     const conflicts = match.validateLibrary(products, universalKeywords);
     if (conflicts.length) {
       const c = conflicts[0];
@@ -94,7 +125,7 @@ class MaterialCheckStore {
 
     let ocrText;
     try {
-      ocrText = await ocr(imagePath);
+      ocrText = await this._runOcrQueued(imagePath, ocr);
     } catch (e) {
       const record = {
         id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy,

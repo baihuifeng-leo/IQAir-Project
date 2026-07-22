@@ -281,6 +281,37 @@ async function run() {
     assert.strictEqual(passOnly[0].filename, 'GC-Multi_a.jpg');
   });
 
+  await tAsync('detectFile 服务端 OCR 并发受限于设定上限', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
+    const store = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'), { ocrConcurrency: 1 });
+    await store.load();
+    await store.saveProducts([{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }], []);
+
+    let active = 0, maxActive = 0;
+    const controlledOcr = () => new Promise((resolve) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      setTimeout(() => { active--; resolve('GC-Multi'); }, 20);
+    });
+
+    await Promise.all([
+      store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', batchId: 'b1', uploadedBy: 'li', ocr: controlledOcr }),
+      store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: 'GC-Multi_b.jpg', batchId: 'b1', uploadedBy: 'li', ocr: controlledOcr }),
+      store.detectFile({ buf: Buffer.from('3'), ext: '.jpg', filename: 'GC-Multi_c.jpg', batchId: 'b1', uploadedBy: 'li', ocr: controlledOcr })
+    ]);
+
+    assert.strictEqual(maxActive, 1);
+  });
+
+  await tAsync('saveProducts 拒绝产品名为空的库并保留原有数据', async () => {
+    const store = await freshStore();
+    await assert.rejects(
+      store.saveProducts([{ id: 'pa', name: '   ', keywords: ['GC-Multi'] }, { id: 'pb', name: 'GCX XE', keywords: ['静音悬浮马达'] }], []),
+      /产品名称不能为空/
+    );
+    assert.strictEqual(store.products.length, 2); // 拒绝后没有把坏数据写进去
+  });
+
   await tAsync('load() 能重新读回持久化的数据', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
     const store1 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));

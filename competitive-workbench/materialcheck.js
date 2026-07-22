@@ -49,37 +49,53 @@ const MaterialCheck = (() => {
       row.className = 'mc-row mc-row-pending';
       row.innerHTML = `<span class="mc-row-name">${escapeHtml(file.name)}</span><span class="mc-row-status"><i class="mc-spin"></i> 识别中…</span>`;
       list.prepend(row);
-      return { file, row };
+      return { file, row, state: 'processing' }; // state: processing | needsPick | done
     });
 
-    let done = 0;
-    const updateSummary = () => { summary.textContent = `本次上传 ${rows.length} 张 · 已完成 ${done} · 处理中 ${rows.length - done}`; };
+    const updateSummary = () => {
+      const done = rows.filter((r) => r.state === 'done').length;
+      const pendingPick = rows.filter((r) => r.state === 'needsPick').length;
+      const processing = rows.length - done - pendingPick;
+      summary.textContent = `本次上传 ${rows.length} 张 · 已完成 ${done} · 待选择 ${pendingPick} · 处理中 ${processing}`;
+    };
     updateSummary();
+
+    async function runOne(entry) {
+      entry.state = 'processing';
+      entry.row.className = 'mc-row mc-row-pending';
+      entry.row.innerHTML = `<span class="mc-row-name">${escapeHtml(entry.file.name)}</span><span class="mc-row-status"><i class="mc-spin"></i> 识别中…</span>`;
+      updateSummary();
+      try {
+        const result = await call(`/api/materialcheck/upload?filename=${encodeURIComponent(entry.file.name)}&batchId=${encodeURIComponent(batchId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': entry.file.type },
+          body: entry.file
+        });
+        entry.state = result.needsManualPick ? 'needsPick' : 'done';
+        renderResult(entry.row, result, {
+          onRetry: () => runOne(entry),
+          onResolved: () => { entry.state = 'done'; updateSummary(); }
+        });
+      } catch (e) {
+        entry.state = 'done';
+        entry.row.className = 'mc-row mc-row-error';
+        entry.row.querySelector('.mc-row-status').textContent = '上传失败：' + e.message;
+      }
+      updateSummary();
+    }
 
     const CONCURRENCY = 3;
     let cursor = 0;
     async function worker() {
       while (cursor < rows.length) {
         const idx = cursor++;
-        const { file, row } = rows[idx];
-        try {
-          const result = await call(`/api/materialcheck/upload?filename=${encodeURIComponent(file.name)}&batchId=${encodeURIComponent(batchId)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': file.type },
-            body: file
-          });
-          renderResult(row, result);
-        } catch (e) {
-          row.className = 'mc-row mc-row-error';
-          row.querySelector('.mc-row-status').textContent = '上传失败：' + e.message;
-        }
-        done++; updateSummary();
+        await runOne(rows[idx]);
       }
     }
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rows.length) }, worker));
   }
 
-  function renderResult(row, result) {
+  function renderResult(row, result, ctx = {}) {
     if (result.needsManualPick) {
       row.className = 'mc-row mc-row-pick';
       const options = products.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
@@ -99,7 +115,8 @@ const MaterialCheck = (() => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pendingId: result.pendingId, productId })
           });
-          renderResult(row, resolved);
+          renderResult(row, resolved, ctx);
+          if (ctx.onResolved) ctx.onResolved();
         } catch (e) { A.toast(e.message, 'bad'); }
       };
       return;
@@ -122,8 +139,12 @@ const MaterialCheck = (() => {
 
     row.innerHTML = `
       <span class="mc-row-name">${escapeHtml(result.filename)}</span>
-      <span class="mc-row-status">${badge} · ${escapeHtml(result.productName || '')}${methodLabel ? ' · 匹配方式：' + methodLabel : ''}</span>
+      <span class="mc-row-status">${badge} · ${escapeHtml(result.productName || '')}${methodLabel ? ' · 匹配方式：' + methodLabel : ''}${failed ? ' <button class="mc-btn mc-row-retry">重试</button>' : ''}</span>
       ${detail}`;
+
+    if (failed) {
+      row.querySelector('.mc-row-retry').onclick = () => { if (ctx.onRetry) ctx.onRetry(); };
+    }
   }
 
   // ── 历史记录 ────────────────────────────────────────
