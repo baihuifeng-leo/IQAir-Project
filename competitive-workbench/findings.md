@@ -42,11 +42,18 @@
 | 产品归属识别复用关键词数据本身打分，不单独维护"识别用标识符"字段 | 减少管理员重复维护数据的负担，型号本身通常就在专属关键词列表里 |
 | 一个关键词只能属于一处（某产品专属 或 通用词），保存时校验 | 让运行时匹配逻辑不用处理归属歧义，复杂度前移到写入时一次性检查 |
 | pending（待人工选择）状态不落历史记录，只在内存缓存 30 分钟 | 避免历史记录堆积"没人处理完"的半成品数据 |
+| **【阶段6新增】OCR 引擎换成 PaddleOCR，取代 tesseract** | 用户拿真实素材图实测，tesseract 反复调参（PSM/预处理/白名单/高精度模型）都有明显识别错误；PaddleOCR 真机对比测试效果好一个量级，且更快（6-15秒 vs tesseract 多路并集的1.5-3分钟） |
+| **【阶段6新增】PaddleOCR 常驻 Python 子进程，而非每次现起进程** | 模型加载要 1-30 秒，不能像 tesseract 那样每张图重新付一次这个成本；用 stdin/stdout 按行 JSON 协议跟 Node 通信 |
+| **【阶段6新增】OCR 结果按行置信度过滤噪声，整体置信度低于阈值转人工核对** | PaddleOCR 自带逐行置信度，图标噪声基本 <0.5，真实文案基本 >0.85；用户明确要求"低置信度跟现有人工选择流程一样处理"，不要新造一套 UI |
+| **【阶段6新增】速度不作为硬约束，允许用延迟换精度** | 用户主动说明"识别速度没有太高要求，稍微慢一些也可以"——但后来实测三路并集方案后又反悔，说明这个权衡需要让用户看到实际数字（分钟级）才能做出准确判断，不能只讲"慢一点" |
 
 ## 遇到的问题
 | 问题 | 解决方案 |
 |------|---------|
 | 写计划时发现 Task 5 提到"Task 6 Step 5"但 Task 6 实际commit是Step 4 | 已用 Edit 工具修正两处引用，现在计划文档内部一致 |
+| 【阶段6】tesseract 的 tessedit_char_whitelist 白名单机制在 LSTM 引擎下会导致单次识别耗时暴涨到 60-90 秒以上，不管换哪个 PSM 值都一样 | 判断是 tesseract 该功能在新版引擎下的已知性能短板，放弃这条路，没有继续深挖底层原因 |
+| 【阶段6】PaddleOCR 默认配置在这台机器上跑不起来，报 `NotImplementedError: ConvertPirAttribute2RuntimeAttribute not support`（oneDNN 加速与 PIR 执行器某些算子组合的兼容性 bug） | 显式传 `enable_mkldnn=False` 关掉 oneDNN 加速，问题解决，且没有观察到明显变慢 |
+| 【阶段6】测试环境（EC-Workbench/Test）不是 install.sh 管理的部署，PaddleOCR 需要的 Python venv 得手动搭建，跟生产环境未来走 install.sh 自动搭建的路径不完全一致 | 手动在 Test 目录下 `python3 -m venv venv` + pip 装包 + 跑一次 `--warmup` 触发模型下载，操作跟 install.sh 里写的步骤保持一致，只是手动执行而非脚本自动跑 |
 
 ## 资源
 - 设计文档：`docs/superpowers/specs/2026-07-21-material-keyword-check-design.md`

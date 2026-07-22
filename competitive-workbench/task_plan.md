@@ -4,7 +4,7 @@
 在电商工作台新增第六个标签页：批量上传素材图片，服务端 OCR 识别文字，跟后台配置的产品专属关键词比对，检测出"缺词"（漏了本该出现的关键词）和"串词"（混入了别的产品的关键词），并留存历史记录供回看。
 
 ## 当前阶段
-阶段 3（实现）— 用 subagent-driven-development 执行中。Task 1-3 已实现+评审通过，Task 3 的一条 Important 评审意见（补 ocr_failed 分支回归测试）修复中。Task 4 未开始。
+阶段 6（OCR 识别精度优化，用户实测反馈驱动）— complete。功能本体（阶段 1-5）早已上线到 8080 测试环境；这一阶段是用户拿真实素材图实测后，反复反馈"识别有误"，驱动了三轮 OCR 引擎迭代（tesseract 参数调优 → tesseract 多路并集+预处理 → 换成 PaddleOCR），当前落地在 PaddleOCR 常驻子进程方案，已推送 `design/deepspace-polish` 分支并另建 `feature/materialcheck-paddleocr-ocr` 分支保留这条工作线（原因见下方"备注"）。
 
 ## 各阶段
 
@@ -46,12 +46,28 @@
 
 ### 阶段 5：交付
 - [x] 确认 `competitive-workbench.tar.gz` 与散装文件内容一致（Task 9 + 后续 ocrConcurrency 加固各打包验证一次）
-- [ ] 推送分支 `design/deepspace-polish`
-- [ ] 按 CLAUDE.md 描述的部署流程走：rsync 到 `EC-Workbench/Product/` → 再到 `/opt/workbench`（**这一步需要用户确认后再做，不要自作主张跑生产部署**）
-- **状态：** in_progress
-- **待用户决定的两处范围取舍**（不是 bug，是设计文档要求了但计划/实现阶段缩了水，最终评审标为 Minor）：
+- [x] 推送分支 `design/deepspace-polish`（已多次推送，最新见阶段 6）
+- [x] 部署到 8080 测试环境（`EC-Workbench/Test/`），供用户自行测试——这一步已做；rsync 到 `EC-Workbench/Product/` → `/opt/workbench` 的生产发布仍未做，**需要用户明确要求才启动**
+- **状态：** complete（测试环境部署部分）；生产发布 pending，等用户明确指令
+- **待用户决定的两处范围取舍**（不是 bug，是设计文档要求了但计划/实现阶段缩了水，最终评审标为 Minor，截至目前用户还没表态）：
   1. 历史记录视图的过滤维度比设计文档少——现在只有产品/状态两个筛选，设计文档还要求按上传人、日期范围筛选、按批次折叠展示；store 层已经支持 `uploadedBy` 过滤，只是前端没接出来。
   2. 上传的素材图片全程没有在界面上显示出来——存了、也能通过 `/uploads/materialcheck/` 访问到，但检测台、人工选择产品那一步、历史记录详情里都没有 `<img>` 展示，人工选择产品时只能看 OCR 文字，看不到图。设计文档里"人工选择时把图和文字放一起给人看"这个诉求目前打了折扣。
+
+### 阶段 6：OCR 识别精度优化（用户实测反馈驱动，非原计划范围）
+用户拿真实素材图（IQAir GCX Series XE 海报）实测 8080 环境后反馈"识别有误"，围绕"怎么提升精度"做了三轮迭代，全程用 `/grill-me` 交互式确认每一步再动手，不是一次性做完：
+
+- [x] **第一轮：tesseract 参数调优**——发现默认 PSM 3（整页版式分析）会把标题文字连同产品图一起误判成图片区域整段跳过；换成 PSM 11（稀疏文本模式）验证有提升 —— commit `fe442c3`
+- [x] **第二轮：tesseract 多路 PSM 并集 + ImageMagick 预处理**——用户确认"速度不是硬指标"后，改成 PSM 3+6+11 三路并行取并集 + 放大/灰度/锐化/对比度增强预处理，真机验证过確实能救回单路 PSM 漏掉的关键词 —— commit `8aff9de`；**但用户实测后反馈这版太慢**（单张图 1.5-3 分钟），**已回退** —— commit `7eaa0c9`（回退到第一轮的单路 PSM11 版本）
+- [x] **同期尝试过但验证后放弃的思路**（省得以后重复踩坑）：反色处理（负50-90秒卡死不出结果）、关键词字符白名单限定识别范围（同样卡死，tesseract LSTM 引擎的已知短板）、tesseract 官方"高精度"tessdata_best 模型（体积是默认模型5倍，单次识别超过90秒未完成）、tesseract 内置 Sauvola 自适应二值化（同样跑不完）——四个思路全部因为速度问题在实测阶段被否决，没有一个验证出实际精度收益
+- [x] **第三轮：换成 PaddleOCR（Python 技术栈）**——用户主动提出"能不能用 PaddleOCR"，验证下来效果远超 tesseract 反复调参的上限（"尊享管家服务""行业63+年深耕""全国可用"等 tesseract 全部方案都认不出的文案基本都识别对了），单图 6-15 秒，比 tesseract 三路并集快一个数量级。落地为：
+  - 常驻 Python 子进程（`materialcheck-paddleocr-worker.py`），Node 通过 stdin/stdout 按行 JSON 通信，避免每张图重新加载模型（1-30秒/次）
+  - 关掉 MKLDNN（这台机器装的 PaddlePaddle 版本某些算子组合会直接报错 `ConvertPirAttribute2RuntimeAttribute not support`，关掉后正常，没有明显变慢）
+  - `runOcr()` 现在返回 `{text, confidence}`：过滤掉单行置信度 <0.5 的噪声（图标常被识别成的乱码），剩余行平均置信度 <0.7 时，跟"文件名/OCR都判断不出产品"一样转人工核对（用户在这一步明确确认了这个处理方式）
+  - `install.sh` 换成装 Python3 venv + pip install paddlepaddle/paddleocr，`venv/` 目录本身不进 git/tarball（跟 node_modules 一个道理，已加 `.gitignore`）
+  - commit `e6acf8b`
+- **状态：** complete —— 已部署到 8080 测试环境（含真实创建的 venv，非临时符号链接），server.log 确认常驻 worker 进程正常运行；用户尚未反馈这版的实测结果
+- **已知局限（如实告知用户过，非隐藏问题）：** "士/十"这类形近字偶尔仍会认错（如"瑞士精工"被认成"瑞十精工"）；这套常驻子进程架构是全新代码，比之前调参数风险更高，用户还没来得及验证长时间运行的稳定性
+- **产出**：4 个提交在 `design/deepspace-polish`（`fe442c3`→`8aff9de`→`7eaa0c9`→`e6acf8b`），另建 `feature/materialcheck-paddleocr-ocr` 分支固定在 `e6acf8b`，防止 `design/deepspace-polish`（项目约定里"唯一保留的测试分支，每次覆盖"）未来被其它任务复用时把这条工作线冲掉
 
 ## 关键问题
 1. ~~执行方式选哪种~~ — 用户已选 1（Subagent-Driven），正在按这个方式执行。
@@ -75,6 +91,18 @@
 |------|---------|---------|
 | 计划文档 Task 2/3 的"预期测试通过数"算错（写的 23/36，实际应为 24/33） | 1 | 写计划时手算漏项。发现于 Task 2 实现子代理跑出 24 而非 23 时。用 Edit 直接修正计划文档两处，另开 commit `530a65c`，并在后续任务派发时提前告知子代理这是已知文档笔误，不用当成自己的错 |
 | Task 3 评审后派"补 ocr_failed 测试"的修复子代理时，Agent 工具报 `claude-sonnet-5 is temporarily unavailable`（分类器暂时不可用） | 1 | 等待后原样重新派发即可，不是任务本身的问题 |
+| tesseract 多路 PSM 并集 + 预处理方案，用户实测后反馈"速度慢太多" | 1 | 直接回退到上一版单路 PSM11（commit `7eaa0c9`），不是去优化这版的速度，改走 PaddleOCR 这个完全不同的方向 |
+| 反色处理 / 关键词字符白名单 / tessdata_best 高精度模型 / tesseract 内置 Sauvola 二值化，四个新思路依次实测，全部在 50-90 秒内跑不完 | 每个思路各试 1-2 次（换 PSM 模式重试过） | 判断是 tesseract LSTM 引擎在这几种用法下的已知性能短板，不是参数没调对，直接放弃这个方向，转向验证 PaddleOCR |
+| PaddleOCR 默认配置在这台机器上报 `NotImplementedError: ConvertPirAttribute2RuntimeAttribute not support`（MKLDNN 加速与某些算子不兼容） | 2（先试换模型版本 PP-OCRv4 替代默认的 PP-OCRv6，同样报错；再试降级 paddlepaddle 到 2.6.2，结果 paddleocr 3.x 需要 3.x 的新 API 报另一个错） | 显式关闭 `enable_mkldnn=False` 解决，换回 paddlepaddle 3.3.1，验证下来没有明显变慢 |
+
+## 五问重启检查（阶段 6 结束时更新）
+| 问题 | 答案 |
+|------|------|
+| 我在哪里？ | 阶段 6（OCR 精度优化）complete；PaddleOCR 方案已部署到 8080 测试环境并确认常驻进程正常运行，等用户下一轮实测反馈 |
+| 我要去哪里？ | 等用户测完 PaddleOCR 版本的效果和稳定性；如果满意，下一步是阶段 5 遗留的生产发布流程（rsync 到 Product → /opt/workbench，需用户明确指令）和两处待决策的范围取舍项 |
+| 目标是什么？ | 原始目标不变（素材文案关键词检测）；阶段 6 的子目标是把 OCR 识别精度提升到用户觉得"能投产"的水平 |
+| 我学到了什么？ | tesseract 在电商海报这类拼贴版式+装饰字体上的天花板明显低于 PaddleOCR；速度和精度的取舍必须让用户明确拍板而不是自己猜（多路并集方案就是没跟用户对齐清楚，做完才发现用户嫌慢）；新技术方向落地前先用真实失败样本做免费实验（改参数、跑脚本）比直接写正式代码更省成本 |
+| 我做了什么？ | 见上方"阶段 6"记录；4 个提交 `fe442c3`→`8aff9de`→`7eaa0c9`→`e6acf8b`，均已推送 `design/deepspace-polish`，另建 `feature/materialcheck-paddleocr-ocr` 分支固定保留 |
 
 ## 备注
 - 随着进度更新阶段状态：pending → in_progress → complete
