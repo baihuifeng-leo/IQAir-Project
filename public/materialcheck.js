@@ -65,6 +65,7 @@ const MaterialCheck = (() => {
   }
 
   async function switchPlatform(next) {
+    clearTimeout(autoSaveTimer); // 切平台前把还没触发的自动保存定时器清掉，避免存错地方
     platform = next;
     sessionStorage.setItem('mc-platform', platform);
     try {
@@ -78,6 +79,7 @@ const MaterialCheck = (() => {
   }
 
   async function switchLibrary(next) {
+    clearTimeout(autoSaveTimer); // 切词库前同理
     libraryId = next;
     sessionStorage.setItem(`mc-library-${platform}`, libraryId);
     try { await loadProducts(); } catch (e) { A.toast(e.message, 'bad'); }
@@ -395,16 +397,50 @@ const MaterialCheck = (() => {
     return opts.map(([v, label]) => `<option value="${v}" ${current === v ? 'selected' : ''}>${label}</option>`).join('');
   }
 
+  let autoSaveTimer = null;
+
+  /** 立即保存当前关键词库。silent=true 用于自动保存：不重画整个页面、不拿服务端返回值
+   *  覆盖本地 products/universalKeywords/groups——这几个变量正被卡片上的 input/checkbox
+   *  事件处理器直接引用着，贸然重新赋值会让后续编辑写到已经跟 DOM 脱钩的旧对象上，
+   *  静默保存失败或者页面上敲的字丢了都不会有提示。手动点"保存关键词库"才做完整刷新。 */
+  async function saveLibraryNow({ silent = false } = {}) {
+    const errEl = A.$('#mc-lib-error');
+    try {
+      const saved = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}&libraryId=${encodeURIComponent(libraryId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products, universalKeywords, groups })
+      });
+      if (errEl) errEl.hidden = true;
+      if (!silent) {
+        products = saved.products; universalKeywords = saved.universalKeywords; groups = saved.groups;
+        await loadLibraries();
+        renderLibrarySwitch();
+        A.toast('关键词库已保存');
+        renderLibrary();
+      }
+    } catch (e) {
+      if (errEl) { errEl.hidden = false; errEl.textContent = e.message; }
+    }
+  }
+
+  /** 停顿 0.7 秒自动保存一次，节奏跟价格带沙盘/竞品对位页面的自动保存一致。 */
+  function scheduleAutoSave() {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => saveLibraryNow({ silent: true }), 700);
+  }
+
   /** 产品卡片：groupsOfType 用来显示"当前属于哪个分组"（分组成员是在分组卡片上勾选的，这里只读展示）；
-   *  siblings 是同一批产品（未分类区就是未分类的那批），用来生成"复制到…"的目标产品列表。 */
+   *  siblings 是同一批产品（未分类区就是未分类的那批），用来生成"复制到…"的目标产品列表和拖拽排序范围。 */
   function productCardHtml(p, groupsOfType, siblings) {
     const group = (groupsOfType || []).find((g) => g.id === p.groupId);
     const groupLabel = group ? `<span class="mc-pcard-group">分组：${escapeHtml(group.name)}</span>` : '';
     const copyTargets = (siblings || []).filter((s) => s.id !== p.id);
     const copyOptionsHtml = copyTargets.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
     return `
-      <div class="mc-pcard">
+      <div class="mc-pcard" data-pid="${escapeHtml(p.id)}">
         <div class="mc-pcard-head">
+          <button type="button" class="mc-pcard-handle" data-role="handle" aria-label="拖动调整「${escapeHtml(p.name)}」的顺序" title="拖动调整顺序">⠿</button>
           <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="产品名称 / 型号…" aria-label="产品名称 / 型号">
           <select class="mc-pcard-move" data-role="move" aria-label="移到其它分区" title="移到其它分区">${typeMoveOptionsHtml(p.type || '')}</select>
           ${groupLabel}
@@ -501,6 +537,50 @@ const MaterialCheck = (() => {
 
     const groupsOfType = (type) => groups.filter((g) => g.type === type);
 
+    /** 把 orderedIds（拖拽后某个分区/未分类列表的新顺序）写回全局 products 数组：
+     *  这个分区涉及的产品整体搬到它们原来所在的第一个位置，不打乱其它分区产品的相对顺序。 */
+    const applyReorder = (list, orderedIds) => {
+      const idSet = new Set(list.map((p) => p.id));
+      const firstIdx = products.findIndex((p) => idSet.has(p.id));
+      const rest = products.filter((p) => !idSet.has(p.id));
+      const ordered = orderedIds.map((id) => list.find((p) => p.id === id));
+      rest.splice(firstIdx, 0, ...ordered);
+      products = rest;
+    };
+
+    /** 原生拖拽排序，范围限定在同一个分区/未分类列表内部；不重新整体 drawAll()，
+     *  拖拽过程本身已经把 DOM 顺序调整好了，dragend 时只需要把最终顺序同步回数据并触发自动保存。 */
+    const wireDragReorder = (wrap, list) => {
+      let dragCard = null;
+      [...wrap.querySelectorAll('.mc-pcard')].forEach((card) => {
+        const handle = card.querySelector('[data-role="handle"]');
+        if (!handle) return;
+        handle.draggable = true;
+        handle.addEventListener('dragstart', (e) => {
+          dragCard = card;
+          card.classList.add('mc-pcard-dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', card.dataset.pid);
+        });
+        handle.addEventListener('dragend', () => {
+          card.classList.remove('mc-pcard-dragging');
+          if (dragCard) {
+            const orderedIds = [...wrap.querySelectorAll('.mc-pcard')].map((c) => c.dataset.pid);
+            applyReorder(list, orderedIds);
+            scheduleAutoSave();
+          }
+          dragCard = null;
+        });
+        card.addEventListener('dragover', (e) => {
+          if (!dragCard || dragCard === card) return;
+          e.preventDefault();
+          const rect = card.getBoundingClientRect();
+          const before = (e.clientY - rect.top) < rect.height / 2;
+          wrap.insertBefore(dragCard, before ? card : card.nextSibling);
+        });
+      });
+    };
+
     const mountProductCards = (root, type) => {
       const wrap = root.querySelector('[data-role="products"]');
       const list = productsOfType(type);
@@ -508,14 +588,16 @@ const MaterialCheck = (() => {
       wrap.innerHTML = list.map((p) => productCardHtml(p, typeGroups, list)).join('') || (type ? '<p class="rv-empty">还没有产品，点上面「+ 新增产品」</p>' : '');
       [...wrap.querySelectorAll('.mc-pcard')].forEach((card, i) => {
         const p = list[i];
-        card.querySelector('[data-role="name"]').oninput = (e) => { p.name = e.target.value; };
-        card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; p.groupId = null; drawAll(); };
+        card.querySelector('[data-role="name"]').oninput = (e) => { p.name = e.target.value; scheduleAutoSave(); };
+        card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; p.groupId = null; drawAll(); scheduleAutoSave(); };
         mountKeywordEditor(card, p.keywords, () => {
           card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
+          scheduleAutoSave();
         });
         card.querySelector('[data-role="del"]').onclick = () => {
           products = products.filter((x) => x.id !== p.id);
           drawAll();
+          scheduleAutoSave();
         };
         const copyBtn = card.querySelector('[data-role="copy-to"]');
         if (copyBtn && !copyBtn.disabled) {
@@ -530,13 +612,15 @@ const MaterialCheck = (() => {
             target.keywords = JSON.parse(JSON.stringify(p.keywords));
             A.toast(`已把关键词复制到「${target.name}」`);
             drawAll();
+            scheduleAutoSave();
           };
         }
       });
+      wireDragReorder(wrap, list);
     };
 
     const drawAll = () => {
-      mountKeywordEditor(A.$('[data-role="universal-card"]'), universalKeywords, null);
+      mountKeywordEditor(A.$('[data-role="universal-card"]'), universalKeywords, () => scheduleAutoSave());
 
       const tsecWrap = A.$('#mc-tsections');
       tsecWrap.innerHTML = TYPE_SECTIONS.map(typeSectionHtml).join('');
@@ -549,13 +633,14 @@ const MaterialCheck = (() => {
         gwrap.innerHTML = typeGroups.map((g) => groupCardHtml(g, typeProducts)).join('');
         typeGroups.forEach((g) => {
           const gcard = gwrap.querySelector(`[data-gid="${g.id}"]`);
-          mountKeywordEditor(gcard, g.keywords, null);
-          gcard.querySelector('[data-role="gname"]').oninput = (e) => { g.name = e.target.value; };
+          mountKeywordEditor(gcard, g.keywords, () => scheduleAutoSave());
+          gcard.querySelector('[data-role="gname"]').oninput = (e) => { g.name = e.target.value; scheduleAutoSave(); };
           gcard.querySelectorAll('[data-role="member"]').forEach((cb) => {
             cb.onchange = (e) => {
               const product = products.find((x) => x.id === e.target.dataset.pid);
               product.groupId = e.target.checked ? g.id : null;
               drawAll();
+              scheduleAutoSave();
             };
           });
           gcard.querySelector('[data-role="gdel"]').onclick = () => {
@@ -563,17 +648,20 @@ const MaterialCheck = (() => {
             products.forEach((p) => { if (p.groupId === g.id) p.groupId = null; });
             groups = groups.filter((x) => x.id !== g.id);
             drawAll();
+            scheduleAutoSave();
           };
         });
         root.querySelector('[data-role="add-group"]').onclick = () => {
           groups.push({ id: 'grp_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新分组', type, keywords: [] });
           drawAll();
+          scheduleAutoSave();
         };
 
         mountProductCards(root, type);
         root.querySelector('[data-role="add-product"]').onclick = () => {
           products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, groupId: null, keywords: [] });
           drawAll();
+          scheduleAutoSave();
         };
       });
 
@@ -609,6 +697,7 @@ const MaterialCheck = (() => {
     const confirmName = async () => {
       const name = nameInput.value.trim();
       if (!name) return A.toast('名字不能为空', 'bad');
+      clearTimeout(autoSaveTimer); // 新建/复制/重命名都会切到别的词库，清掉还没触发的自动保存
       try {
         if (opMode === 'new') {
           const lib = await call(`/api/materialcheck/libraries?platform=${encodeURIComponent(platform)}`, {
@@ -648,6 +737,7 @@ const MaterialCheck = (() => {
     deleteBtn.onclick = withBusy(deleteBtn, async () => {
       const lib = libraries.find((l) => l.id === libraryId);
       if (!confirm(`删除词库「${lib?.name}」？里面的产品和关键词都会被删掉，且不可恢复。`)) return;
+      clearTimeout(autoSaveTimer); // 词库都要被删了，别再让待触发的自动保存往它身上存
       try {
         await call(`/api/materialcheck/libraries?platform=${encodeURIComponent(platform)}&id=${encodeURIComponent(libraryId)}`, { method: 'DELETE' });
         await loadLibraries();
@@ -660,22 +750,8 @@ const MaterialCheck = (() => {
 
     const saveBtn = A.$('#mc-lib-save');
     saveBtn.onclick = withBusy(saveBtn, async () => {
-      const errEl = A.$('#mc-lib-error');
-      errEl.hidden = true;
-      try {
-        const saved = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}&libraryId=${encodeURIComponent(libraryId)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ products, universalKeywords, groups })
-        });
-        products = saved.products; universalKeywords = saved.universalKeywords; groups = saved.groups;
-        await loadLibraries(); // 产品数变了，词库下拉框里的计数要跟着刷新
-        renderLibrarySwitch();
-        A.toast('关键词库已保存');
-        renderLibrary();
-      } catch (e) {
-        errEl.hidden = false; errEl.textContent = e.message;
-      }
+      clearTimeout(autoSaveTimer); // 手动保存立即执行，不用再等那个待触发的自动保存
+      await saveLibraryNow({ silent: false });
     });
   }
 

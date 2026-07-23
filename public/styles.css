@@ -1993,7 +1993,16 @@ body.rpt-presenting .rpt-wm-note {
 .mc-chip-editor .mc-chip { font-size: 15px; font-weight: 600; padding: 5px 11px; }
 
 /* 自定义共享分组：跟产品卡片一样的可编辑 chip 区，多加一段"勾选哪些产品属于这个分组"的成员列表 */
-.mc-gcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+/* 分组卡片继承所在分区的强调色（--mc-sec 由 .mc-tsec-machine/filter/accessory 定义），
+   靠"有色边框+淡色底"和产品卡片的素色区分开——不是分组的另一套颜色体系，是同一套强调色的延伸，
+   color-mix() 不支持的旧浏览器会让这条 background 声明整体失效，退化成继承背景，不会破版 */
+.mc-gcard {
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 90%, var(--mc-sec, transparent) 10%);
+  border: 1px solid var(--mc-sec, var(--line-soft));
+  border-left-width: 3px;
+  border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+}
 .mc-gcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .mc-gcard-name { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
 .mc-gmembers { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 12px; }
@@ -2021,6 +2030,15 @@ body.rpt-presenting .rpt-wm-note {
 .mc-pcard-move { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
 .mc-pcard-group { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 .mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
+
+/* 拖拽手柄：单独的小按钮而不是整张卡片可拖，避免跟卡片里的输入框/下拉框抢手势 */
+.mc-pcard-handle {
+  flex: 0 0 auto; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--dimmer);
+  border-radius: 6px; width: 26px; height: 26px; font-size: 13px; cursor: grab; padding: 0;
+  display: grid; place-items: center; user-select: none; touch-action: none;
+}
+.mc-pcard-handle:hover { color: var(--text); background: var(--surface-2); }
+.mc-pcard-dragging { opacity: 0.5; }
 
 /* "复制到…"：跟词库改名那条内联行一样的隐藏/展开模式，同样要钉住 [hidden]，
    否则 .mc-copy-row 的 display:flex 跟 UA 的 [hidden]{display:none} 优先级打平会被覆盖 */
