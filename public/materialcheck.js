@@ -5,7 +5,6 @@ const MaterialCheck = (() => {
   let products = [], universalKeywords = [], machineSharedKeywords = [], filterSharedKeywords = [], accessorySharedKeywords = [];
 
   const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
-  const TYPES = [['', '（未分类）'], ['machine', '机器'], ['filter', '滤芯'], ['accessory', '附件']];
   // pass/warn/error 是新三态；fail 是 v2 上线前的旧记录留下的值，不迁移，历史筛选里仍要能选到
   const STATUS_META = {
     pass: { cls: 'mc-row-ok', badge: '✓ 通过' },
@@ -336,12 +335,13 @@ const MaterialCheck = (() => {
     '大促销售权益': 'mc-cat-promo', '附加权益': 'mc-cat-extra', '国补': 'mc-cat-subsidy',
     '价格': 'mc-cat-price', '其它': 'mc-cat-other'
   };
-  const GROUPS = [
-    ['universal', '全局通用词', '任何产品图上出现都不算问题'],
-    ['machine', '机器组通用词', '机器类产品之间可共用，不算缺词/串词'],
-    ['filter', '滤芯组通用词', '滤芯类产品之间可共用'],
-    ['accessory', '附件组通用词', '附件类产品之间可共用']
+  // 产品按类型分区展示：每个分区里先放该类型的共用词，再放该类型下的产品卡片
+  const TYPE_SECTIONS = [
+    ['machine', '机器', '机器组通用词', '机器类产品之间可共用，不算缺词/串词'],
+    ['filter', '滤芯', '滤芯组通用词', '滤芯类产品之间可共用'],
+    ['accessory', '附件', '附件组通用词', '附件类产品之间可共用']
   ];
+  const VALID_TYPES = TYPE_SECTIONS.map(([v]) => v);
 
   const catOptionsHtml = CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
 
@@ -385,13 +385,20 @@ const MaterialCheck = (() => {
       </div>`;
   }
 
+  /** 产品原来的类型主要通过所在分区决定；这个下拉框只用来纠错、把产品挪到别的分区，
+   *  所以只列真实类型，"未分类"只在产品当前确实没归类时才作为一个可见选项出现（不能手动挪回未分类）。 */
+  function typeMoveOptionsHtml(current) {
+    const opts = TYPE_SECTIONS.map(([v, label]) => [v, label]);
+    if (!VALID_TYPES.includes(current)) opts.unshift(['', '未分类']);
+    return opts.map(([v, label]) => `<option value="${v}" ${current === v ? 'selected' : ''}>${label}</option>`).join('');
+  }
+
   function productCardHtml(p) {
-    const typeOptions = TYPES.map(([v, label]) => `<option value="${v}" ${(p.type || '') === v ? 'selected' : ''}>${label}</option>`).join('');
     return `
       <div class="mc-pcard">
         <div class="mc-pcard-head">
           <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="产品名称 / 型号…" aria-label="产品名称 / 型号">
-          <select class="mc-pcard-type" data-role="type" aria-label="产品类型">${typeOptions}</select>
+          <select class="mc-pcard-move" data-role="move" aria-label="移到其它分区" title="移到其它分区">${typeMoveOptionsHtml(p.type || '')}</select>
           <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
           <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
         </div>
@@ -400,12 +407,21 @@ const MaterialCheck = (() => {
       </div>`;
   }
 
-  function groupCardHtml([g, label, hint]) {
+  function groupCardHtml(label, hint) {
     return `
-      <div class="mc-gcard" data-group="${g}">
+      <div class="mc-gcard" data-role="group-card">
         <div class="mc-gcard-head"><h4>${label}</h4><p class="mc-utab-hint">${hint}</p></div>
         <div class="mc-chip-editor" data-role="chips"></div>
         ${keywordAddRowHtml()}
+      </div>`;
+  }
+
+  function typeSectionHtml([type, label, groupLabel, groupHint]) {
+    return `
+      <div class="mc-tsection mc-tsec-${type}" data-type="${type}">
+        <div class="mc-tsection-head"><h3>${label}</h3><button class="mc-btn" data-role="add-product">+ 新增产品</button></div>
+        ${groupCardHtml(groupLabel, groupHint)}
+        <div class="mc-pcards-scroll" data-role="products"></div>
       </div>`;
   }
 
@@ -415,7 +431,7 @@ const MaterialCheck = (() => {
     if (role === 'none') { el.innerHTML = '<p class="rv-empty">没有查看关键词库的权限</p>'; return; }
     const readOnly = role !== 'edit';
 
-    const groupLists = { universal: universalKeywords, machine: machineSharedKeywords, filter: filterSharedKeywords, accessory: accessorySharedKeywords };
+    const groupListFor = { machine: machineSharedKeywords, filter: filterSharedKeywords, accessory: accessorySharedKeywords };
 
     el.innerHTML = `
       <div class="${readOnly ? 'mc-lib-disabled' : ''}">
@@ -436,49 +452,63 @@ const MaterialCheck = (() => {
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
         </div>
         <p class="mc-lib-error" id="mc-lib-error" hidden></p>
-        <div class="mc-lib-card">
-          <h3>通用词库</h3>
-          <div class="mc-gcards" id="mc-gcards"></div>
+        <div class="mc-lib-card mc-lib-universal" data-role="universal-card">
+          <h3>全局通用词</h3>
+          <p class="mc-utab-hint">任何产品图上出现都不算问题</p>
+          <div class="mc-chip-editor" data-role="chips"></div>
+          ${keywordAddRowHtml()}
         </div>
-        <div class="mc-lib-card">
-          <div class="mc-lib-head"><h3>产品专属词</h3><button class="mc-btn" id="mc-add-product">+ 新增产品</button></div>
-          <div class="mc-pcards-scroll" id="mc-pcards"></div>
+        <div id="mc-tsections"></div>
+        <div class="mc-tsection mc-tsec-none" id="mc-tsec-none" hidden>
+          <div class="mc-tsection-head"><h3>未分类</h3></div>
+          <div class="mc-pcards-scroll" data-role="products"></div>
         </div>
       </div>`;
 
-    const drawGroupCards = () => {
-      const wrap = A.$('#mc-gcards');
-      wrap.innerHTML = GROUPS.map(groupCardHtml).join('');
-      [...wrap.querySelectorAll('.mc-gcard')].forEach((card, i) => {
-        const [g] = GROUPS[i];
-        mountKeywordEditor(card, groupLists[g], null);
-      });
-    };
+    const productsOfType = (type) => type
+      ? products.filter((p) => p.type === type)
+      : products.filter((p) => !VALID_TYPES.includes(p.type));
 
-    const drawProductCards = () => {
-      const wrap = A.$('#mc-pcards');
-      wrap.innerHTML = products.map(productCardHtml).join('') || '<p class="rv-empty">还没有产品，点右上角「+ 新增产品」</p>';
+    const mountProductCards = (root, type) => {
+      const wrap = root.querySelector('[data-role="products"]');
+      const list = productsOfType(type);
+      wrap.innerHTML = list.map(productCardHtml).join('') || (type ? '<p class="rv-empty">还没有产品，点上面「+ 新增产品」</p>' : '');
       [...wrap.querySelectorAll('.mc-pcard')].forEach((card, i) => {
-        const p = products[i];
+        const p = list[i];
         card.querySelector('[data-role="name"]').oninput = (e) => { p.name = e.target.value; };
-        card.querySelector('[data-role="type"]').onchange = (e) => { p.type = e.target.value; };
+        card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; drawAll(); };
         mountKeywordEditor(card, p.keywords, () => {
           card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
         });
         card.querySelector('[data-role="del"]').onclick = () => {
           products = products.filter((x) => x.id !== p.id);
-          drawProductCards();
+          drawAll();
         };
       });
     };
 
-    drawGroupCards();
-    drawProductCards();
+    const drawAll = () => {
+      mountKeywordEditor(A.$('[data-role="universal-card"]'), universalKeywords, null);
 
-    A.$('#mc-add-product').onclick = () => {
-      products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type: '', keywords: [] });
-      drawProductCards();
+      const tsecWrap = A.$('#mc-tsections');
+      tsecWrap.innerHTML = TYPE_SECTIONS.map(typeSectionHtml).join('');
+      TYPE_SECTIONS.forEach(([type]) => {
+        const root = tsecWrap.querySelector(`.mc-tsection[data-type="${type}"]`);
+        mountKeywordEditor(root.querySelector('[data-role="group-card"]'), groupListFor[type], null);
+        mountProductCards(root, type);
+        root.querySelector('[data-role="add-product"]').onclick = () => {
+          products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, keywords: [] });
+          drawAll();
+        };
+      });
+
+      const noneSec = A.$('#mc-tsec-none');
+      const noneList = productsOfType('');
+      noneSec.hidden = noneList.length === 0;
+      if (noneList.length) mountProductCards(noneSec, '');
     };
+
+    drawAll();
 
     // 请求进行中禁用按钮，避免网络慢的时候重复点击发出重复请求；正常收尾走 renderLibrary() 整体重画，
     // 这里的 finally 主要是兜底失败路径（renderLibrary 不会跑，按钮必须自己恢复可点）

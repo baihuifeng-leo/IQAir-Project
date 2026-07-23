@@ -1978,28 +1978,44 @@ body.rpt-presenting .rpt-wm-note {
   background: var(--group-card); border: 1px solid var(--hair); border-radius: 16px;
   padding: 20px 22px; margin-bottom: 20px;
 }
-.mc-lib-card > h3, .mc-lib-card .mc-lib-head h3 { font-size: 14px; letter-spacing: 0.01em; }
-.mc-lib-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.mc-lib-card > h3 { font-size: 14px; letter-spacing: 0.01em; }
 
 .mc-kw-add input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
-.mc-type-select, .mc-cat-select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+.mc-cat-select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-kw-add { display: flex; gap: 8px; margin-top: 10px; }
 .mc-chip-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 30px; }
 .mc-chip-empty { color: var(--dimmer); font-size: 12px; }
 
 .mc-utab-hint { color: var(--dimmer); font-size: 12px; margin: 2px 0 0; }
 
-/* 通用词库：四组纵向堆叠的卡片，跟产品专属词一样的可编辑 chip 区 */
-.mc-gcards { display: flex; flex-direction: column; gap: 16px; }
-.mc-gcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; }
+/* 关键词内容是这个页面要看的重点，chip 文字明显放大加粗；
+   只限定在可编辑的词库 chip 区（分类徽标/其它 chip 场景，比如检测结果里的缺词/串词，不受影响，保持原来的紧凑密度） */
+.mc-chip-editor .mc-chip { font-size: 15px; font-weight: 600; padding: 5px 11px; }
+
+/* 通用词库/分区共用词：跟产品专属词一样的可编辑 chip 区，标题保持小字号当容器标签，不跟关键词抢视线 */
+.mc-gcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
 .mc-gcard-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
 .mc-gcard-head h4 { margin: 0; font-size: 13px; }
+
+/* 产品按机器/滤芯/附件分区：每个分区标题左侧一道专属色条做区分，分区内先放共用词卡片，再纵向堆叠产品卡片 */
+.mc-tsection { margin-bottom: 26px; }
+.mc-tsection-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 2px 0 10px 12px; margin-bottom: 12px; border-left: 3px solid var(--mc-sec, var(--line-soft));
+}
+.mc-tsection-head h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--mc-sec, var(--text)); letter-spacing: 0.02em; }
+.mc-tsec-machine   { --mc-sec: #5b8cff; }
+.mc-tsec-filter    { --mc-sec: #3ec9d6; }
+.mc-tsec-accessory { --mc-sec: #f2a355; }
+.mc-tsec-none .mc-tsection-head { border-left-color: var(--line-soft); }
+.mc-tsec-none .mc-tsection-head h3 { color: var(--dimmer); }
 
 /* 产品专属词：一行一个产品卡片，纵向堆叠，超出高度整体滚动，关键词横向铺开自动换行 */
 .mc-pcards-scroll { display: flex; flex-direction: column; gap: 14px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
 .mc-pcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; }
 .mc-pcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.mc-pcard-name { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; }
+.mc-pcard-name { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
+.mc-pcard-move { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
 .mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 
 .mc-cat-badge { border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
@@ -2120,6 +2136,11 @@ body.rpt-presenting .rpt-wm-note {
 [data-theme="light"] .mc-cat-extra { background: #eae2fb; color: #6a44c9; }
 [data-theme="light"] .mc-cat-subsidy { background: #fbdcea; color: #a52e6b; }
 [data-theme="light"] .mc-cat-price { background: #d8f2f7; color: #14707f; }
+
+/* 素材质检·分区色条：深色下的亮色在浅底上偏刺眼/对比不够，换成同色系压深的版本 */
+[data-theme="light"] .mc-tsec-machine   { --mc-sec: #3358c9; }
+[data-theme="light"] .mc-tsec-filter    { --mc-sec: #0e7a86; }
+[data-theme="light"] .mc-tsec-accessory { --mc-sec: #a15f14; }
 
 /* 报告管理徽标 / 放映退出按钮 */
 [data-theme="light"] .rpt-scope-badge.alt { background: #3358c91c; color: #2d4fbe; }
