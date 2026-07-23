@@ -669,27 +669,91 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, result);
     }
 
+    if (p === '/api/materialcheck/libraries' && req.method === 'GET') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      return json(res, 200, { libraries: materialcheck.listLibraries(platform) });
+    }
+
+    if (p === '/api/materialcheck/libraries' && req.method === 'POST') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const { name } = await body(req, 4096);
+      let lib;
+      try { lib = await materialcheck.createLibrary(platform, name); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      const platformLabel = platform === 'tmall' ? '天猫' : '京东';
+      audit(me, 'materialcheck.library.create', { detail: [`${platformLabel}新建词库「${lib.name}」`] });
+      return json(res, 200, lib);
+    }
+
+    if (p === '/api/materialcheck/libraries/copy' && req.method === 'POST') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const { sourceId, name } = await body(req, 4096);
+      if (!sourceId) return json(res, 400, { error: '缺少要复制的词库' });
+      let lib;
+      try { lib = await materialcheck.copyLibrary(platform, sourceId, name); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      const platformLabel = platform === 'tmall' ? '天猫' : '京东';
+      audit(me, 'materialcheck.library.copy', { detail: [`${platformLabel}复制出新词库「${lib.name}」`] });
+      return json(res, 200, lib);
+    }
+
+    if (p === '/api/materialcheck/libraries/rename' && req.method === 'PUT') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const { id, name } = await body(req, 4096);
+      if (!id) return json(res, 400, { error: '缺少要改名的词库' });
+      let lib;
+      try { lib = await materialcheck.renameLibrary(platform, id, name); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'materialcheck.library.rename', { detail: [`词库改名为「${lib.name}」`] });
+      return json(res, 200, lib);
+    }
+
+    if (p === '/api/materialcheck/libraries' && req.method === 'DELETE') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const id = url.searchParams.get('id');
+      if (!id) return json(res, 400, { error: '缺少要删除的词库' });
+      const deletedName = (materialcheck.getLibrary(platform, id) || {}).name || id;
+      try { await materialcheck.deleteLibrary(platform, id); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'materialcheck.library.delete', { detail: [`删除词库「${deletedName}」`] });
+      return json(res, 200, { ok: true });
+    }
+
     if (p === '/api/materialcheck/products' && req.method === 'GET') {
       const platform = url.searchParams.get('platform') || 'tmall';
       if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
-      return json(res, 200, materialcheck.getLibrary(platform));
+      const libraryId = url.searchParams.get('libraryId') || undefined;
+      const lib = materialcheck.getLibrary(platform, libraryId);
+      if (!lib) return json(res, 400, { error: '这套词库不存在，可能已经被删除' });
+      return json(res, 200, lib);
     }
 
     if (p === '/api/materialcheck/products' && req.method === 'PUT') {
       const platform = url.searchParams.get('platform') || 'tmall';
       if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      const libraryId = url.searchParams.get('libraryId');
+      if (!libraryId) return json(res, 400, { error: '缺少词库参数' });
       if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
       const { products, universalKeywords, machineSharedKeywords, filterSharedKeywords, accessorySharedKeywords } = await body(req, 1024 * 1024);
       if (!Array.isArray(products) || !Array.isArray(universalKeywords)) return json(res, 400, { error: '数据格式不对' });
       let saved;
       try {
-        saved = await materialcheck.saveProducts(platform, products, universalKeywords, {
+        saved = await materialcheck.saveProducts(platform, libraryId, products, universalKeywords, {
           machine: machineSharedKeywords, filter: filterSharedKeywords, accessory: accessorySharedKeywords
         });
       }
       catch (e) { return json(res, 400, { error: e.message }); }
       const platformLabel = platform === 'tmall' ? '天猫' : '京东';
-      audit(me, 'materialcheck.products.update', { detail: [`${platformLabel}关键词库已更新：${saved.products.length} 个产品，${saved.universalKeywords.length} 个通用词`] });
+      audit(me, 'materialcheck.products.update', { detail: [`${platformLabel}「${saved.name}」已更新：${saved.products.length} 个产品，${saved.universalKeywords.length} 个通用词`] });
       return json(res, 200, saved);
     }
 
@@ -699,12 +763,13 @@ const server = http.createServer(async (req, res) => {
       if (!ext) return json(res, 415, { error: '只支持 PNG、JPG、WebP 三种格式' });
       const platform = url.searchParams.get('platform') || 'tmall';
       if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      const libraryId = url.searchParams.get('libraryId') || undefined;
       const filename = decodeURIComponent(url.searchParams.get('filename') || ('upload' + ext));
       const batchId = url.searchParams.get('batchId') || ('b_' + crypto.randomBytes(6).toString('hex'));
       const buf = await readBinary(req, MAX_IMAGE);
       if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
       let result;
-      try { result = await materialcheck.detectFile({ buf, ext, filename, batchId, uploadedBy: me.name, platform }); }
+      try { result = await materialcheck.detectFile({ buf, ext, filename, batchId, uploadedBy: me.name, platform, libraryId }); }
       catch (e) { return json(res, 400, { error: e.message }); }
       if (!result.needsManualPick) {
         const label = { pass: '通过', warn: '提醒', error: '报错', ocr_failed: '识别失败' }[result.status] || result.status;
@@ -726,11 +791,12 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/materialcheck/records' && req.method === 'GET') {
       const platform = url.searchParams.get('platform') || undefined;
+      const libraryId = url.searchParams.get('libraryId') || undefined;
       const productId = url.searchParams.get('productId') || undefined;
       const status = url.searchParams.get('status') || undefined;
       const uploadedBy = url.searchParams.get('uploadedBy') || undefined;
       const limit = Math.min(2000, Number(url.searchParams.get('limit')) || 500);
-      return json(res, 200, { records: materialcheck.listRecords({ platform, productId, status, uploadedBy, limit }) });
+      return json(res, 200, { records: materialcheck.listRecords({ platform, libraryId, productId, status, uploadedBy, limit }) });
     }
 
     if (p.startsWith('/uploads/')) return serveStatic(res, UPLOAD_DIR, p.slice('/uploads/'.length), true);

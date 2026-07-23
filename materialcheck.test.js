@@ -293,8 +293,9 @@ async function run() {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
     const store = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
     await store.load();
+    const libId = store.getLibrary(PF).id;
     await store.saveProducts(
-      PF,
+      PF, libId,
       [
         { id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi', '抗菌滤网认证号XXX'] },
         { id: 'pb', name: 'GCX XE', keywords: ['GCX XE', '静音悬浮马达'] }
@@ -308,23 +309,83 @@ async function run() {
     assert.deepStrictEqual(PLATFORMS, ['tmall', 'jd']);
   });
 
+  await tAsync('新建的 store 每个平台都自带一套「默认词库」', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
+    const store = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
+    await store.load();
+    assert.strictEqual(store.listLibraries('tmall').length, 1);
+    assert.strictEqual(store.listLibraries('tmall')[0].name, '默认词库');
+    assert.strictEqual(store.listLibraries('jd').length, 1);
+  });
+
+  await tAsync('createLibrary 新建空词库，名字重复时拒绝', async () => {
+    const store = await freshStore();
+    const lib = await store.createLibrary(PF, '大促专用');
+    assert.strictEqual(lib.products.length, 0);
+    assert.strictEqual(store.listLibraries(PF).length, 2);
+    await assert.rejects(store.createLibrary(PF, '大促专用'), /已经用过/);
+    await assert.rejects(store.createLibrary(PF, '  '), /不能为空/);
+  });
+
+  await tAsync('copyLibrary 复制出内容一致但 id 不同的新词库，不带检测历史', async () => {
+    const store = await freshStore();
+    const srcId = store.getLibrary(PF).id;
+    const copy = await store.copyLibrary(PF, srcId, '复制版');
+    assert.notStrictEqual(copy.id, srcId);
+    assert.strictEqual(copy.products.length, 2);
+    assert.strictEqual(copy.universalKeywords[0].text, '7天无理由退换');
+    // 复制后的产品是深拷贝，改动互不影响
+    copy.products[0].name = '改过的名字';
+    assert.strictEqual(store.getLibrary(PF, srcId).products[0].name, 'GC-Multi');
+  });
+
+  await tAsync('copyLibrary 源词库不存在时拒绝', async () => {
+    const store = await freshStore();
+    await assert.rejects(store.copyLibrary(PF, 'lib_不存在', '新名字'), /不存在/);
+  });
+
+  await tAsync('renameLibrary 改名，跟同平台已有名字冲突时拒绝', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await store.createLibrary(PF, '另一套');
+    await assert.rejects(store.renameLibrary(PF, libId, '另一套'), /已经用过/);
+    const renamed = await store.renameLibrary(PF, libId, '改名后');
+    assert.strictEqual(renamed.name, '改名后');
+  });
+
+  await tAsync('deleteLibrary 只剩最后一套时拒绝删除', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await assert.rejects(store.deleteLibrary(PF, libId), /至少要保留一套/);
+    const other = await store.createLibrary(PF, '另一套');
+    await store.deleteLibrary(PF, other.id); // 不是最后一套，可以删
+    assert.strictEqual(store.listLibraries(PF).length, 1);
+  });
+
   await tAsync('saveProducts 拒绝重复关键词并保留原有数据', async () => {
     const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     await assert.rejects(
-      store.saveProducts(PF, [{ id: 'pa', name: 'A', keywords: ['同一个词'] }, { id: 'pb', name: 'B', keywords: ['同一个词'] }], []),
+      store.saveProducts(PF, libId, [{ id: 'pa', name: 'A', keywords: ['同一个词'] }, { id: 'pb', name: 'B', keywords: ['同一个词'] }], []),
       /同一个词/
     );
-    assert.strictEqual(store.getLibrary(PF).products.length, 2); // 拒绝后没有把坏数据写进去
+    assert.strictEqual(store.getLibrary(PF, libId).products.length, 2); // 拒绝后没有把坏数据写进去
   });
 
   await tAsync('saveProducts 拒绝不认识的平台参数', async () => {
     const store = await freshStore();
-    await assert.rejects(store.saveProducts('pdd', [], []), /平台参数不对/);
+    await assert.rejects(store.saveProducts('pdd', 'lib_x', [], []), /平台参数不对/);
+  });
+
+  await tAsync('saveProducts 拒绝不存在的词库 id', async () => {
+    const store = await freshStore();
+    await assert.rejects(store.saveProducts(PF, 'lib_不存在', [], []), /不存在/);
   });
 
   await tAsync('saveProducts 把关键词归一化成 {text,category} 对象，产品 type 校验非法值兜底为空', async () => {
     const store = await freshStore();
-    const saved = await store.saveProducts(PF, [
+    const libId = store.getLibrary(PF).id;
+    const saved = await store.saveProducts(PF, libId, [
       { id: 'pa', name: 'GC-Multi', type: 'machine', keywords: [{ text: 'GC-Multi', category: '产品型号' }, '国补价1999'] },
       { id: 'pb', name: 'GCX XE', type: '不合法类型', keywords: ['GCX XE'] }
     ], []);
@@ -333,54 +394,84 @@ async function run() {
     assert.strictEqual(saved.products[1].type, ''); // 非法 type 兜底为空，不抛错
   });
 
-  await tAsync('saveProducts 保存三套组内通用词，且跟专属词冲突时拒绝', async () => {
+  await tAsync('saveProducts 通用词和三套组内通用词也归一化成 {text,category}，且跟专属词冲突时拒绝', async () => {
     const store = await freshStore();
-    const saved = await store.saveProducts(PF, [{ id: 'pa', name: 'GC-Multi', type: 'machine', keywords: ['GC-Multi'] }], [], {
-      machine: ['机器组内共享词'], filter: ['滤芯组内共享词'], accessory: ['附件组内共享词']
-    });
-    assert.deepStrictEqual(saved.machineSharedKeywords, ['机器组内共享词']);
-    assert.deepStrictEqual(saved.filterSharedKeywords, ['滤芯组内共享词']);
-    assert.deepStrictEqual(saved.accessorySharedKeywords, ['附件组内共享词']);
+    const libId = store.getLibrary(PF).id;
+    const saved = await store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', type: 'machine', keywords: ['GC-Multi'] }],
+      [{ text: '全局通用词', category: '产品利益点' }], {
+        machine: ['机器组内共享词'], filter: ['滤芯组内共享词'], accessory: ['附件组内共享词']
+      });
+    assert.deepStrictEqual(saved.universalKeywords, [{ text: '全局通用词', category: '产品利益点' }]);
+    assert.deepStrictEqual(saved.machineSharedKeywords, [{ text: '机器组内共享词', category: '其它' }]);
+    assert.deepStrictEqual(saved.filterSharedKeywords, [{ text: '滤芯组内共享词', category: '其它' }]);
+    assert.deepStrictEqual(saved.accessorySharedKeywords, [{ text: '附件组内共享词', category: '其它' }]);
 
     await assert.rejects(
-      store.saveProducts(PF, [{ id: 'pa', name: 'GC-Multi', keywords: ['冲突词'] }], [], { machine: ['冲突词'] }),
+      store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['冲突词'] }], [], { machine: ['冲突词'] }),
       /冲突词/
     );
   });
 
   await tAsync('天猫和京东两个平台的词库完全独立，互不影响', async () => {
     const store = await freshStore();
-    await store.saveProducts('jd', [{ id: 'pj', name: '京东专属产品', keywords: ['京东词'] }], []);
+    const jdLibId = store.getLibrary('jd').id;
+    await store.saveProducts('jd', jdLibId, [{ id: 'pj', name: '京东专属产品', keywords: ['京东词'] }], []);
     assert.strictEqual(store.getLibrary('tmall').products.length, 2);
     assert.strictEqual(store.getLibrary('jd').products.length, 1);
     assert.strictEqual(store.getLibrary('jd').products[0].name, '京东专属产品');
     // 同一个词在天猫和京东各自的库里都能用，互不冲突
-    await store.saveProducts('jd', [{ id: 'pj', name: '京东专属产品', keywords: ['GC-Multi'] }], []);
+    await store.saveProducts('jd', jdLibId, [{ id: 'pj', name: '京东专属产品', keywords: ['GC-Multi'] }], []);
     assert.strictEqual(store.getLibrary('jd').products[0].keywords[0].text, 'GC-Multi');
+  });
+
+  await tAsync('同一个平台下的两套词库互相独立，互不冲突', async () => {
+    const store = await freshStore();
+    const libA = store.getLibrary(PF).id;
+    const libB = await store.createLibrary(PF, '词库B');
+    await store.saveProducts(PF, libB.id, [{ id: 'pn', name: '新产品', keywords: ['GC-Multi'] }], []); // 跟词库A里的词重名也没事
+    assert.strictEqual(store.getLibrary(PF, libA).products.length, 2);
+    assert.strictEqual(store.getLibrary(PF, libB.id).products.length, 1);
   });
 
   await tAsync('detectFile 拒绝不认识的平台参数', async () => {
     const store = await freshStore();
-    await assert.rejects(store.detectFile({ buf: Buffer.from('x'), ext: '.jpg', filename: 'a.jpg', batchId: 'b1', uploadedBy: 'li', platform: 'pdd', ocr: stubOcr('x') }), /平台参数不对/);
+    await assert.rejects(store.detectFile({ buf: Buffer.from('x'), ext: '.jpg', filename: 'a.jpg', batchId: 'b1', uploadedBy: 'li', platform: 'pdd', libraryId: 'lib_x', ocr: stubOcr('x') }), /平台参数不对/);
   });
 
-  await tAsync('detectFile 文件名可判定时直接产出通过结果，记录带 platform', async () => {
+  await tAsync('detectFile 拒绝不存在的词库 id', async () => {
     const store = await freshStore();
+    await assert.rejects(store.detectFile({ buf: Buffer.from('x'), ext: '.jpg', filename: 'a.jpg', batchId: 'b1', uploadedBy: 'li', platform: PF, libraryId: 'lib_不存在', ocr: stubOcr('x') }), /不存在/);
+  });
+
+  await tAsync('detectFile 文件名可判定时直接产出通过结果，记录带 platform 和 libraryId', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     const result = await store.detectFile({
-      buf: Buffer.from('fake-image-bytes'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF,
+      buf: Buffer.from('fake-image-bytes'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF, libraryId: libId,
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX 7天无理由退换')
     });
     assert.strictEqual(result.status, 'pass');
     assert.strictEqual(result.productId, 'pa');
     assert.strictEqual(result.matchMethod, 'filename');
     assert.strictEqual(result.platform, PF);
+    assert.strictEqual(result.libraryId, libId);
     assert.strictEqual(store.records.length, 1);
+  });
+
+  await tAsync('detectFile 不传 libraryId 时兜底用平台第一套词库', async () => {
+    const store = await freshStore();
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF,
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX 7天无理由退换')
+    });
+    assert.strictEqual(result.libraryId, store.getLibrary(PF).id);
   });
 
   await tAsync('detectFile 缺词时判定为提醒状态', async () => {
     const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     const result = await store.detectFile({
-      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF,
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF, libraryId: libId,
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi')
     });
     assert.strictEqual(result.status, 'warn');
@@ -389,9 +480,10 @@ async function run() {
 
   await tAsync('detectFile OCR 失败时判定为 ocr_failed', async () => {
     const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     const stubOcrFail = () => async () => { throw new Error('识别失败：图片损坏'); };
     const result = await store.detectFile({
-      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0001.jpg', platform: PF,
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0001.jpg', platform: PF, libraryId: libId,
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcrFail()
     });
     assert.strictEqual(result.status, 'ocr_failed');
@@ -401,8 +493,9 @@ async function run() {
 
   await tAsync('detectFile 文件名和 OCR 都无法判定时返回待人工选择，不写入历史记录', async () => {
     const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     const result = await store.detectFile({
-      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0001.jpg', platform: PF,
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0001.jpg', platform: PF, libraryId: libId,
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('无关文字')
     });
     assert.strictEqual(result.needsManualPick, true);
@@ -410,28 +503,31 @@ async function run() {
     assert.strictEqual(store.records.length, 0);
   });
 
-  await tAsync('resolvePending 用人工选择的产品完成判定并写入历史，记录带正确的 platform', async () => {
+  await tAsync('resolvePending 用人工选择的产品完成判定并写入历史，记录带正确的 platform 和 libraryId', async () => {
     const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     await store.detectFile({
-      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0001.jpg', platform: PF,
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0001.jpg', platform: PF, libraryId: libId,
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX')
     });
     // 用一段两个产品都不命中的文字，强迫走人工选择路径
     const ambiguousPending = await store.detectFile({
-      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0002.jpg', platform: PF,
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'IMG_0002.jpg', platform: PF, libraryId: libId,
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('完全无关的文字')
     });
     const resolved = await store.resolvePending(ambiguousPending.pendingId, 'pa', 'li');
     assert.strictEqual(resolved.matchMethod, 'manual');
     assert.strictEqual(resolved.productId, 'pa');
     assert.strictEqual(resolved.platform, PF);
+    assert.strictEqual(resolved.libraryId, libId);
     assert.strictEqual(store.records.length, 2); // pending 本身没落库，resolvePending 后 + 上面那条 filename 判定的
   });
 
   await tAsync('detectFile 整体识别置信度低时转人工核对，即便文件名本可判定产品', async () => {
     const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     const result = await store.detectFile({
-      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF,
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF, libraryId: libId,
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX', 0.4)
     });
     assert.strictEqual(result.needsManualPick, true);
@@ -441,8 +537,9 @@ async function run() {
 
   await tAsync('resolvePending 完成判定后记录里带着识别置信度', async () => {
     const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     const result = await store.detectFile({
-      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF,
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF, libraryId: libId,
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX 7天无理由退换', 0.93)
     });
     assert.ok(Math.abs(result.ocrConfidence - 0.93) < 1e-9);
@@ -455,8 +552,9 @@ async function run() {
 
   await tAsync('detectFile 串词时标注来源产品，判定为报错状态', async () => {
     const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     const result = await store.detectFile({
-      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF,
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF, libraryId: libId,
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX GCX XE')
     });
     assert.strictEqual(result.status, 'error');
@@ -465,8 +563,9 @@ async function run() {
 
   await tAsync('listRecords 按产品和状态过滤，最新的排最前', async () => {
     const store = await freshStore();
-    await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX') });
-    await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: 'GC-Multi_b.jpg', platform: PF, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
+    const libId = store.getLibrary(PF).id;
+    await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX') });
+    await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: 'GC-Multi_b.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
     const passOnly = store.listRecords({ productId: 'pa', status: 'pass' });
     assert.strictEqual(passOnly.length, 1);
     assert.strictEqual(passOnly[0].filename, 'GC-Multi_a.jpg');
@@ -474,19 +573,33 @@ async function run() {
 
   await tAsync('listRecords 按平台过滤', async () => {
     const store = await freshStore();
-    await store.saveProducts('jd', [{ id: 'pj', name: '京东产品', keywords: ['京东词'] }], []);
-    await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: 'tmall', batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX') });
-    await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: '京东产品_a.jpg', platform: 'jd', batchId: 'b2', uploadedBy: 'li', ocr: stubOcr('京东词') });
+    const tmallLibId = store.getLibrary('tmall').id;
+    const jdLibId = store.getLibrary('jd').id;
+    await store.saveProducts('jd', jdLibId, [{ id: 'pj', name: '京东产品', keywords: ['京东词'] }], []);
+    await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: 'tmall', libraryId: tmallLibId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX') });
+    await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: '京东产品_a.jpg', platform: 'jd', libraryId: jdLibId, batchId: 'b2', uploadedBy: 'li', ocr: stubOcr('京东词') });
     assert.strictEqual(store.listRecords({ platform: 'tmall' }).length, 1);
     assert.strictEqual(store.listRecords({ platform: 'jd' }).length, 1);
     assert.strictEqual(store.listRecords({}).length, 2);
+  });
+
+  await tAsync('listRecords 按词库过滤', async () => {
+    const store = await freshStore();
+    const libA = store.getLibrary(PF).id;
+    const libB = await store.createLibrary(PF, '词库B');
+    await store.saveProducts(PF, libB.id, [{ id: 'pn', name: '新产品', keywords: ['新品词'] }], []);
+    await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, libraryId: libA, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX') });
+    await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: '新产品_a.jpg', platform: PF, libraryId: libB.id, batchId: 'b2', uploadedBy: 'li', ocr: stubOcr('新品词') });
+    assert.strictEqual(store.listRecords({ libraryId: libA }).length, 1);
+    assert.strictEqual(store.listRecords({ libraryId: libB.id }).length, 1);
   });
 
   await tAsync('detectFile 服务端 OCR 并发受限于设定上限', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
     const store = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'), { ocrConcurrency: 1 });
     await store.load();
-    await store.saveProducts(PF, [{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }], []);
+    const libId = store.getLibrary(PF).id;
+    await store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }], []);
 
     let active = 0, maxActive = 0;
     const controlledOcr = () => new Promise((resolve) => {
@@ -496,9 +609,9 @@ async function run() {
     });
 
     await Promise.all([
-      store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, batchId: 'b1', uploadedBy: 'li', ocr: controlledOcr }),
-      store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: 'GC-Multi_b.jpg', platform: PF, batchId: 'b1', uploadedBy: 'li', ocr: controlledOcr }),
-      store.detectFile({ buf: Buffer.from('3'), ext: '.jpg', filename: 'GC-Multi_c.jpg', platform: PF, batchId: 'b1', uploadedBy: 'li', ocr: controlledOcr })
+      store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: controlledOcr }),
+      store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: 'GC-Multi_b.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: controlledOcr }),
+      store.detectFile({ buf: Buffer.from('3'), ext: '.jpg', filename: 'GC-Multi_c.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: controlledOcr })
     ]);
 
     assert.strictEqual(maxActive, 1);
@@ -506,19 +619,21 @@ async function run() {
 
   await tAsync('saveProducts 拒绝产品名为空的库并保留原有数据', async () => {
     const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
     await assert.rejects(
-      store.saveProducts(PF, [{ id: 'pa', name: '   ', keywords: ['GC-Multi'] }, { id: 'pb', name: 'GCX XE', keywords: ['静音悬浮马达'] }], []),
+      store.saveProducts(PF, libId, [{ id: 'pa', name: '   ', keywords: ['GC-Multi'] }, { id: 'pb', name: 'GCX XE', keywords: ['静音悬浮马达'] }], []),
       /产品名称不能为空/
     );
-    assert.strictEqual(store.getLibrary(PF).products.length, 2); // 拒绝后没有把坏数据写进去
+    assert.strictEqual(store.getLibrary(PF, libId).products.length, 2); // 拒绝后没有把坏数据写进去
   });
 
   await tAsync('load() 能重新读回持久化的数据', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
     const store1 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
     await store1.load();
-    await store1.saveProducts(PF, [{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }], []);
-    await store1.detectFile({ buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi.jpg', platform: PF, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
+    const libId = store1.getLibrary(PF).id;
+    await store1.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }], []);
+    await store1.detectFile({ buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
 
     const store2 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
     await store2.load();
@@ -526,7 +641,7 @@ async function run() {
     assert.strictEqual(store2.records.length, 1);
   });
 
-  await tAsync('load() 自动把旧版扁平结构的 products.json 迁移到天猫命名空间下', async () => {
+  await tAsync('load() 自动把 v1 最老的扁平结构迁移成天猫命名空间下的「默认词库」', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
     const mcDir = path.join(dir, 'materialcheck');
     await fsp.mkdir(mcDir, { recursive: true });
@@ -537,14 +652,33 @@ async function run() {
 
     const store = new MaterialCheckStore(mcDir, path.join(dir, 'uploads'));
     await store.load();
+    assert.strictEqual(store.getLibrary('tmall').name, '默认词库');
     assert.strictEqual(store.getLibrary('tmall').products.length, 1);
     assert.strictEqual(store.getLibrary('tmall').products[0].name, '旧产品');
     assert.deepStrictEqual(store.getLibrary('tmall').universalKeywords, ['旧通用词']);
     assert.strictEqual(store.getLibrary('jd').products.length, 0);
+    assert.strictEqual(store.getLibrary('jd').name, '默认词库');
 
     // 迁移后落盘为新格式，重新 load 应该直接读到新格式，不再重复触发迁移逻辑
     const raw = JSON.parse(await fsp.readFile(path.join(mcDir, 'products.json'), 'utf8'));
-    assert.ok(raw.tmall && raw.jd);
+    assert.ok(Array.isArray(raw.tmall.libraries) && Array.isArray(raw.jd.libraries));
+  });
+
+  await tAsync('load() 自动把 v2 单词库结构迁移成多词库结构下的「默认词库」', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
+    const mcDir = path.join(dir, 'materialcheck');
+    await fsp.mkdir(mcDir, { recursive: true });
+    await fsp.writeFile(path.join(mcDir, 'products.json'), JSON.stringify({
+      tmall: { products: [{ id: 'p1', name: 'GCX XE', keywords: ['瑞士精工'] }], universalKeywords: ['顺丰包邮'], machineSharedKeywords: [], filterSharedKeywords: [], accessorySharedKeywords: [] },
+      jd: { products: [], universalKeywords: [], machineSharedKeywords: [], filterSharedKeywords: [], accessorySharedKeywords: [] }
+    }));
+
+    const store = new MaterialCheckStore(mcDir, path.join(dir, 'uploads'));
+    await store.load();
+    assert.strictEqual(store.listLibraries('tmall').length, 1);
+    assert.strictEqual(store.getLibrary('tmall').name, '默认词库');
+    assert.strictEqual(store.getLibrary('tmall').products[0].name, 'GCX XE');
+    assert.strictEqual(store.listLibraries('jd').length, 1);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

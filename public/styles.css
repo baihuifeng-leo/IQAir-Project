@@ -1929,6 +1929,7 @@ body.rpt-presenting .rpt-wm-note {
 .mc-row-pick { border-color: var(--blue); }
 
 .mc-platform-switch { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; margin-right: 10px; }
+.mc-library-switch { min-width: 140px; }
 
 .mc-progress { height: 6px; border-radius: 999px; background: var(--field-bg); overflow: hidden; margin: 4px 0 14px; }
 .mc-progress-bar { height: 100%; width: 0; background: var(--mint); transition: width 0.25s var(--ease); }
@@ -1963,32 +1964,40 @@ body.rpt-presenting .rpt-wm-note {
 .mc-ocr-text { white-space: pre-wrap; background: var(--field-bg); padding: 14px; border-radius: 10px; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.6; max-height: 320px; overflow-y: auto; margin-top: 12px; }
 .mc-mark-bad { background: var(--bad); color: #fff; padding: 0 2px; border-radius: 3px; }
 
-.mc-lib-actionbar { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
-.mc-lib-actionbar .mc-lib-error { margin-top: 0; }
+.mc-lib-actionbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 10px; }
+.mc-lib-ops { display: flex; flex-wrap: wrap; gap: 8px; }
+.mc-lib-name-row { display: flex; gap: 8px; align-items: center; }
+.mc-lib-name-row[hidden] { display: none; } /* author 规则的 display:flex 优先级跟 UA 的 [hidden] 打平，后者会被覆盖——显式钉住 */
+.mc-lib-name-row input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); min-width: 200px; }
+.mc-lib-spacer { flex: 1 1 auto; }
 
 .mc-lib-card {
   background: var(--group-card); border: 1px solid var(--hair); border-radius: 16px;
   padding: 20px 22px; margin-bottom: 20px;
 }
 .mc-lib-card > h3, .mc-lib-card .mc-lib-head h3 { font-size: 14px; letter-spacing: 0.01em; }
+.mc-lib-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 
-.mc-lib { display: grid; grid-template-columns: 220px 1fr; gap: 24px; }
-.mc-lib-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.mc-product-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; font-size: 13px; }
-.mc-product-item:hover { background: var(--surface-2); }
-.mc-product-item.is-active { background: var(--mint-dim); color: var(--mint); }
-.mc-product-item small { color: var(--dimmer); }
-
-.mc-kw-editor label { display: block; margin: 14px 0 6px; font-size: 12px; color: var(--dim); }
-.mc-kw-editor input, .mc-kw-add input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+.mc-kw-add input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-type-select, .mc-cat-select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
-.mc-kw-add { display: flex; gap: 8px; margin-top: 8px; }
-.mc-chip-editor { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+.mc-kw-add { display: flex; gap: 8px; margin-top: 10px; }
+.mc-chip-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 30px; }
+.mc-chip-empty { color: var(--dimmer); font-size: 12px; }
 
-.mc-utabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
-.mc-utab { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line-soft); background: transparent; color: var(--dim); font-size: 12.5px; cursor: pointer; transition: background var(--fast), color var(--fast); }
-.mc-utab.is-active { background: var(--mint-dim); color: var(--mint); border-color: var(--mint); }
-.mc-utab-hint { color: var(--dimmer); font-size: 12px; margin: 0 0 10px; }
+.mc-utab-hint { color: var(--dimmer); font-size: 12px; margin: 2px 0 0; }
+
+/* 通用词库：四组纵向堆叠的卡片，跟产品专属词一样的可编辑 chip 区 */
+.mc-gcards { display: flex; flex-direction: column; gap: 16px; }
+.mc-gcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; }
+.mc-gcard-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.mc-gcard-head h4 { margin: 0; font-size: 13px; }
+
+/* 产品专属词：一行一个产品卡片，纵向堆叠，超出高度整体滚动，关键词横向铺开自动换行 */
+.mc-pcards-scroll { display: flex; flex-direction: column; gap: 14px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
+.mc-pcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; }
+.mc-pcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.mc-pcard-name { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; }
+.mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 
 .mc-cat-badge { border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
 .mc-cat-model   { background: #1a2440; color: var(--blue); }
@@ -2000,7 +2009,7 @@ body.rpt-presenting .rpt-wm-note {
 .mc-cat-price   { background: #0f2f38; color: #6fd3e8; }
 .mc-cat-other   { background: var(--overlay-strong); color: var(--dim); }
 
-.mc-lib-error { color: var(--bad-text); font-size: 12.5px; margin-top: 8px; }
+.mc-lib-error { color: var(--bad-text); font-size: 12.5px; margin: 0 0 16px; }
 
 .mc-lib-disabled input, .mc-lib-disabled select, .mc-lib-disabled button { opacity: 0.6; pointer-events: none; }
 

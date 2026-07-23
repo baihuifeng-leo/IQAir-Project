@@ -1,5 +1,7 @@
 const MaterialCheck = (() => {
-  let A, subView = 'check', platform = 'tmall';
+  let A, subView = 'check', platform = 'tmall', libraryId = null;
+  let libraries = []; // 当前平台下的词库列表 [{id,name,productCount}]
+  let libraryDirectory = []; // 历史记录筛选用：两个平台全部词库的扁平列表 [{id,name,platform}]
   let products = [], universalKeywords = [], machineSharedKeywords = [], filterSharedKeywords = [], accessorySharedKeywords = [];
 
   const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
@@ -31,8 +33,23 @@ const MaterialCheck = (() => {
   function keywordText(k) { return typeof k === 'string' ? k : String((k && k.text) || ''); }
   function keywordCategory(k) { return (k && typeof k === 'object' && CATEGORIES.includes(k.category)) ? k.category : '其它'; }
 
+  async function loadLibraries() {
+    const j = await call(`/api/materialcheck/libraries?platform=${encodeURIComponent(platform)}`);
+    libraries = j.libraries;
+    const saved = sessionStorage.getItem(`mc-library-${platform}`);
+    libraryId = (saved && libraries.some((l) => l.id === saved)) ? saved : (libraries[0]?.id || null);
+    if (libraryId) sessionStorage.setItem(`mc-library-${platform}`, libraryId);
+  }
+
+  function renderLibrarySwitch() {
+    const sel = A.$('#mc-library-switch');
+    sel.innerHTML = libraries.map((l) =>
+      `<option value="${escapeHtml(l.id)}" ${l.id === libraryId ? 'selected' : ''}>${escapeHtml(l.name)}（${l.productCount}）</option>`
+    ).join('');
+  }
+
   async function loadProducts() {
-    const j = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}`);
+    const j = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}&libraryId=${encodeURIComponent(libraryId)}`);
     products = j.products;
     universalKeywords = j.universalKeywords;
     machineSharedKeywords = j.machineSharedKeywords;
@@ -53,10 +70,22 @@ const MaterialCheck = (() => {
   async function switchPlatform(next) {
     platform = next;
     sessionStorage.setItem('mc-platform', platform);
-    try { await loadProducts(); } catch (e) { A.toast(e.message, 'bad'); }
+    try {
+      await loadLibraries();
+      renderLibrarySwitch();
+      await loadProducts();
+    } catch (e) { A.toast(e.message, 'bad'); }
     renderCheckView();
-    if (subView === 'history') renderHistory();
     if (subView === 'library') renderLibrary();
+    if (subView === 'history') renderHistory();
+  }
+
+  async function switchLibrary(next) {
+    libraryId = next;
+    sessionStorage.setItem(`mc-library-${platform}`, libraryId);
+    try { await loadProducts(); } catch (e) { A.toast(e.message, 'bad'); }
+    if (subView === 'library') renderLibrary();
+    if (subView === 'history') renderHistory();
   }
 
   // ── 检测台 ──────────────────────────────────────────
@@ -74,6 +103,7 @@ const MaterialCheck = (() => {
     if (!products.length) return A.toast('先去「关键词库」配置至少一个产品', 'bad');
     const batchId = Date.now().toString(36) + Math.random().toString(36).slice(2);
     const uploadPlatform = platform;
+    const uploadLibraryId = libraryId;
     const list = A.$('#mc-result-list');
     const summary = A.$('#mc-batch-summary');
     const progress = A.$('#mc-progress');
@@ -104,7 +134,7 @@ const MaterialCheck = (() => {
       entry.row.innerHTML = `<span class="mc-row-name">${escapeHtml(entry.file.name)}</span><span class="mc-row-status"><i class="mc-spin"></i> 识别中…</span>`;
       updateSummary();
       try {
-        const result = await call(`/api/materialcheck/upload?filename=${encodeURIComponent(entry.file.name)}&batchId=${encodeURIComponent(batchId)}&platform=${encodeURIComponent(uploadPlatform)}`, {
+        const result = await call(`/api/materialcheck/upload?filename=${encodeURIComponent(entry.file.name)}&batchId=${encodeURIComponent(batchId)}&platform=${encodeURIComponent(uploadPlatform)}&libraryId=${encodeURIComponent(uploadLibraryId)}`, {
           method: 'POST',
           headers: { 'Content-Type': entry.file.type },
           body: entry.file
@@ -188,12 +218,27 @@ const MaterialCheck = (() => {
   // ── 历史记录 ────────────────────────────────────────
   let historyRows = [], detailMask, detailBody;
 
+  async function loadLibraryDirectory() {
+    const dir = [];
+    for (const pf of ['tmall', 'jd']) {
+      const j = await call(`/api/materialcheck/libraries?platform=${encodeURIComponent(pf)}`);
+      j.libraries.forEach((l) => dir.push({ id: l.id, name: l.name, platform: pf }));
+    }
+    libraryDirectory = dir;
+  }
+
+  function libraryLabel(id) {
+    if (!id) return '（迁移前/未知）';
+    const l = libraryDirectory.find((x) => x.id === id);
+    return l ? l.name : '（已删除的词库）';
+  }
+
   async function renderHistory() {
     const el = A.$('#mc-history-view');
     el.innerHTML = '<p class="rv-empty">读取中…</p>';
     try {
-      const j = await call('/api/materialcheck/records?limit=1000');
-      historyRows = j.records;
+      const [recJ] = await Promise.all([call('/api/materialcheck/records?limit=1000'), loadLibraryDirectory()]);
+      historyRows = recJ.records;
     } catch (e) { el.innerHTML = ''; return A.toast(e.message, 'bad'); }
 
     el.innerHTML = `
@@ -203,6 +248,11 @@ const MaterialCheck = (() => {
           <option value="tmall">天猫</option>
           <option value="jd">京东</option>
           <option value="__legacy__">（未知平台，旧记录）</option>
+        </select>
+        <select id="mc-f-library">
+          <option value="">全部词库</option>
+          ${libraryDirectory.map((l) => `<option value="${escapeHtml(l.id)}">${platformLabel(l.platform)} · ${escapeHtml(l.name)}</option>`).join('')}
+          <option value="__legacy__">（迁移前/未知词库）</option>
         </select>
         <select id="mc-f-product"><option value="">全部产品</option>${products.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')}</select>
         <select id="mc-f-status">
@@ -217,9 +267,10 @@ const MaterialCheck = (() => {
       <div class="mc-history-list" id="mc-history-list"></div>`;
 
     const draw = () => {
-      const plf = A.$('#mc-f-platform').value, pf = A.$('#mc-f-product').value, sf = A.$('#mc-f-status').value;
+      const plf = A.$('#mc-f-platform').value, lf = A.$('#mc-f-library').value, pf = A.$('#mc-f-product').value, sf = A.$('#mc-f-status').value;
       const shown = historyRows.filter((r) =>
         (!plf || (plf === '__legacy__' ? !r.platform : r.platform === plf)) &&
+        (!lf || (lf === '__legacy__' ? !r.libraryId : r.libraryId === lf)) &&
         (!pf || r.productId === pf) &&
         (!sf || r.status === sf)
       );
@@ -229,6 +280,7 @@ const MaterialCheck = (() => {
       shown.forEach((r, i) => { list.querySelector(`[data-hi="${i}"]`).onclick = () => openHistoryDetail(r); });
     };
     A.$('#mc-f-platform').onchange = draw;
+    A.$('#mc-f-library').onchange = draw;
     A.$('#mc-f-product').onchange = draw;
     A.$('#mc-f-status').onchange = draw;
     draw();
@@ -242,7 +294,7 @@ const MaterialCheck = (() => {
     const meta = STATUS_META[r.status] || STATUS_META.error;
     return `<div class="mc-history-row ${meta.cls}" data-hi="${i}">
       <span class="mc-row-name">${escapeHtml(r.filename)}</span>
-      <span class="mc-row-status">${meta.badge} · ${platformLabel(r.platform)} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')} · ${escapeHtml(r.uploadedBy)}</span>
+      <span class="mc-row-status">${meta.badge} · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')} · ${escapeHtml(r.uploadedBy)}</span>
     </div>`;
   }
 
@@ -271,7 +323,7 @@ const MaterialCheck = (() => {
     const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('') || '（无缺词）';
     const crossed = (r.crossedKeywords || []).map((c) => `<span class="mc-chip mc-chip-bad">${escapeHtml(c.keyword)} · 属于「${escapeHtml(c.fromProductName)}」</span>`).join('') || '（无串词）';
     detailBody.innerHTML = `
-      <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')}</p>
+      <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')}</p>
       <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
       <div class="mc-chip-row"><b>串词：</b>${crossed}</div>
       <pre class="mc-ocr-text">${html}</pre>`;
@@ -290,22 +342,71 @@ const MaterialCheck = (() => {
     ['filter', '滤芯组通用词', '滤芯类产品之间可共用'],
     ['accessory', '附件组通用词', '附件类产品之间可共用']
   ];
-  function typeToGroup(type) { return (type === 'machine' || type === 'filter' || type === 'accessory') ? type : 'universal'; }
 
-  function wireChipList(list, chipsElId, inputId, addBtnId) {
-    const draw = () => {
-      A.$('#' + chipsElId).innerHTML = list.map((k, i) => `<span class="mc-chip">${escapeHtml(k)}<i data-i="${i}">×</i></span>`).join('');
-      A.$$('#' + chipsElId + ' i').forEach((x) => (x.onclick = () => { list.splice(Number(x.dataset.i), 1); draw(); }));
+  const catOptionsHtml = CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
+
+  /** 关键词编辑器：chip 展示 + 分类徽标 + 输入/分类下拉/添加按钮，产品卡片和通用词卡片共用同一份逻辑。 */
+  function mountKeywordEditor(root, list, onChange) {
+    const chipsEl = root.querySelector('[data-role="chips"]');
+    const inputEl = root.querySelector('[data-role="kw-input"]');
+    const catEl = root.querySelector('[data-role="kw-cat"]');
+    const addBtn = root.querySelector('[data-role="kw-add"]');
+
+    const drawChips = () => {
+      chipsEl.innerHTML = list.map((k, i) =>
+        `<span class="mc-chip">${escapeHtml(keywordText(k))}<small class="mc-cat-badge ${CAT_CLASS[keywordCategory(k)]}">${escapeHtml(keywordCategory(k))}</small><i data-i="${i}">×</i></span>`
+      ).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
+      chipsEl.querySelectorAll('i').forEach((x) => (x.onclick = () => {
+        list.splice(Number(x.dataset.i), 1);
+        drawChips();
+        if (onChange) onChange();
+      }));
     };
+    drawChips();
+
     const add = () => {
-      const input = A.$('#' + inputId);
-      const v = input.value.trim();
+      const v = inputEl.value.trim();
       if (!v) return;
-      list.push(v); input.value = ''; draw();
+      list.push({ text: v, category: catEl.value });
+      inputEl.value = '';
+      drawChips();
+      if (onChange) onChange();
     };
-    A.$('#' + addBtnId).onclick = add;
-    A.$('#' + inputId).onkeydown = (e) => { if (e.key === 'Enter') add(); };
-    draw();
+    addBtn.onclick = add;
+    inputEl.onkeydown = (e) => { if (e.key === 'Enter') add(); };
+  }
+
+  function keywordAddRowHtml() {
+    return `
+      <div class="mc-kw-add">
+        <input placeholder="输入关键词" data-role="kw-input">
+        <select class="mc-cat-select" data-role="kw-cat">${catOptionsHtml}</select>
+        <button class="mc-btn" data-role="kw-add">添加</button>
+      </div>`;
+  }
+
+  function productCardHtml(p) {
+    const typeOptions = TYPES.map(([v, label]) => `<option value="${v}" ${(p.type || '') === v ? 'selected' : ''}>${label}</option>`).join('');
+    return `
+      <div class="mc-pcard">
+        <div class="mc-pcard-head">
+          <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="产品名称 / 型号">
+          <select class="mc-pcard-type" data-role="type">${typeOptions}</select>
+          <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
+          <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
+        </div>
+        <div class="mc-chip-editor" data-role="chips"></div>
+        ${keywordAddRowHtml()}
+      </div>`;
+  }
+
+  function groupCardHtml([g, label, hint]) {
+    return `
+      <div class="mc-gcard" data-group="${g}">
+        <div class="mc-gcard-head"><h4>${label}</h4><p class="mc-utab-hint">${hint}</p></div>
+        <div class="mc-chip-editor" data-role="chips"></div>
+        ${keywordAddRowHtml()}
+      </div>`;
   }
 
   async function renderLibrary() {
@@ -320,111 +421,132 @@ const MaterialCheck = (() => {
       <div class="${readOnly ? 'mc-lib-disabled' : ''}">
         ${readOnly ? '<p class="mc-warning">你只有查看权限，改动不会被保存——找管理员开编辑权限。</p>' : ''}
         <div class="mc-lib-actionbar">
+          <div class="mc-lib-ops">
+            <button class="mc-btn" id="mc-lib-op-new">+ 新建词库</button>
+            <button class="mc-btn" id="mc-lib-op-copy">复制词库</button>
+            <button class="mc-btn" id="mc-lib-op-rename">重命名</button>
+            <button class="mc-btn mc-btn-danger" id="mc-lib-op-delete">删除词库</button>
+          </div>
+          <div class="mc-lib-name-row" id="mc-lib-name-row" hidden>
+            <input id="mc-lib-name-input" placeholder="词库名称">
+            <button class="mc-btn mc-btn-primary" id="mc-lib-name-confirm">确定</button>
+            <button class="mc-btn" id="mc-lib-name-cancel">取消</button>
+          </div>
+          <span class="mc-lib-spacer"></span>
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
-          <p class="mc-lib-error" id="mc-lib-error" hidden></p>
+        </div>
+        <p class="mc-lib-error" id="mc-lib-error" hidden></p>
+        <div class="mc-lib-card">
+          <h3>通用词库</h3>
+          <div class="mc-gcards" id="mc-gcards"></div>
         </div>
         <div class="mc-lib-card">
-          <div class="mc-lib-head"><h3>产品</h3><button class="mc-btn" id="mc-add-product">+ 新增产品</button></div>
-          <div class="mc-lib">
-            <div class="mc-lib-products"><div id="mc-product-list"></div></div>
-            <div class="mc-lib-detail" id="mc-lib-detail"></div>
-          </div>
-        </div>
-        <div class="mc-lib-card">
-          <div class="mc-lib-head"><h3>通用词库</h3></div>
-          <div class="mc-utabs" id="mc-utabs">
-            ${GROUPS.map(([g, label]) => `<button class="mc-utab" data-group="${g}">${label}</button>`).join('')}
-          </div>
-          ${GROUPS.map(([g, , hint]) => `
-            <div class="mc-utab-panel" data-group="${g}" hidden>
-              <p class="mc-utab-hint">${hint}</p>
-              <div class="mc-chip-editor" id="mc-${g}-chips"></div>
-              <div class="mc-kw-add"><input placeholder="输入关键词，回车添加" id="mc-${g}-input"><button class="mc-btn" id="mc-${g}-add-btn">添加</button></div>
-            </div>`).join('')}
+          <div class="mc-lib-head"><h3>产品专属词</h3><button class="mc-btn" id="mc-add-product">+ 新增产品</button></div>
+          <div class="mc-pcards-scroll" id="mc-pcards"></div>
         </div>
       </div>`;
 
-    let selected = products[0]?.id || null;
-
-    const showGroup = (g) => {
-      A.$$('#mc-utabs .mc-utab').forEach((b) => b.classList.toggle('is-active', b.dataset.group === g));
-      A.$$('.mc-utab-panel').forEach((p) => { p.hidden = p.dataset.group !== g; });
-    };
-    const syncGroupToSelection = () => showGroup(typeToGroup(products.find((x) => x.id === selected)?.type));
-    A.$$('#mc-utabs .mc-utab').forEach((b) => (b.onclick = () => showGroup(b.dataset.group)));
-
-    const drawProductList = () => {
-      A.$('#mc-product-list').innerHTML = products.map((p) => `
-        <div class="mc-product-item ${p.id === selected ? 'is-active' : ''}" data-id="${escapeHtml(p.id)}">
-          <span>${escapeHtml(p.name)}</span><small>${p.keywords.length} 词</small>
-        </div>`).join('') || '<p class="rv-empty">还没有产品</p>';
-      A.$$('#mc-product-list .mc-product-item').forEach((it) => {
-        it.onclick = () => { selected = it.dataset.id; drawProductList(); drawDetail(); syncGroupToSelection(); };
+    const drawGroupCards = () => {
+      const wrap = A.$('#mc-gcards');
+      wrap.innerHTML = GROUPS.map(groupCardHtml).join('');
+      [...wrap.querySelectorAll('.mc-gcard')].forEach((card, i) => {
+        const [g] = GROUPS[i];
+        mountKeywordEditor(card, groupLists[g], null);
       });
     };
 
-    const drawDetail = () => {
-      const detail = A.$('#mc-lib-detail');
-      const p = products.find((x) => x.id === selected);
-      if (!p) { detail.innerHTML = '<p class="rv-empty">选一个产品</p>'; return; }
-      const typeOptions = TYPES.map(([v, label]) => `<option value="${v}" ${(p.type || '') === v ? 'selected' : ''}>${label}</option>`).join('');
-      const catOptions = CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
-      detail.innerHTML = `
-        <div class="mc-kw-editor">
-          <label>产品名称 / 型号</label>
-          <input class="mc-kw-name" value="${escapeHtml(p.name)}">
-          <label>产品类型（决定哪套组内通用词对它生效）</label>
-          <select class="mc-type-select" id="mc-p-type">${typeOptions}</select>
-          <label>专属关键词</label>
-          <div class="mc-chip-editor" id="mc-kw-chips"></div>
-          <div class="mc-kw-add">
-            <input placeholder="输入关键词" id="mc-kw-input">
-            <select class="mc-cat-select" id="mc-kw-cat-select">${catOptions}</select>
-            <button class="mc-btn" id="mc-kw-add-btn">添加</button>
-          </div>
-          <button class="mc-btn mc-btn-danger" id="mc-del-product">删除这个产品</button>
-        </div>`;
-
-      const drawChips = () => {
-        A.$('#mc-kw-chips').innerHTML = p.keywords.map((k, i) =>
-          `<span class="mc-chip">${escapeHtml(keywordText(k))}<small class="mc-cat-badge ${CAT_CLASS[keywordCategory(k)]}">${escapeHtml(keywordCategory(k))}</small><i data-i="${i}">×</i></span>`
-        ).join('');
-        A.$$('#mc-kw-chips i').forEach((x) => (x.onclick = () => { p.keywords.splice(Number(x.dataset.i), 1); drawChips(); drawProductList(); }));
-      };
-      drawChips();
-
-      A.$('.mc-kw-name').oninput = (e) => { p.name = e.target.value; };
-      A.$('#mc-p-type').onchange = (e) => { p.type = e.target.value; syncGroupToSelection(); };
-
-      const addKw = () => {
-        const input = A.$('#mc-kw-input');
-        const v = input.value.trim();
-        if (!v) return;
-        const category = A.$('#mc-kw-cat-select').value;
-        p.keywords.push({ text: v, category }); input.value = ''; drawChips(); drawProductList();
-      };
-      A.$('#mc-kw-add-btn').onclick = addKw;
-      A.$('#mc-kw-input').onkeydown = (e) => { if (e.key === 'Enter') addKw(); };
-
-      A.$('#mc-del-product').onclick = () => {
-        products = products.filter((x) => x.id !== p.id);
-        selected = products[0]?.id || null;
-        drawProductList(); drawDetail(); syncGroupToSelection();
-      };
+    const drawProductCards = () => {
+      const wrap = A.$('#mc-pcards');
+      wrap.innerHTML = products.map(productCardHtml).join('') || '<p class="rv-empty">还没有产品，点右上角「+ 新增产品」</p>';
+      [...wrap.querySelectorAll('.mc-pcard')].forEach((card, i) => {
+        const p = products[i];
+        card.querySelector('[data-role="name"]').oninput = (e) => { p.name = e.target.value; };
+        card.querySelector('[data-role="type"]').onchange = (e) => { p.type = e.target.value; };
+        mountKeywordEditor(card, p.keywords, () => {
+          card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
+        });
+        card.querySelector('[data-role="del"]').onclick = () => {
+          products = products.filter((x) => x.id !== p.id);
+          drawProductCards();
+        };
+      });
     };
+
+    drawGroupCards();
+    drawProductCards();
 
     A.$('#mc-add-product').onclick = () => {
-      const p = { id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type: '', keywords: [] };
-      products.push(p); selected = p.id; drawProductList(); drawDetail(); syncGroupToSelection();
+      products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type: '', keywords: [] });
+      drawProductCards();
     };
 
-    GROUPS.forEach(([g]) => wireChipList(groupLists[g], `mc-${g}-chips`, `mc-${g}-input`, `mc-${g}-add-btn`));
+    // 词库操作：新建/复制/重命名共用同一条内联输入行，删除走 confirm() 二次确认
+    let opMode = null;
+    const nameRow = A.$('#mc-lib-name-row');
+    const nameInput = A.$('#mc-lib-name-input');
+    const showNameRow = (mode, prefill = '') => { opMode = mode; nameRow.hidden = false; nameInput.value = prefill; nameInput.focus(); };
+    const hideNameRow = () => { opMode = null; nameRow.hidden = true; nameInput.value = ''; };
+
+    A.$('#mc-lib-op-new').onclick = () => showNameRow('new');
+    A.$('#mc-lib-op-copy').onclick = () => showNameRow('copy');
+    A.$('#mc-lib-op-rename').onclick = () => showNameRow('rename', libraries.find((l) => l.id === libraryId)?.name || '');
+    A.$('#mc-lib-name-cancel').onclick = hideNameRow;
+
+    const confirmName = async () => {
+      const name = nameInput.value.trim();
+      if (!name) return A.toast('名字不能为空', 'bad');
+      try {
+        if (opMode === 'new') {
+          const lib = await call(`/api/materialcheck/libraries?platform=${encodeURIComponent(platform)}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+          });
+          libraryId = lib.id;
+          sessionStorage.setItem(`mc-library-${platform}`, libraryId);
+          await loadLibraries();
+          await loadProducts();
+          A.toast('已新建词库');
+        } else if (opMode === 'copy') {
+          const lib = await call(`/api/materialcheck/libraries/copy?platform=${encodeURIComponent(platform)}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceId: libraryId, name })
+          });
+          libraryId = lib.id;
+          sessionStorage.setItem(`mc-library-${platform}`, libraryId);
+          await loadLibraries();
+          await loadProducts();
+          A.toast('已复制词库');
+        } else if (opMode === 'rename') {
+          await call(`/api/materialcheck/libraries/rename?platform=${encodeURIComponent(platform)}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: libraryId, name })
+          });
+          await loadLibraries();
+          A.toast('已重命名');
+        }
+        renderLibrarySwitch();
+        hideNameRow();
+        renderLibrary();
+      } catch (e) { A.toast(e.message, 'bad'); }
+    };
+    A.$('#mc-lib-name-confirm').onclick = confirmName;
+    nameInput.onkeydown = (e) => { if (e.key === 'Enter') confirmName(); if (e.key === 'Escape') hideNameRow(); };
+
+    A.$('#mc-lib-op-delete').onclick = async () => {
+      const lib = libraries.find((l) => l.id === libraryId);
+      if (!confirm(`删除词库「${lib?.name}」？里面的产品和关键词都会被删掉，且不可恢复。`)) return;
+      try {
+        await call(`/api/materialcheck/libraries?platform=${encodeURIComponent(platform)}&id=${encodeURIComponent(libraryId)}`, { method: 'DELETE' });
+        await loadLibraries();
+        renderLibrarySwitch();
+        await loadProducts();
+        A.toast('已删除词库');
+        renderLibrary();
+      } catch (e) { A.toast(e.message, 'bad'); }
+    };
 
     A.$('#mc-lib-save').onclick = async () => {
       const errEl = A.$('#mc-lib-error');
       errEl.hidden = true;
       try {
-        const saved = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}`, {
+        const saved = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}&libraryId=${encodeURIComponent(libraryId)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ products, universalKeywords, machineSharedKeywords, filterSharedKeywords, accessorySharedKeywords })
@@ -433,14 +555,14 @@ const MaterialCheck = (() => {
         machineSharedKeywords = saved.machineSharedKeywords;
         filterSharedKeywords = saved.filterSharedKeywords;
         accessorySharedKeywords = saved.accessorySharedKeywords;
+        await loadLibraries(); // 产品数变了，词库下拉框里的计数要跟着刷新
+        renderLibrarySwitch();
         A.toast('关键词库已保存');
         renderLibrary();
       } catch (e) {
         errEl.hidden = false; errEl.textContent = e.message;
       }
     };
-
-    drawProductList(); drawDetail(); syncGroupToSelection();
   }
 
   function init(api) {
@@ -454,8 +576,18 @@ const MaterialCheck = (() => {
     platformSwitch.value = platform;
     platformSwitch.onchange = () => switchPlatform(platformSwitch.value);
 
+    const librarySwitch = A.$('#mc-library-switch');
+    librarySwitch.onchange = () => switchLibrary(librarySwitch.value);
+
     renderCheckView();
-    loadProducts().catch((e) => A.toast(e.message, 'bad'));
+    (async () => {
+      try {
+        await loadLibraries();
+        renderLibrarySwitch();
+        await loadProducts();
+        renderCheckView();
+      } catch (e) { A.toast(e.message, 'bad'); }
+    })();
 
     const scroll = A.$('#mc-scroll');
     ['dragenter', 'dragover'].forEach((ev) => scroll.addEventListener(ev, (e) => { e.preventDefault(); scroll.classList.add('drop-hot'); }));

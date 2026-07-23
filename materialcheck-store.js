@@ -14,36 +14,10 @@ const PENDING_TTL_MS = 30 * 60 * 1000;
 const OVERALL_MIN_CONFIDENCE = 0.7;
 
 const PLATFORMS = ['tmall', 'jd'];
+const DEFAULT_LIBRARY_NAME = '默认词库';
 
-function emptyPlatform() {
-  return { products: [], universalKeywords: [], machineSharedKeywords: [], filterSharedKeywords: [], accessorySharedKeywords: [] };
-}
-
-function normalizePlatformData(raw) {
-  const r = raw || {};
-  return {
-    products: Array.isArray(r.products) ? r.products : [],
-    universalKeywords: Array.isArray(r.universalKeywords) ? r.universalKeywords : [],
-    machineSharedKeywords: Array.isArray(r.machineSharedKeywords) ? r.machineSharedKeywords : [],
-    filterSharedKeywords: Array.isArray(r.filterSharedKeywords) ? r.filterSharedKeywords : [],
-    accessorySharedKeywords: Array.isArray(r.accessorySharedKeywords) ? r.accessorySharedKeywords : []
-  };
-}
-
-/**
- * 兼容两种磁盘格式：新的按平台命名空间 { tmall: {...}, jd: {...} }，
- * 或者旧版扁平结构 { products: [...], universalKeywords: [...] }（v2 上线前的数据）。
- * 旧格式一律整体归到天猫命名空间下，京东留空——这是一次性迁移，load() 随后立刻落盘，
- * 这样迁移只发生一次，之后磁盘上就是新格式了。
- */
-function loadPlatforms(raw) {
-  if (raw && (raw.tmall || raw.jd)) {
-    return { tmall: normalizePlatformData(raw.tmall), jd: normalizePlatformData(raw.jd) };
-  }
-  if (raw && Array.isArray(raw.products)) {
-    return { tmall: normalizePlatformData(raw), jd: emptyPlatform() };
-  }
-  return { tmall: emptyPlatform(), jd: emptyPlatform() };
+function makeLibraryId() {
+  return 'lib_' + crypto.randomBytes(6).toString('hex');
 }
 
 function cleanKeywords(keywords) {
@@ -55,8 +29,65 @@ function cleanKeywords(keywords) {
     .filter(Boolean);
 }
 
-function cleanStringList(list) {
-  return (list || []).map((k) => String(match.keywordText(k)).trim()).filter(Boolean);
+function emptyLibrary(name) {
+  return {
+    id: makeLibraryId(), name,
+    products: [], universalKeywords: [], machineSharedKeywords: [], filterSharedKeywords: [], accessorySharedKeywords: []
+  };
+}
+
+function emptyPlatform() {
+  return { libraries: [emptyLibrary(DEFAULT_LIBRARY_NAME)] };
+}
+
+function normalizeLibrary(raw) {
+  const r = raw || {};
+  return {
+    id: String(r.id || makeLibraryId()),
+    name: String(r.name || '未命名词库'),
+    products: Array.isArray(r.products) ? r.products : [],
+    universalKeywords: Array.isArray(r.universalKeywords) ? r.universalKeywords : [],
+    machineSharedKeywords: Array.isArray(r.machineSharedKeywords) ? r.machineSharedKeywords : [],
+    filterSharedKeywords: Array.isArray(r.filterSharedKeywords) ? r.filterSharedKeywords : [],
+    accessorySharedKeywords: Array.isArray(r.accessorySharedKeywords) ? r.accessorySharedKeywords : []
+  };
+}
+
+/**
+ * 兼容三种磁盘格式（从新到旧）：
+ * 1. 当前的多词库结构 { libraries: [{id,name,products,...}, ...] }
+ * 2. v2 的单词库结构（没有 libraries 数组，字段直接铺在平台下） { products: [...], universalKeywords: [...] }
+ * 3. v1 更早的扁平结构，整个 raw 就是一个平台的数据（那时候还没有 tmall/jd 概念）
+ * 旧格式一律包成一套叫「默认词库」的库——这是一次性迁移，load() 随后立刻落盘，
+ * 这样迁移只发生一次，之后磁盘上就是当前格式了。
+ */
+function normalizePlatformData(raw) {
+  const r = raw || {};
+  if (Array.isArray(r.libraries) && r.libraries.length) {
+    return { libraries: r.libraries.map(normalizeLibrary) };
+  }
+  if (Array.isArray(r.products)) {
+    return { libraries: [normalizeLibrary({ ...r, name: DEFAULT_LIBRARY_NAME })] };
+  }
+  return emptyPlatform();
+}
+
+function loadPlatforms(raw) {
+  if (raw && (raw.tmall || raw.jd)) {
+    return { tmall: normalizePlatformData(raw.tmall), jd: normalizePlatformData(raw.jd) };
+  }
+  if (raw && Array.isArray(raw.products)) {
+    return { tmall: normalizePlatformData(raw), jd: emptyPlatform() };
+  }
+  return { tmall: emptyPlatform(), jd: emptyPlatform() };
+}
+
+/** 读到的磁盘数据里，只要有一个平台还不是当前的多词库格式，就说明发生了迁移。 */
+function detectsLegacyFormat(raw) {
+  if (!raw) return false;
+  const platformIsCurrent = (p) => p && Array.isArray(p.libraries);
+  if (raw.tmall || raw.jd) return !(platformIsCurrent(raw.tmall) && platformIsCurrent(raw.jd));
+  return true; // 连 tmall/jd 命名空间都没有，是最老的扁平格式
 }
 
 class MaterialCheckStore {
@@ -107,13 +138,13 @@ class MaterialCheckStore {
     let migrated = false;
     try {
       const raw = JSON.parse(await fsp.readFile(this.productsFile, 'utf8'));
-      migrated = !(raw && (raw.tmall || raw.jd)) && Array.isArray(raw && raw.products);
+      migrated = detectsLegacyFormat(raw);
       this.platforms = loadPlatforms(raw);
     } catch { /* 首次运行，没有文件 */ }
 
     if (migrated) {
       await this._persistPlatforms();
-      console.log('[materialcheck] 已把旧的扁平词库数据一次性迁移到「天猫」命名空间下');
+      console.log('[materialcheck] 已把旧版词库数据迁移为多词库结构（归入「默认词库」）');
     }
 
     try {
@@ -127,7 +158,7 @@ class MaterialCheckStore {
       if (broken) console.warn(`[materialcheck] 跳过 ${broken} 行损坏的记录`);
     } catch { /* 首次运行，没有文件 */ }
 
-    const total = PLATFORMS.reduce((n, p) => n + this.platforms[p].products.length, 0);
+    const total = PLATFORMS.reduce((n, p) => n + this.platforms[p].libraries.reduce((m, l) => m + l.products.length, 0), 0);
     console.log(`[materialcheck] 载入 ${total} 个产品，${this.records.length} 条历史记录`);
   }
 
@@ -135,12 +166,88 @@ class MaterialCheckStore {
     await fsp.writeFile(this.productsFile, JSON.stringify(this.platforms, null, 1));
   }
 
-  getLibrary(platform) {
-    return this.platforms[platform] || emptyPlatform();
+  _assertPlatform(platform) {
+    if (!PLATFORMS.includes(platform)) throw new Error('平台参数不对，只能是 tmall 或 jd');
   }
 
-  async saveProducts(platform, products, universalKeywords, sharedPools = {}) {
-    if (!PLATFORMS.includes(platform)) throw new Error('平台参数不对，只能是 tmall 或 jd');
+  listLibraries(platform) {
+    this._assertPlatform(platform);
+    return this.platforms[platform].libraries.map((l) => ({ id: l.id, name: l.name, productCount: l.products.length }));
+  }
+
+  getLibrary(platform, libraryId) {
+    const p = this.platforms[platform];
+    if (!p) return null;
+    if (!libraryId) return p.libraries[0] || null;
+    return p.libraries.find((l) => l.id === libraryId) || null;
+  }
+
+  _findLibraryIndex(platform, libraryId) {
+    const idx = this.platforms[platform].libraries.findIndex((l) => l.id === libraryId);
+    if (idx === -1) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
+    return idx;
+  }
+
+  _assertUniqueName(platform, name, excludeId) {
+    const clash = this.platforms[platform].libraries.some((l) => l.id !== excludeId && l.name === name);
+    if (clash) throw new Error(`「${name}」这个名字在这个平台下已经用过了，换一个名字`);
+  }
+
+  async createLibrary(platform, name) {
+    this._assertPlatform(platform);
+    const trimmed = String(name || '').trim();
+    if (!trimmed) throw new Error('词库名称不能为空');
+    this._assertUniqueName(platform, trimmed, null);
+    const lib = emptyLibrary(trimmed);
+    this.platforms[platform].libraries.push(lib);
+    await this._persistPlatforms();
+    return lib;
+  }
+
+  async copyLibrary(platform, sourceLibraryId, name) {
+    this._assertPlatform(platform);
+    const trimmed = String(name || '').trim();
+    if (!trimmed) throw new Error('词库名称不能为空');
+    const idx = this._findLibraryIndex(platform, sourceLibraryId);
+    this._assertUniqueName(platform, trimmed, null);
+    const src = this.platforms[platform].libraries[idx];
+    const lib = {
+      id: makeLibraryId(),
+      name: trimmed,
+      products: JSON.parse(JSON.stringify(src.products)),
+      universalKeywords: JSON.parse(JSON.stringify(src.universalKeywords)),
+      machineSharedKeywords: JSON.parse(JSON.stringify(src.machineSharedKeywords)),
+      filterSharedKeywords: JSON.parse(JSON.stringify(src.filterSharedKeywords)),
+      accessorySharedKeywords: JSON.parse(JSON.stringify(src.accessorySharedKeywords))
+    };
+    this.platforms[platform].libraries.push(lib);
+    await this._persistPlatforms();
+    return lib;
+  }
+
+  async renameLibrary(platform, libraryId, name) {
+    this._assertPlatform(platform);
+    const trimmed = String(name || '').trim();
+    if (!trimmed) throw new Error('词库名称不能为空');
+    const idx = this._findLibraryIndex(platform, libraryId);
+    this._assertUniqueName(platform, trimmed, libraryId);
+    this.platforms[platform].libraries[idx].name = trimmed;
+    await this._persistPlatforms();
+    return this.platforms[platform].libraries[idx];
+  }
+
+  async deleteLibrary(platform, libraryId) {
+    this._assertPlatform(platform);
+    const libs = this.platforms[platform].libraries;
+    const idx = this._findLibraryIndex(platform, libraryId);
+    if (libs.length <= 1) throw new Error('这个平台下至少要保留一套词库，不能把最后一套也删掉');
+    libs.splice(idx, 1);
+    await this._persistPlatforms();
+  }
+
+  async saveProducts(platform, libraryId, products, universalKeywords, sharedPools = {}) {
+    this._assertPlatform(platform);
+    const idx = this._findLibraryIndex(platform, libraryId);
     if ((products || []).some((p) => !String(p.name || '').trim())) {
       throw new Error('产品名称不能为空');
     }
@@ -150,18 +257,20 @@ class MaterialCheckStore {
       throw new Error(`关键词「${c.keyword}」重复出现在「${c.first}」和「${c.second}」，一个词只能属于一处`);
     }
     const clean = {
+      id: libraryId,
+      name: this.platforms[platform].libraries[idx].name,
       products: (products || []).map((p) => ({
         id: p.id,
         name: String(p.name || '').trim(),
         type: match.PRODUCT_TYPES.includes(p.type) ? p.type : '',
         keywords: cleanKeywords(p.keywords)
       })),
-      universalKeywords: cleanStringList(universalKeywords),
-      machineSharedKeywords: cleanStringList(sharedPools.machine),
-      filterSharedKeywords: cleanStringList(sharedPools.filter),
-      accessorySharedKeywords: cleanStringList(sharedPools.accessory)
+      universalKeywords: cleanKeywords(universalKeywords),
+      machineSharedKeywords: cleanKeywords(sharedPools.machine),
+      filterSharedKeywords: cleanKeywords(sharedPools.filter),
+      accessorySharedKeywords: cleanKeywords(sharedPools.accessory)
     };
-    this.platforms[platform] = clean;
+    this.platforms[platform].libraries[idx] = clean;
     await this._persistPlatforms();
     return clean;
   }
@@ -171,9 +280,10 @@ class MaterialCheckStore {
     this.records.push(record);
   }
 
-  listRecords({ platform, productId, status, uploadedBy, limit = 500 } = {}) {
+  listRecords({ platform, libraryId, productId, status, uploadedBy, limit = 500 } = {}) {
     let rows = this.records;
     if (platform) rows = rows.filter((r) => r.platform === platform);
+    if (libraryId) rows = rows.filter((r) => r.libraryId === libraryId);
     if (productId) rows = rows.filter((r) => r.productId === productId);
     if (status) rows = rows.filter((r) => r.status === status);
     if (uploadedBy) rows = rows.filter((r) => r.uploadedBy === uploadedBy);
@@ -187,9 +297,10 @@ class MaterialCheckStore {
     }
   }
 
-  async detectFile({ buf, ext, filename, batchId, uploadedBy, platform, ocr = runOcr }) {
-    if (!PLATFORMS.includes(platform)) throw new Error('平台参数不对，只能是 tmall 或 jd');
-    const lib = this.getLibrary(platform);
+  async detectFile({ buf, ext, filename, batchId, uploadedBy, platform, libraryId, ocr = runOcr }) {
+    this._assertPlatform(platform);
+    const lib = this.getLibrary(platform, libraryId);
+    if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
     if (!lib.products.length) throw new Error('还没有配置任何产品的关键词，先去「关键词库」里加一个产品');
 
     const name = crypto.randomBytes(9).toString('hex') + ext;
@@ -204,7 +315,7 @@ class MaterialCheckStore {
       ocrConfidence = result.confidence;
     } catch (e) {
       const record = {
-        id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform,
+        id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId: lib.id,
         filename, imagePath: url, productId: null, productName: null, matchMethod: null,
         ocrText: '', ocrConfidence: null, missingKeywords: [], crossedKeywords: [], status: 'ocr_failed', warning: e.message
       };
@@ -221,7 +332,7 @@ class MaterialCheckStore {
       this._cleanupPending();
       const pendingId = 'mcp_' + crypto.randomBytes(6).toString('hex');
       this.pending.set(pendingId, {
-        imagePath: url, filename, ocrText, ocrConfidence, batchId, uploadedBy, platform, expiresAt: Date.now() + PENDING_TTL_MS
+        imagePath: url, filename, ocrText, ocrConfidence, batchId, uploadedBy, platform, libraryId: lib.id, expiresAt: Date.now() + PENDING_TTL_MS
       });
       return { needsManualPick: true, pendingId, ocrText, filename, candidates: resolution.candidates, lowConfidence };
     }
@@ -231,7 +342,7 @@ class MaterialCheckStore {
       : null;
 
     return this._finish({
-      platform, product: resolution.product, allProducts: lib.products, method: resolution.method,
+      platform, libraryId: lib.id, product: resolution.product, allProducts: lib.products, method: resolution.method,
       ocrText, ocrConfidence, imagePath: url, filename, batchId, uploadedBy, warning
     });
   }
@@ -240,20 +351,21 @@ class MaterialCheckStore {
     this._cleanupPending();
     const p = this.pending.get(pendingId);
     if (!p) throw new Error('这次待选择已经过期了，重新上传这张图');
-    const lib = this.getLibrary(p.platform);
+    const lib = this.getLibrary(p.platform, p.libraryId);
+    if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
     const product = lib.products.find((x) => x.id === productId);
     if (!product) throw new Error('选的这个产品不存在');
     this.pending.delete(pendingId);
     return this._finish({
-      platform: p.platform, product, allProducts: lib.products, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence,
+      platform: p.platform, libraryId: lib.id, product, allProducts: lib.products, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence,
       imagePath: p.imagePath, filename: p.filename, batchId: p.batchId, uploadedBy: p.uploadedBy || uploadedBy, warning: null
     });
   }
 
-  async _finish({ platform, product, allProducts, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning }) {
+  async _finish({ platform, libraryId, product, allProducts, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning }) {
     const { missingKeywords, crossedKeywords, status } = match.matchAgainstProduct(ocrText, product, allProducts);
     const record = {
-      id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform,
+      id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId,
       filename, imagePath, productId: product.id, productName: product.name, matchMethod: method,
       ocrText, ocrConfidence, missingKeywords, crossedKeywords, status, warning
     };
