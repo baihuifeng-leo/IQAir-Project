@@ -342,6 +342,8 @@ const MaterialCheck = (() => {
     ['accessory', '附件']
   ];
   const VALID_TYPES = TYPE_SECTIONS.map(([v]) => v);
+  /** 哪些分区被折叠了（点标题折叠/展开）。只是页面显示状态，不落盘，drawAll() 重画时靠这个 Set 保持住。 */
+  let collapsedSections = new Set();
 
   const catOptionsHtml = CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
 
@@ -463,7 +465,7 @@ const MaterialCheck = (() => {
     const memberBoxes = (typeProducts || []).map((p) => `
         <label class="mc-gmember">
           <input type="checkbox" data-role="member" data-pid="${escapeHtml(p.id)}" ${p.groupId === g.id ? 'checked' : ''}>
-          ${escapeHtml(p.name)}
+          <span data-role="mname">${escapeHtml(p.name)}</span>
         </label>`).join('') || '<span class="mc-chip-empty">这个分区还没有产品</span>';
     return `
       <div class="mc-gcard" data-gid="${escapeHtml(g.id)}">
@@ -479,17 +481,23 @@ const MaterialCheck = (() => {
   }
 
   function typeSectionHtml([type, label]) {
+    const collapsed = collapsedSections.has(type);
     return `
-      <div class="mc-tsection mc-tsec-${type}" data-type="${type}">
+      <div class="mc-tsection mc-tsec-${type}${collapsed ? ' mc-tsection-collapsed' : ''}" data-type="${type}">
         <div class="mc-tsection-head">
-          <h3>${label}</h3>
+          <button type="button" class="mc-tsection-toggle" data-role="toggle-section" aria-expanded="${collapsed ? 'false' : 'true'}">
+            <span class="mc-tsection-chevron" aria-hidden="true">▾</span>
+            <h3>${label}</h3>
+          </button>
           <span class="mc-tsection-actions">
             <button class="mc-btn" data-role="add-group">+ 新建分组</button>
             <button class="mc-btn" data-role="add-product">+ 新增产品</button>
           </span>
         </div>
-        <div class="mc-gcards" data-role="groups"></div>
-        <div class="mc-pcards-scroll" data-role="products"></div>
+        <div class="mc-tsection-body" data-role="body">
+          <div class="mc-gcards" data-role="groups"></div>
+          <div class="mc-pcards-scroll" data-role="products"></div>
+        </div>
       </div>`;
   }
 
@@ -588,7 +596,16 @@ const MaterialCheck = (() => {
       wrap.innerHTML = list.map((p) => productCardHtml(p, typeGroups, list)).join('') || (type ? '<p class="rv-empty">还没有产品，点上面「+ 新增产品」</p>' : '');
       [...wrap.querySelectorAll('.mc-pcard')].forEach((card, i) => {
         const p = list[i];
-        card.querySelector('[data-role="name"]').oninput = (e) => { p.name = e.target.value; scheduleAutoSave(); };
+        card.querySelector('[data-role="name"]').oninput = (e) => {
+          p.name = e.target.value;
+          // 分组卡片上的勾选项标签是改名时直接patch的文字节点，不是靠drawAll()整体重画——
+          // 重画会打断正在输入的名称输入框的光标位置/焦点
+          root.querySelectorAll(`[data-role="member"][data-pid="${p.id}"]`).forEach((cb) => {
+            const nameSpan = cb.parentElement.querySelector('[data-role="mname"]');
+            if (nameSpan) nameSpan.textContent = p.name;
+          });
+          scheduleAutoSave();
+        };
         card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; p.groupId = null; drawAll(); scheduleAutoSave(); };
         mountKeywordEditor(card, p.keywords, () => {
           card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
@@ -628,6 +645,14 @@ const MaterialCheck = (() => {
         const root = tsecWrap.querySelector(`.mc-tsection[data-type="${type}"]`);
         const typeGroups = groupsOfType(type);
         const typeProducts = productsOfType(type);
+
+        const toggleBtn = root.querySelector('[data-role="toggle-section"]');
+        toggleBtn.onclick = () => {
+          if (collapsedSections.has(type)) collapsedSections.delete(type); else collapsedSections.add(type);
+          const nowCollapsed = collapsedSections.has(type);
+          root.classList.toggle('mc-tsection-collapsed', nowCollapsed);
+          toggleBtn.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
+        };
 
         const gwrap = root.querySelector('[data-role="groups"]');
         gwrap.innerHTML = typeGroups.map((g) => groupCardHtml(g, typeProducts)).join('');

@@ -2015,6 +2015,16 @@ body.rpt-presenting .rpt-wm-note {
   padding: 2px 0 10px 12px; margin-bottom: 12px; border-left: 3px solid var(--mc-sec, var(--line-soft));
 }
 .mc-tsection-head h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--mc-sec, var(--text)); letter-spacing: 0.02em; }
+/* 标题本身就是折叠开关：点它折叠/展开下面的分组+产品卡片，右侧的+新建分组/+新增产品按钮不受影响 */
+.mc-tsection-toggle {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  background: none; border: none; padding: 2px 4px; margin: -2px -4px;
+  cursor: pointer; border-radius: 6px;
+}
+.mc-tsection-toggle:hover { background: var(--surface-2); }
+.mc-tsection-chevron { display: inline-block; font-size: 12px; color: var(--mc-sec, var(--dimmer)); transition: transform 0.15s ease; }
+.mc-tsection-collapsed .mc-tsection-chevron { transform: rotate(-90deg); }
+.mc-tsection-collapsed .mc-tsection-body { display: none; }
 .mc-tsection-actions { display: flex; gap: 8px; }
 .mc-tsec-machine   { --mc-sec: #5b8cff; }
 .mc-tsec-filter    { --mc-sec: #3ec9d6; }
