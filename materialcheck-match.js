@@ -83,18 +83,29 @@ function crossCheckWarning(resolvedProduct, ocrText, products) {
 }
 
 /**
- * 缺词 = 本产品专属关键词里没在文本中出现的；串词 = 其它产品专属关键词，或者不是本产品
- * 所在分组的其它分组共享词，出现在了本文本里。通用词永远不参与——对所有产品都免检，这是
- * validateLibrary 唯一性校验的副产品，不是匹配算法本身的特殊分支。
- * 自定义分组：同一个分组内的成员互相共享词，不算串词；不同分组之间、或者分组跟未分组产品
- * 之间，正常按"是不是自己的词"来判定，group.id === product.groupId 才免检。
+ * 缺词 = 本产品专属关键词、全局通用词、本产品所在分组的共享词——这三类都是强关联，
+ * 每一条都必须在素材文字里各自独立出现，少哪条就是哪条缺词（不是"沾边就算过"）。
+ * 串词 = 其它产品专属关键词，或者不是本产品所在分组的其它分组共享词，出现在了本文本里。
+ * 自定义分组：同一个分组内的成员互相共享词，不算串词也不算缺词豁免——恰恰相反，组内
+ * 成员本来就该有这些共享词，缺了要报；不同分组之间、或者分组跟未分组产品之间，正常按
+ * "是不是自己的词"来判定串词，group.id === product.groupId 才是"自己的"。
  *
  * 三态严重程度是固定规则，不做成可配置项：串词 > 缺词 > 通过。
  */
-function matchAgainstProduct(text, product, allProducts, groups = []) {
-  const missingKeywords = (product.keywords || [])
+function matchAgainstProduct(text, product, allProducts, groups = [], universalKeywords = []) {
+  const missingKeywords = [];
+  (product.keywords || [])
     .filter((kw) => findKeywordHits(text, [kw]).length === 0)
-    .map(keywordText);
+    .forEach((kw) => missingKeywords.push({ keyword: keywordText(kw), source: 'own' }));
+  (universalKeywords || [])
+    .filter((kw) => findKeywordHits(text, [kw]).length === 0)
+    .forEach((kw) => missingKeywords.push({ keyword: keywordText(kw), source: 'universal' }));
+  (groups || []).forEach((g) => {
+    if (g.id !== product.groupId) return;
+    (g.keywords || [])
+      .filter((kw) => findKeywordHits(text, [kw]).length === 0)
+      .forEach((kw) => missingKeywords.push({ keyword: keywordText(kw), source: 'group', groupName: g.name }));
+  });
 
   const crossedKeywords = [];
   allProducts.forEach((other) => {

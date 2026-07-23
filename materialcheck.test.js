@@ -232,7 +232,7 @@ async function run() {
 
   t('matchAgainstProduct 缺词判定为提醒状态', () => {
     const r = M.matchAgainstProduct('GC-Multi', productA, products);
-    assert.deepStrictEqual(r.missingKeywords, ['抗菌滤网认证号XXX']);
+    assert.deepStrictEqual(r.missingKeywords, [{ keyword: '抗菌滤网认证号XXX', source: 'own' }]);
     assert.strictEqual(r.status, 'warn');
   });
 
@@ -247,15 +247,24 @@ async function run() {
 
   t('matchAgainstProduct 既有串词又有缺词时，报错优先，但详情仍分别列出', () => {
     const r = M.matchAgainstProduct('GCX XE', productA, products);
-    assert.deepStrictEqual(r.missingKeywords, ['GC-Multi', '抗菌滤网认证号XXX']);
+    assert.deepStrictEqual(r.missingKeywords, [
+      { keyword: 'GC-Multi', source: 'own' },
+      { keyword: '抗菌滤网认证号XXX', source: 'own' }
+    ]);
     assert.strictEqual(r.crossedKeywords.length, 1);
     assert.strictEqual(r.status, 'error');
   });
 
-  t('matchAgainstProduct 通用词不参与缺词也不参与串词', () => {
-    const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX', productA, products);
+  t('matchAgainstProduct 全局通用词是强关联，没命中的每一条都算缺词，标注来源', () => {
+    const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX 7天无理由退换', productA, products, [], universal);
+    assert.deepStrictEqual(r.missingKeywords, [{ keyword: '包邮', source: 'universal' }]);
+    assert.strictEqual(r.status, 'warn');
+  });
+
+  t('matchAgainstProduct 全局通用词全部命中时不产生缺词', () => {
+    const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX 7天无理由退换 包邮', productA, products, [], universal);
     assert.deepStrictEqual(r.missingKeywords, []);
-    assert.deepStrictEqual(r.crossedKeywords, []);
+    assert.strictEqual(r.status, 'pass');
   });
 
   t('keywordText/keywordCategory 兼容纯字符串和 {text,category} 对象两种关键词写法', () => {
@@ -269,7 +278,7 @@ async function run() {
   t('matchAgainstProduct 关键词是 {text,category} 对象时匹配逻辑不受影响', () => {
     const objProduct = { id: 'po', name: 'Obj', keywords: [{ text: 'OBJ-100', category: '产品型号' }, { text: '国补价1999', category: '国补' }] };
     const r = M.matchAgainstProduct('OBJ-100', objProduct, [objProduct]);
-    assert.deepStrictEqual(r.missingKeywords, ['国补价1999']);
+    assert.deepStrictEqual(r.missingKeywords, [{ keyword: '国补价1999', source: 'own' }]);
     assert.strictEqual(r.status, 'warn');
   });
 
@@ -302,6 +311,14 @@ async function run() {
     assert.strictEqual(r.crossedKeywords[0].keyword, '系列共享词');
     assert.strictEqual(r.crossedKeywords[0].fromProductName, '分组「GX系列」');
     assert.strictEqual(r.status, 'error');
+  });
+
+  t('matchAgainstProduct 所在分组的共享词是强关联，缺了也算缺词，标注来源分组名', () => {
+    const inGroupA = { id: 'pg1', name: 'GX-1', type: 'machine', groupId: 'g1', keywords: ['GX-1专属词'] };
+    const groups = [{ id: 'g1', name: 'GX系列', type: 'machine', keywords: ['系列共享词'] }];
+    const r = M.matchAgainstProduct('GX-1专属词', inGroupA, [inGroupA], groups);
+    assert.deepStrictEqual(r.missingKeywords, [{ keyword: '系列共享词', source: 'group', groupName: 'GX系列' }]);
+    assert.strictEqual(r.status, 'warn');
   });
 
   // ── materialcheck-store.js ────────────────────────────
@@ -530,7 +547,10 @@ async function run() {
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi')
     });
     assert.strictEqual(result.status, 'warn');
-    assert.deepStrictEqual(result.missingKeywords, ['抗菌滤网认证号XXX']);
+    assert.deepStrictEqual(result.missingKeywords, [
+      { keyword: '抗菌滤网认证号XXX', source: 'own' },
+      { keyword: '7天无理由退换', source: 'universal' }
+    ]);
   });
 
   await tAsync('detectFile OCR 失败时判定为 ocr_failed', async () => {
@@ -619,7 +639,7 @@ async function run() {
   await tAsync('listRecords 按产品和状态过滤，最新的排最前', async () => {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;
-    await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX') });
+    await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX 7天无理由退换') });
     await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: 'GC-Multi_b.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
     const passOnly = store.listRecords({ productId: 'pa', status: 'pass' });
     assert.strictEqual(passOnly.length, 1);

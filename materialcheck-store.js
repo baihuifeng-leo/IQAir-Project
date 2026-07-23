@@ -394,7 +394,7 @@ class MaterialCheckStore {
       : null;
 
     return this._finish({
-      platform, libraryId: lib.id, product: resolution.product, allProducts: lib.products, groups: lib.groups, method: resolution.method,
+      platform, libraryId: lib.id, product: resolution.product, allProducts: lib.products, groups: lib.groups, universalKeywords: lib.universalKeywords, method: resolution.method,
       ocrText, ocrConfidence, imagePath: url, filename, batchId, uploadedBy, warning
     });
   }
@@ -409,13 +409,13 @@ class MaterialCheckStore {
     if (!product) throw new Error('选的这个产品不存在');
     this.pending.delete(pendingId);
     return this._finish({
-      platform: p.platform, libraryId: lib.id, product, allProducts: lib.products, groups: lib.groups, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence,
+      platform: p.platform, libraryId: lib.id, product, allProducts: lib.products, groups: lib.groups, universalKeywords: lib.universalKeywords, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence,
       imagePath: p.imagePath, filename: p.filename, batchId: p.batchId, uploadedBy: p.uploadedBy || uploadedBy, warning: null
     });
   }
 
-  async _finish({ platform, libraryId, product, allProducts, groups, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning }) {
-    const { missingKeywords, crossedKeywords, status } = match.matchAgainstProduct(ocrText, product, allProducts, groups);
+  async _finish({ platform, libraryId, product, allProducts, groups, universalKeywords, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning }) {
+    const { missingKeywords, crossedKeywords, status } = match.matchAgainstProduct(ocrText, product, allProducts, groups, universalKeywords);
     const record = {
       id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId,
       filename, imagePath, productId: product.id, productName: product.name, matchMethod: method,

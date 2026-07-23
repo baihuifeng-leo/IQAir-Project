@@ -32,6 +32,17 @@ const MaterialCheck = (() => {
   function keywordText(k) { return typeof k === 'string' ? k : String((k && k.text) || ''); }
   function keywordCategory(k) { return (k && typeof k === 'object' && CATEGORIES.includes(k.category)) ? k.category : '其它'; }
 
+  /** 缺词现在分三种来源：产品自己的词（不额外标注，保持原样）、全局通用词、
+   *  产品所在分组的共享词——跟串词一样标出"缺失属于哪". 兼容老历史记录里
+   *  missingKeywords 是纯字符串数组的情况（改版之前存的检测记录）。 */
+  function missingKeywordLabel(k) {
+    if (typeof k === 'string') return escapeHtml(k);
+    const text = escapeHtml(k.keyword);
+    if (k.source === 'universal') return `${text} · 缺失通用词`;
+    if (k.source === 'group') return `${text} · 缺失「${escapeHtml(k.groupName)}」共享词`;
+    return text;
+  }
+
   async function loadLibraries() {
     const j = await call(`/api/materialcheck/libraries?platform=${encodeURIComponent(platform)}`);
     libraries = j.libraries;
@@ -197,7 +208,7 @@ const MaterialCheck = (() => {
 
     let detail = '';
     if (result.missingKeywords?.length) {
-      detail += `<div class="mc-chip-row">缺词：${result.missingKeywords.map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('')}</div>`;
+      detail += `<div class="mc-chip-row">缺词：${result.missingKeywords.map((k) => `<span class="mc-chip mc-chip-warn">${missingKeywordLabel(k)}</span>`).join('')}</div>`;
     }
     if (result.crossedKeywords?.length) {
       detail += `<div class="mc-chip-row">串词：${result.crossedKeywords.map((c) => `<span class="mc-chip mc-chip-bad">${escapeHtml(c.keyword)} · 属于「${escapeHtml(c.fromProductName)}」</span>`).join('')}</div>`;
@@ -319,7 +330,7 @@ const MaterialCheck = (() => {
     (r.crossedKeywords || []).forEach((c) => {
       html = html.split(escapeHtml(c.keyword)).join(`<mark class="mc-mark-bad">${escapeHtml(c.keyword)}</mark>`);
     });
-    const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('') || '（无缺词）';
+    const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-warn">${missingKeywordLabel(k)}</span>`).join('') || '（无缺词）';
     const crossed = (r.crossedKeywords || []).map((c) => `<span class="mc-chip mc-chip-bad">${escapeHtml(c.keyword)} · 属于「${escapeHtml(c.fromProductName)}」</span>`).join('') || '（无串词）';
     detailBody.innerHTML = `
       <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')}</p>
