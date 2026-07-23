@@ -354,9 +354,9 @@ const MaterialCheck = (() => {
 
     const drawChips = () => {
       chipsEl.innerHTML = list.map((k, i) =>
-        `<span class="mc-chip">${escapeHtml(keywordText(k))}<small class="mc-cat-badge ${CAT_CLASS[keywordCategory(k)]}">${escapeHtml(keywordCategory(k))}</small><i data-i="${i}">×</i></span>`
+        `<span class="mc-chip">${escapeHtml(keywordText(k))}<small class="mc-cat-badge ${CAT_CLASS[keywordCategory(k)]}">${escapeHtml(keywordCategory(k))}</small><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`
       ).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
-      chipsEl.querySelectorAll('i').forEach((x) => (x.onclick = () => {
+      chipsEl.querySelectorAll('.mc-chip-del').forEach((x) => (x.onclick = () => {
         list.splice(Number(x.dataset.i), 1);
         drawChips();
         if (onChange) onChange();
@@ -379,8 +379,8 @@ const MaterialCheck = (() => {
   function keywordAddRowHtml() {
     return `
       <div class="mc-kw-add">
-        <input placeholder="输入关键词" data-role="kw-input">
-        <select class="mc-cat-select" data-role="kw-cat">${catOptionsHtml}</select>
+        <input placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
+        <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
         <button class="mc-btn" data-role="kw-add">添加</button>
       </div>`;
   }
@@ -390,8 +390,8 @@ const MaterialCheck = (() => {
     return `
       <div class="mc-pcard">
         <div class="mc-pcard-head">
-          <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="产品名称 / 型号">
-          <select class="mc-pcard-type" data-role="type">${typeOptions}</select>
+          <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="产品名称 / 型号…" aria-label="产品名称 / 型号">
+          <select class="mc-pcard-type" data-role="type" aria-label="产品类型">${typeOptions}</select>
           <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
           <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
         </div>
@@ -428,7 +428,7 @@ const MaterialCheck = (() => {
             <button class="mc-btn mc-btn-danger" id="mc-lib-op-delete">删除词库</button>
           </div>
           <div class="mc-lib-name-row" id="mc-lib-name-row" hidden>
-            <input id="mc-lib-name-input" placeholder="词库名称">
+            <input id="mc-lib-name-input" placeholder="词库名称…" aria-label="词库名称">
             <button class="mc-btn mc-btn-primary" id="mc-lib-name-confirm">确定</button>
             <button class="mc-btn" id="mc-lib-name-cancel">取消</button>
           </div>
@@ -480,6 +480,15 @@ const MaterialCheck = (() => {
       drawProductCards();
     };
 
+    // 请求进行中禁用按钮，避免网络慢的时候重复点击发出重复请求；正常收尾走 renderLibrary() 整体重画，
+    // 这里的 finally 主要是兜底失败路径（renderLibrary 不会跑，按钮必须自己恢复可点）
+    const withBusy = (btn, fn) => async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try { await fn(); }
+      finally { btn.disabled = false; }
+    };
+
     // 词库操作：新建/复制/重命名共用同一条内联输入行，删除走 confirm() 二次确认
     let opMode = null;
     const nameRow = A.$('#mc-lib-name-row');
@@ -526,10 +535,12 @@ const MaterialCheck = (() => {
         renderLibrary();
       } catch (e) { A.toast(e.message, 'bad'); }
     };
-    A.$('#mc-lib-name-confirm').onclick = confirmName;
+    const nameConfirmBtn = A.$('#mc-lib-name-confirm');
+    nameConfirmBtn.onclick = withBusy(nameConfirmBtn, confirmName);
     nameInput.onkeydown = (e) => { if (e.key === 'Enter') confirmName(); if (e.key === 'Escape') hideNameRow(); };
 
-    A.$('#mc-lib-op-delete').onclick = async () => {
+    const deleteBtn = A.$('#mc-lib-op-delete');
+    deleteBtn.onclick = withBusy(deleteBtn, async () => {
       const lib = libraries.find((l) => l.id === libraryId);
       if (!confirm(`删除词库「${lib?.name}」？里面的产品和关键词都会被删掉，且不可恢复。`)) return;
       try {
@@ -540,9 +551,10 @@ const MaterialCheck = (() => {
         A.toast('已删除词库');
         renderLibrary();
       } catch (e) { A.toast(e.message, 'bad'); }
-    };
+    });
 
-    A.$('#mc-lib-save').onclick = async () => {
+    const saveBtn = A.$('#mc-lib-save');
+    saveBtn.onclick = withBusy(saveBtn, async () => {
       const errEl = A.$('#mc-lib-error');
       errEl.hidden = true;
       try {
@@ -562,7 +574,7 @@ const MaterialCheck = (() => {
       } catch (e) {
         errEl.hidden = false; errEl.textContent = e.message;
       }
-    };
+    });
   }
 
   function init(api) {

@@ -1943,6 +1943,8 @@ body.rpt-presenting .rpt-wm-note {
 .mc-chip-warn { background: var(--warn); color: #04140f; }
 .mc-chip i { cursor: pointer; opacity: 0.7; font-style: normal; }
 .mc-chip i:hover { opacity: 1; }
+.mc-chip-del { border: none; background: none; padding: 0; margin: 0; color: inherit; font: inherit; cursor: pointer; opacity: 0.7; line-height: 1; }
+.mc-chip-del:hover { opacity: 1; }
 .mc-kw-cat { color: var(--dimmer); font-size: 10px; }
 
 .mc-warning { width: 100%; color: var(--warn-text); font-size: 12px; margin-top: 4px; }
@@ -1952,6 +1954,7 @@ body.rpt-presenting .rpt-wm-note {
 
 .mc-btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line-soft); background: transparent; color: var(--text); cursor: pointer; font-size: 12.5px; transition: background var(--fast); }
 .mc-btn:hover { background: var(--surface-2); }
+.mc-btn:disabled { opacity: 0.55; cursor: default; }
 .mc-btn-primary { background: var(--mint); color: #04140f; border-color: var(--mint); font-weight: 600; }
 .mc-btn-danger { color: var(--bad-text); border-color: var(--bad); }
 
