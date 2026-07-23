@@ -4,9 +4,8 @@
 在电商工作台新增第六个标签页：批量上传素材图片，服务端 OCR 识别文字，跟后台配置的产品专属关键词比对，检测出"缺词"（漏了本该出现的关键词）和"串词"（混入了别的产品的关键词），并留存历史记录供回看。
 
 ## 当前阶段
-阶段 7（v2：权限/平台/分类/状态/进度条）— complete。仓库已在 2026-07-22 做过一次大重构：`test/` 嵌套仓库 + tarball 打包整体退休，`EC-Workbench/` 本身现在就是 git 仓库根目录、可直接 `node server.js` 运行，不再需要打包/解包。本阶段在 worktree `materialcheck-v2` 里开发。
+阶段 7（v2：权限/平台/分类/状态/进度条）— complete，且已部署到 8080 测试环境供用户实机验证（2026-07-23，见 progress.md 对应会话记录）。仓库已在 2026-07-22 做过一次大重构：`test/` 嵌套仓库 + tarball 打包整体退休，`EC-Workbench/` 本身现在就是 git 仓库根目录、可直接 `node server.js` 运行，不再需要打包/解包。本阶段在 worktree `materialcheck-v2` 里开发，分支 `feature/materialcheck-v2-permissions-platform`（PR #2，draft，base=`feature/materialcheck-paddleocr-ocr`）。
 
-## 当前阶段
 阶段 6（OCR 识别精度优化，用户实测反馈驱动）— complete。功能本体（阶段 1-5）早已上线到 8080 测试环境；这一阶段是用户拿真实素材图实测后，反复反馈"识别有误"，驱动了三轮 OCR 引擎迭代（tesseract 参数调优 → tesseract 多路并集+预处理 → 换成 PaddleOCR），当前落地在 PaddleOCR 常驻子进程方案，已推送 `design/deepspace-polish` 分支并另建 `feature/materialcheck-paddleocr-ocr` 分支保留这条工作线（原因见下方"备注"）。
 
 ## 各阶段

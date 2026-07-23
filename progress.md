@@ -150,5 +150,18 @@
 | 我学到了什么？ | "组内可共享关键词"这类看似需要感知产品分组的逻辑，很多时候可以通过唯一性约束自然获得，不需要在匹配算法里加分支——设计时先想清楚"这个效果是不是别的约束的推论"能省很多代码；沙盒里能装 Playwright 做真实浏览器验证时应该优先用，比只靠 curl 猜前端行为可靠得多；浏览器测试脚本要注意每次清空测试数据目录，否则会把测试残留误判成应用 bug |
 | 我做了什么？ | 见上方「阶段 7」记录；改了 8 个文件（match/store/server 三个核心模块 + users.js/materialcheck.js/index.html/styles.css 前端 + task_plan/findings/progress 三个规划文件）+ 新增 1 份设计文档，`node materialcheck.test.js` 56/56 通过，真机 Playwright 验证通过 |
 
+## 会话：2026-07-23（阶段 7 收尾：部署到 8080 供用户实测）
+
+### 状态：complete
+- 会话开始时先确认：commit `6151ca1` 已推送到 `origin/feature/materialcheck-v2-permissions-platform`，PR #2（draft，base=`feature/materialcheck-paddleocr-ocr`）已开好；工作区 `git status` 干净，**这次没有新代码改动可提交**，只是把已完成的 v2 分支部署上 8080 供用户手动验证
+- 用户要求"推 8080 端口我来自行测试"，执行步骤：
+  1. 排查发现 8080 原本跑着 `/root/IQAir-Project/EC-Workbench`（主 checkout，非本 worktree）上的旧代码（分支 `feature/materialcheck-paddleocr-ocr`，commit `b4da77a`，即 v2 之前的版本），PID 753940，`PPID=1`（后台常驻）
+  2. 因为 v2 分支已经被本 worktree 占用（git 不允许同一分支在两个 worktree 同时签出），不能直接切换主 checkout 的分支；改为**直接在本 worktree 目录里起服务**，`DATA_DIR` 指向主 checkout 现有的 `data/` 目录（复用用户已经积累的真实测试数据：矩阵/对位看板、6332 条评论、18 款 3D 预览产品、2 个素材质检产品+9 条历史记录），避免数据割裂成两份
+  3. `venv/` 本 worktree 没有（PaddleOCR 依赖装在主 checkout 那份），软链 `ln -s /root/IQAir-Project/EC-Workbench/venv venv` 复用，不重复装一遍
+  4. 优雅停掉旧进程（`SIGTERM`，确认退出）→ 在 worktree 里 `DATA_DIR=.../EC-Workbench/data PORT=8080 nohup node server.js >> server.log 2>&1 &` 起新进程（PID 794708）
+  5. 验证：`server.log` 里看到 `[materialcheck] 已把旧的扁平词库数据一次性迁移到「天猫」命名空间下`（证明 v2 的自动迁移逻辑真实跑在用户的存量数据上，不是空库）；`curl /login.html` 200；`curl /materialcheck.js` 302 跳登录（静态资源鉴权正常）；`ss -ltnp` 确认 8080 上监听的是新 PID
+- 创建/修改的文件：无代码改动，仅运维操作（起停进程、建软链）
+- **五问重启检查更新**：「我在哪里」→ v2 分支已实际跑在 8080，用户可以直接用浏览器测；「我要去哪里」→ 等用户实测反馈，反馈后再决定是否需要改代码/合并到 `feature/materialcheck-paddleocr-ocr`/进而合并 `main`；生产发布（8090/`/opt/workbench`）依然需要用户明确指令，本次未触碰
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*
