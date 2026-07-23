@@ -2035,16 +2035,14 @@ body.rpt-presenting .rpt-wm-note {
 /* 产品专属词：一行一个产品卡片，纵向堆叠，超出高度整体滚动，关键词横向铺开自动换行 */
 .mc-pcards-scroll { display: flex; flex-direction: column; gap: 14px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
 .mc-pcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; }
-/* 名称不用占太多空间——加关键词是高频操作，跟名称同一行放得下，同样高度能看到更多产品；
-   次要的移动分区/分组归属/复制/删除挪到下面一条更紧凑的次要行 */
-.mc-pcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.mc-pcard-name { flex: 0 1 120px; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
-.mc-kw-input-inline { flex: 1 1 140px; min-width: 100px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+/* 名称+加关键词+移动分区/分组归属/复制/删除全部挤在同一行，
+   名称和关键词输入框各占剩余空间一半（flex-basis 相同），其它都是固定宽度的控件 */
+.mc-pcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.mc-pcard-name { flex: 1 1 100px; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
+.mc-kw-input-inline { flex: 1 1 100px; min-width: 90px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
-.mc-pcard-sub { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.mc-pcard-sub-spacer { flex: 1 1 auto; }
-.mc-pcard-move { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
-.mc-pcard-group { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
+.mc-pcard-move { flex: 0 0 auto; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
+.mc-pcard-group { flex: 0 0 auto; color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 
 /* 拖拽手柄：单独的小按钮而不是整张卡片可拖，避免跟卡片里的输入框/下拉框抢手势 */
 .mc-pcard-handle {

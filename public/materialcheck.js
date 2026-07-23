@@ -448,11 +448,8 @@ const MaterialCheck = (() => {
           <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
           <button class="mc-btn" data-role="kw-add">添加</button>
           <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
-        </div>
-        <div class="mc-pcard-sub">
           <select class="mc-pcard-move" data-role="move" aria-label="移到其它分区" title="移到其它分区">${typeMoveOptionsHtml(p.type || '')}</select>
           ${groupLabel}
-          <span class="mc-pcard-sub-spacer"></span>
           <button class="mc-btn" data-role="copy-to" ${copyTargets.length ? '' : 'disabled'}>复制到…</button>
           <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
         </div>
