@@ -2,7 +2,6 @@
 
 const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
 const PRODUCT_TYPES = ['machine', 'filter', 'accessory'];
-const SHARED_POOL_LABELS = { machine: '机器组内通用词', filter: '滤芯组内通用词', accessory: '附件组内通用词' };
 
 function normalize(s) {
   return String(s || '').replace(/\s+/g, '');
@@ -26,11 +25,11 @@ function findKeywordHits(text, keywords) {
 
 /**
  * 校验关键词库唯一性：同一个词不能出现在两处——产品之间、产品词与通用词之间、
- * 或者跟机器/滤芯/附件三套组内通用词之间都不行。一个词只能属于唯一一个"归属"。
- * sharedPools 是可选的第三参数（{ machine: [...], filter: [...], accessory: [...] }），
- * 不传时行为跟老版本一致，只查产品词和全局通用词。
+ * 或者跟自定义分组的共享词之间都不行。一个词只能属于唯一一个"归属"。
+ * groups 是可选的第三参数（[{id,name,type,keywords}, ...]），不传时行为跟老版本
+ * 一致，只查产品词和全局通用词。
  */
-function validateLibrary(products, universalKeywords, sharedPools = {}) {
+function validateLibrary(products, universalKeywords, groups = []) {
   const seen = new Map();
   const conflicts = [];
   const record = (kw, where) => {
@@ -40,9 +39,7 @@ function validateLibrary(products, universalKeywords, sharedPools = {}) {
   };
   (products || []).forEach((p) => (p.keywords || []).forEach((kw) => record(kw, p.name)));
   (universalKeywords || []).forEach((kw) => record(kw, '通用词'));
-  PRODUCT_TYPES.forEach((type) => {
-    (sharedPools[type] || []).forEach((kw) => record(kw, SHARED_POOL_LABELS[type]));
-  });
+  (groups || []).forEach((g) => (g.keywords || []).forEach((kw) => record(kw, `分组「${g.name}」`)));
   return conflicts;
 }
 
@@ -86,14 +83,15 @@ function crossCheckWarning(resolvedProduct, ocrText, products) {
 }
 
 /**
- * 缺词 = 本产品专属关键词里没在文本中出现的；串词 = 其它产品专属关键词出现在了本文本里。
- * 通用词、机器/滤芯/附件组内通用词两边都不参与——因为 validateLibrary 保证了这些词
- * 永远不会同时也是某个产品的专属词，所以这里不需要额外感知 product.type 或任何通用词列表，
- * "组内可共享"这个效果是唯一性校验的副产品，不是匹配算法本身的特殊分支。
+ * 缺词 = 本产品专属关键词里没在文本中出现的；串词 = 其它产品专属关键词，或者不是本产品
+ * 所在分组的其它分组共享词，出现在了本文本里。通用词永远不参与——对所有产品都免检，这是
+ * validateLibrary 唯一性校验的副产品，不是匹配算法本身的特殊分支。
+ * 自定义分组：同一个分组内的成员互相共享词，不算串词；不同分组之间、或者分组跟未分组产品
+ * 之间，正常按"是不是自己的词"来判定，group.id === product.groupId 才免检。
  *
  * 三态严重程度是固定规则，不做成可配置项：串词 > 缺词 > 通过。
  */
-function matchAgainstProduct(text, product, allProducts) {
+function matchAgainstProduct(text, product, allProducts, groups = []) {
   const missingKeywords = (product.keywords || [])
     .filter((kw) => findKeywordHits(text, [kw]).length === 0)
     .map(keywordText);
@@ -103,6 +101,12 @@ function matchAgainstProduct(text, product, allProducts) {
     if (other.id === product.id) return;
     findKeywordHits(text, other.keywords || []).forEach((kw) => {
       crossedKeywords.push({ keyword: keywordText(kw), fromProductId: other.id, fromProductName: other.name });
+    });
+  });
+  (groups || []).forEach((g) => {
+    if (g.id === product.groupId) return;
+    findKeywordHits(text, g.keywords || []).forEach((kw) => {
+      crossedKeywords.push({ keyword: keywordText(kw), fromProductId: null, fromProductName: `分组「${g.name}」` });
     });
   });
 

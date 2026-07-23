@@ -2,7 +2,7 @@ const MaterialCheck = (() => {
   let A, subView = 'check', platform = 'tmall', libraryId = null;
   let libraries = []; // 当前平台下的词库列表 [{id,name,productCount}]
   let libraryDirectory = []; // 历史记录筛选用：两个平台全部词库的扁平列表 [{id,name,platform}]
-  let products = [], universalKeywords = [], machineSharedKeywords = [], filterSharedKeywords = [], accessorySharedKeywords = [];
+  let products = [], universalKeywords = [], groups = [];
 
   const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
   // pass/warn/error 是新三态；fail 是 v2 上线前的旧记录留下的值，不迁移，历史筛选里仍要能选到
@@ -51,9 +51,7 @@ const MaterialCheck = (() => {
     const j = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}&libraryId=${encodeURIComponent(libraryId)}`);
     products = j.products;
     universalKeywords = j.universalKeywords;
-    machineSharedKeywords = j.machineSharedKeywords;
-    filterSharedKeywords = j.filterSharedKeywords;
-    accessorySharedKeywords = j.accessorySharedKeywords;
+    groups = j.groups;
   }
 
   function switchSub(name) {
@@ -335,11 +333,11 @@ const MaterialCheck = (() => {
     '大促销售权益': 'mc-cat-promo', '附加权益': 'mc-cat-extra', '国补': 'mc-cat-subsidy',
     '价格': 'mc-cat-price', '其它': 'mc-cat-other'
   };
-  // 产品按类型分区展示：每个分区里先放该类型的共用词，再放该类型下的产品卡片
+  // 产品按类型分区展示：每个分区里先放该类型下自定义的共享分组，再放该类型下的产品卡片
   const TYPE_SECTIONS = [
-    ['machine', '机器', '机器组通用词', '机器类产品之间可共用，不算缺词/串词'],
-    ['filter', '滤芯', '滤芯组通用词', '滤芯类产品之间可共用'],
-    ['accessory', '附件', '附件组通用词', '附件类产品之间可共用']
+    ['machine', '机器'],
+    ['filter', '滤芯'],
+    ['accessory', '附件']
   ];
   const VALID_TYPES = TYPE_SECTIONS.map(([v]) => v);
 
@@ -352,10 +350,14 @@ const MaterialCheck = (() => {
     const catEl = root.querySelector('[data-role="kw-cat"]');
     const addBtn = root.querySelector('[data-role="kw-add"]');
 
+    // 显示顺序按分类顺序来（产品型号→产品利益点→…），跟添加先后无关；
+    // data-i 仍然指向 list 里的原始下标，删除操作按这个下标定位，不受显示顺序影响
     const drawChips = () => {
-      chipsEl.innerHTML = list.map((k, i) =>
-        `<span class="mc-chip">${escapeHtml(keywordText(k))}<small class="mc-cat-badge ${CAT_CLASS[keywordCategory(k)]}">${escapeHtml(keywordCategory(k))}</small><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`
-      ).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
+      const order = list.map((_, i) => i).sort((a, b) => CATEGORIES.indexOf(keywordCategory(list[a])) - CATEGORIES.indexOf(keywordCategory(list[b])));
+      chipsEl.innerHTML = order.map((i) => {
+        const k = list[i];
+        return `<span class="mc-chip">${escapeHtml(keywordText(k))}<small class="mc-cat-badge ${CAT_CLASS[keywordCategory(k)]}">${escapeHtml(keywordCategory(k))}</small><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
+      }).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
       chipsEl.querySelectorAll('.mc-chip-del').forEach((x) => (x.onclick = () => {
         list.splice(Number(x.dataset.i), 1);
         drawChips();
@@ -393,34 +395,64 @@ const MaterialCheck = (() => {
     return opts.map(([v, label]) => `<option value="${v}" ${current === v ? 'selected' : ''}>${label}</option>`).join('');
   }
 
-  function productCardHtml(p) {
+  /** 产品卡片：groupsOfType 用来显示"当前属于哪个分组"（分组成员是在分组卡片上勾选的，这里只读展示）；
+   *  siblings 是同一批产品（未分类区就是未分类的那批），用来生成"复制到…"的目标产品列表。 */
+  function productCardHtml(p, groupsOfType, siblings) {
+    const group = (groupsOfType || []).find((g) => g.id === p.groupId);
+    const groupLabel = group ? `<span class="mc-pcard-group">分组：${escapeHtml(group.name)}</span>` : '';
+    const copyTargets = (siblings || []).filter((s) => s.id !== p.id);
+    const copyOptionsHtml = copyTargets.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
     return `
       <div class="mc-pcard">
         <div class="mc-pcard-head">
           <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="产品名称 / 型号…" aria-label="产品名称 / 型号">
           <select class="mc-pcard-move" data-role="move" aria-label="移到其它分区" title="移到其它分区">${typeMoveOptionsHtml(p.type || '')}</select>
+          ${groupLabel}
           <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
+          <button class="mc-btn" data-role="copy-to" ${copyTargets.length ? '' : 'disabled'}>复制到…</button>
           <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
+        </div>
+        <div class="mc-copy-row" data-role="copy-row" hidden>
+          <select data-role="copy-target" aria-label="复制关键词到哪个产品">${copyOptionsHtml}</select>
+          <button class="mc-btn mc-btn-primary" data-role="copy-confirm">确定覆盖</button>
+          <button class="mc-btn" data-role="copy-cancel">取消</button>
         </div>
         <div class="mc-chip-editor" data-role="chips"></div>
         ${keywordAddRowHtml()}
       </div>`;
   }
 
-  function groupCardHtml(label, hint) {
+  /** 分组卡片：勾选成员（只列同类型下的产品）+ 一份组内共享关键词，替代原来固定的"XX组通用词"。 */
+  function groupCardHtml(g, typeProducts) {
+    const memberBoxes = (typeProducts || []).map((p) => `
+        <label class="mc-gmember">
+          <input type="checkbox" data-role="member" data-pid="${escapeHtml(p.id)}" ${p.groupId === g.id ? 'checked' : ''}>
+          ${escapeHtml(p.name)}
+        </label>`).join('') || '<span class="mc-chip-empty">这个分区还没有产品</span>';
     return `
-      <div class="mc-gcard" data-role="group-card">
-        <div class="mc-gcard-head"><h4>${label}</h4><p class="mc-utab-hint">${hint}</p></div>
+      <div class="mc-gcard" data-gid="${escapeHtml(g.id)}">
+        <div class="mc-gcard-head">
+          <input class="mc-gcard-name" data-role="gname" value="${escapeHtml(g.name)}" placeholder="分组名称…" aria-label="分组名称">
+          <button class="mc-btn mc-btn-danger" data-role="gdel">删除分组</button>
+        </div>
+        <p class="mc-utab-hint">勾选属于这个分组的产品，组内成员之间共用下面这些词，不算缺词/串词</p>
+        <div class="mc-gmembers" data-role="gmembers">${memberBoxes}</div>
         <div class="mc-chip-editor" data-role="chips"></div>
         ${keywordAddRowHtml()}
       </div>`;
   }
 
-  function typeSectionHtml([type, label, groupLabel, groupHint]) {
+  function typeSectionHtml([type, label]) {
     return `
       <div class="mc-tsection mc-tsec-${type}" data-type="${type}">
-        <div class="mc-tsection-head"><h3>${label}</h3><button class="mc-btn" data-role="add-product">+ 新增产品</button></div>
-        ${groupCardHtml(groupLabel, groupHint)}
+        <div class="mc-tsection-head">
+          <h3>${label}</h3>
+          <span class="mc-tsection-actions">
+            <button class="mc-btn" data-role="add-group">+ 新建分组</button>
+            <button class="mc-btn" data-role="add-product">+ 新增产品</button>
+          </span>
+        </div>
+        <div class="mc-gcards" data-role="groups"></div>
         <div class="mc-pcards-scroll" data-role="products"></div>
       </div>`;
   }
@@ -430,8 +462,6 @@ const MaterialCheck = (() => {
     const role = libraryRole();
     if (role === 'none') { el.innerHTML = '<p class="rv-empty">没有查看关键词库的权限</p>'; return; }
     const readOnly = role !== 'edit';
-
-    const groupListFor = { machine: machineSharedKeywords, filter: filterSharedKeywords, accessory: accessorySharedKeywords };
 
     el.innerHTML = `
       <div class="${readOnly ? 'mc-lib-disabled' : ''}">
@@ -469,14 +499,17 @@ const MaterialCheck = (() => {
       ? products.filter((p) => p.type === type)
       : products.filter((p) => !VALID_TYPES.includes(p.type));
 
+    const groupsOfType = (type) => groups.filter((g) => g.type === type);
+
     const mountProductCards = (root, type) => {
       const wrap = root.querySelector('[data-role="products"]');
       const list = productsOfType(type);
-      wrap.innerHTML = list.map(productCardHtml).join('') || (type ? '<p class="rv-empty">还没有产品，点上面「+ 新增产品」</p>' : '');
+      const typeGroups = type ? groupsOfType(type) : [];
+      wrap.innerHTML = list.map((p) => productCardHtml(p, typeGroups, list)).join('') || (type ? '<p class="rv-empty">还没有产品，点上面「+ 新增产品」</p>' : '');
       [...wrap.querySelectorAll('.mc-pcard')].forEach((card, i) => {
         const p = list[i];
         card.querySelector('[data-role="name"]').oninput = (e) => { p.name = e.target.value; };
-        card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; drawAll(); };
+        card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; p.groupId = null; drawAll(); };
         mountKeywordEditor(card, p.keywords, () => {
           card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
         });
@@ -484,6 +517,21 @@ const MaterialCheck = (() => {
           products = products.filter((x) => x.id !== p.id);
           drawAll();
         };
+        const copyBtn = card.querySelector('[data-role="copy-to"]');
+        if (copyBtn && !copyBtn.disabled) {
+          const copyRow = card.querySelector('[data-role="copy-row"]');
+          copyBtn.onclick = () => { copyRow.hidden = !copyRow.hidden; };
+          card.querySelector('[data-role="copy-cancel"]').onclick = () => { copyRow.hidden = true; };
+          card.querySelector('[data-role="copy-confirm"]').onclick = () => {
+            const targetId = card.querySelector('[data-role="copy-target"]').value;
+            if (!targetId) return;
+            const target = products.find((x) => x.id === targetId);
+            if (!confirm(`这会覆盖「${target.name}」当前的所有关键词，确定吗？`)) return;
+            target.keywords = JSON.parse(JSON.stringify(p.keywords));
+            A.toast(`已把关键词复制到「${target.name}」`);
+            drawAll();
+          };
+        }
       });
     };
 
@@ -494,10 +542,37 @@ const MaterialCheck = (() => {
       tsecWrap.innerHTML = TYPE_SECTIONS.map(typeSectionHtml).join('');
       TYPE_SECTIONS.forEach(([type]) => {
         const root = tsecWrap.querySelector(`.mc-tsection[data-type="${type}"]`);
-        mountKeywordEditor(root.querySelector('[data-role="group-card"]'), groupListFor[type], null);
+        const typeGroups = groupsOfType(type);
+        const typeProducts = productsOfType(type);
+
+        const gwrap = root.querySelector('[data-role="groups"]');
+        gwrap.innerHTML = typeGroups.map((g) => groupCardHtml(g, typeProducts)).join('');
+        typeGroups.forEach((g) => {
+          const gcard = gwrap.querySelector(`[data-gid="${g.id}"]`);
+          mountKeywordEditor(gcard, g.keywords, null);
+          gcard.querySelector('[data-role="gname"]').oninput = (e) => { g.name = e.target.value; };
+          gcard.querySelectorAll('[data-role="member"]').forEach((cb) => {
+            cb.onchange = (e) => {
+              const product = products.find((x) => x.id === e.target.dataset.pid);
+              product.groupId = e.target.checked ? g.id : null;
+              drawAll();
+            };
+          });
+          gcard.querySelector('[data-role="gdel"]').onclick = () => {
+            if (!confirm(`删除分组「${g.name}」？组内产品会变回未分组，这个分组的共享词会一并清除。`)) return;
+            products.forEach((p) => { if (p.groupId === g.id) p.groupId = null; });
+            groups = groups.filter((x) => x.id !== g.id);
+            drawAll();
+          };
+        });
+        root.querySelector('[data-role="add-group"]').onclick = () => {
+          groups.push({ id: 'grp_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新分组', type, keywords: [] });
+          drawAll();
+        };
+
         mountProductCards(root, type);
         root.querySelector('[data-role="add-product"]').onclick = () => {
-          products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, keywords: [] });
+          products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, groupId: null, keywords: [] });
           drawAll();
         };
       });
@@ -591,12 +666,9 @@ const MaterialCheck = (() => {
         const saved = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}&libraryId=${encodeURIComponent(libraryId)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ products, universalKeywords, machineSharedKeywords, filterSharedKeywords, accessorySharedKeywords })
+          body: JSON.stringify({ products, universalKeywords, groups })
         });
-        products = saved.products; universalKeywords = saved.universalKeywords;
-        machineSharedKeywords = saved.machineSharedKeywords;
-        filterSharedKeywords = saved.filterSharedKeywords;
-        accessorySharedKeywords = saved.accessorySharedKeywords;
+        products = saved.products; universalKeywords = saved.universalKeywords; groups = saved.groups;
         await loadLibraries(); // 产品数变了，词库下拉框里的计数要跟着刷新
         renderLibrarySwitch();
         A.toast('关键词库已保存');

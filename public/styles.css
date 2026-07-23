@@ -1992,18 +1992,21 @@ body.rpt-presenting .rpt-wm-note {
    只限定在可编辑的词库 chip 区（分类徽标/其它 chip 场景，比如检测结果里的缺词/串词，不受影响，保持原来的紧凑密度） */
 .mc-chip-editor .mc-chip { font-size: 15px; font-weight: 600; padding: 5px 11px; }
 
-/* 通用词库/分区共用词：跟产品专属词一样的可编辑 chip 区，标题保持小字号当容器标签，不跟关键词抢视线 */
+/* 自定义共享分组：跟产品卡片一样的可编辑 chip 区，多加一段"勾选哪些产品属于这个分组"的成员列表 */
 .mc-gcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
-.mc-gcard-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
-.mc-gcard-head h4 { margin: 0; font-size: 13px; }
+.mc-gcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.mc-gcard-name { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
+.mc-gmembers { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 12px; }
+.mc-gmember { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--dim); cursor: pointer; }
 
-/* 产品按机器/滤芯/附件分区：每个分区标题左侧一道专属色条做区分，分区内先放共用词卡片，再纵向堆叠产品卡片 */
+/* 产品按机器/滤芯/附件分区：每个分区标题左侧一道专属色条做区分，分区内先放自定义共享分组，再纵向堆叠产品卡片 */
 .mc-tsection { margin-bottom: 26px; }
 .mc-tsection-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 2px 0 10px 12px; margin-bottom: 12px; border-left: 3px solid var(--mc-sec, var(--line-soft));
 }
 .mc-tsection-head h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--mc-sec, var(--text)); letter-spacing: 0.02em; }
+.mc-tsection-actions { display: flex; gap: 8px; }
 .mc-tsec-machine   { --mc-sec: #5b8cff; }
 .mc-tsec-filter    { --mc-sec: #3ec9d6; }
 .mc-tsec-accessory { --mc-sec: #f2a355; }
@@ -2016,12 +2019,19 @@ body.rpt-presenting .rpt-wm-note {
 .mc-pcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .mc-pcard-name { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
 .mc-pcard-move { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
+.mc-pcard-group { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 .mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
+
+/* "复制到…"：跟词库改名那条内联行一样的隐藏/展开模式，同样要钉住 [hidden]，
+   否则 .mc-copy-row 的 display:flex 跟 UA 的 [hidden]{display:none} 优先级打平会被覆盖 */
+.mc-copy-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.mc-copy-row[hidden] { display: none; }
+.mc-copy-row select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 
 .mc-cat-badge { border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
 .mc-cat-model   { background: #1a2440; color: var(--blue); }
 .mc-cat-benefit { background: #10312c; color: var(--mint); }
-.mc-cat-daily   { background: #103326; color: #4ad991; }
+.mc-cat-daily   { background: #2c330f; color: #d4e35a; }
 .mc-cat-promo   { background: #33290f; color: #f4c37b; }
 .mc-cat-extra   { background: #2c2340; color: #b9a3f0; }
 .mc-cat-subsidy { background: #3a1a2c; color: #f2a0c4; }
@@ -2131,7 +2141,7 @@ body.rpt-presenting .rpt-wm-note {
 /* 素材质检·关键词分类徽标：深色底/亮字 → 浅色底/深字 */
 [data-theme="light"] .mc-cat-model { background: #e0e8fb; color: #2d4fbe; }
 [data-theme="light"] .mc-cat-benefit { background: #d8f1ea; color: #0f7a63; }
-[data-theme="light"] .mc-cat-daily { background: #d7f3e6; color: #12805a; }
+[data-theme="light"] .mc-cat-daily { background: #eef3d0; color: #5f7a0d; }
 [data-theme="light"] .mc-cat-promo { background: #f6ead2; color: #8a5c0d; }
 [data-theme="light"] .mc-cat-extra { background: #eae2fb; color: #6a44c9; }
 [data-theme="light"] .mc-cat-subsidy { background: #fbdcea; color: #a52e6b; }

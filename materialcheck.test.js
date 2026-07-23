@@ -273,15 +273,35 @@ async function run() {
     assert.strictEqual(r.status, 'warn');
   });
 
-  t('validateLibrary 检出产品词和机器组内通用词重复', () => {
-    const conflicts = M.validateLibrary(products, [], { machine: ['GC-Multi'] });
+  t('validateLibrary 检出产品词和自定义分组共享词重复', () => {
+    const conflicts = M.validateLibrary(products, [], [{ id: 'g1', name: '机器组', type: 'machine', keywords: ['GC-Multi'] }]);
     assert.strictEqual(conflicts.length, 1);
     assert.strictEqual(conflicts[0].keyword, 'GC-Multi');
-    assert.strictEqual(conflicts[0].second, '机器组内通用词');
+    assert.strictEqual(conflicts[0].second, '分组「机器组」');
   });
 
-  t('validateLibrary 不传 sharedPools 时行为跟老版本一致', () => {
+  t('validateLibrary 不传 groups 参数时行为跟老版本一致', () => {
     assert.deepStrictEqual(M.validateLibrary(products, universal), []);
+  });
+
+  t('matchAgainstProduct 同分组成员之间共享词不算串词', () => {
+    const inGroupA = { id: 'pg1', name: 'GX-1', type: 'machine', groupId: 'g1', keywords: ['GX-1专属词'] };
+    const inGroupB = { id: 'pg2', name: 'GX-2', type: 'machine', groupId: 'g1', keywords: ['GX-2专属词'] };
+    const groups = [{ id: 'g1', name: 'GX系列', type: 'machine', keywords: ['系列共享词'] }];
+    const r = M.matchAgainstProduct('系列共享词 GX-1专属词', inGroupA, [inGroupA, inGroupB], groups);
+    assert.deepStrictEqual(r.crossedKeywords, []);
+    assert.strictEqual(r.status, 'pass');
+  });
+
+  t('matchAgainstProduct 不属于该分组的产品出现分组共享词时判定为串词', () => {
+    const inGroup = { id: 'pg1', name: 'GX-1', type: 'machine', groupId: 'g1', keywords: [] };
+    const outsider = { id: 'pg3', name: '独立产品', type: 'machine', groupId: null, keywords: [] };
+    const groups = [{ id: 'g1', name: 'GX系列', type: 'machine', keywords: ['系列共享词'] }];
+    const r = M.matchAgainstProduct('系列共享词', outsider, [inGroup, outsider], groups);
+    assert.strictEqual(r.crossedKeywords.length, 1);
+    assert.strictEqual(r.crossedKeywords[0].keyword, '系列共享词');
+    assert.strictEqual(r.crossedKeywords[0].fromProductName, '分组「GX系列」');
+    assert.strictEqual(r.status, 'error');
   });
 
   // ── materialcheck-store.js ────────────────────────────
@@ -394,22 +414,57 @@ async function run() {
     assert.strictEqual(saved.products[1].type, ''); // 非法 type 兜底为空，不抛错
   });
 
-  await tAsync('saveProducts 通用词和三套组内通用词也归一化成 {text,category}，且跟专属词冲突时拒绝', async () => {
+  await tAsync('saveProducts 通用词和分组共享词也归一化成 {text,category}，且跟专属词冲突时拒绝', async () => {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;
-    const saved = await store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', type: 'machine', keywords: ['GC-Multi'] }],
-      [{ text: '全局通用词', category: '产品利益点' }], {
-        machine: ['机器组内共享词'], filter: ['滤芯组内共享词'], accessory: ['附件组内共享词']
-      });
+    const saved = await store.saveProducts(PF, libId,
+      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupId: 'g1', keywords: ['GC-Multi'] }],
+      [{ text: '全局通用词', category: '产品利益点' }],
+      [{ id: 'g1', name: '机器分组', type: 'machine', keywords: ['机器组内共享词'] }]
+    );
     assert.deepStrictEqual(saved.universalKeywords, [{ text: '全局通用词', category: '产品利益点' }]);
-    assert.deepStrictEqual(saved.machineSharedKeywords, [{ text: '机器组内共享词', category: '其它' }]);
-    assert.deepStrictEqual(saved.filterSharedKeywords, [{ text: '滤芯组内共享词', category: '其它' }]);
-    assert.deepStrictEqual(saved.accessorySharedKeywords, [{ text: '附件组内共享词', category: '其它' }]);
+    assert.deepStrictEqual(saved.groups, [{ id: 'g1', name: '机器分组', type: 'machine', keywords: [{ text: '机器组内共享词', category: '其它' }] }]);
+    assert.strictEqual(saved.products[0].groupId, 'g1');
 
     await assert.rejects(
-      store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['冲突词'] }], [], { machine: ['冲突词'] }),
+      store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['冲突词'] }], [], [{ id: 'g1', name: '机器分组', type: 'machine', keywords: ['冲突词'] }]),
       /冲突词/
     );
+  });
+
+  await tAsync('saveProducts 分组同类型下不能重名；产品挂到跟自己类型不一致的分组时兜底为未分组', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await assert.rejects(
+      store.saveProducts(PF, libId, [], [], [
+        { id: 'g1', name: '同名', type: 'machine', keywords: [] },
+        { id: 'g2', name: '同名', type: 'machine', keywords: [] }
+      ]),
+      /同一个类型下重复/
+    );
+
+    const saved = await store.saveProducts(PF, libId,
+      [{ id: 'pa', name: 'GC-Multi', type: 'filter', groupId: 'g1', keywords: [] }],
+      [],
+      [{ id: 'g1', name: '机器分组', type: 'machine', keywords: [] }]
+    );
+    assert.strictEqual(saved.products[0].groupId, null); // 产品是 filter 类型，分组是 machine 类型，不匹配就当没分组
+  });
+
+  await tAsync('deleteLibrary/copyLibrary 会带上分组数据一起处理', async () => {
+    const store = await freshStore();
+    const srcId = store.getLibrary(PF).id;
+    await store.saveProducts(PF, srcId,
+      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupId: 'g1', keywords: [] }, { id: 'pb', name: 'GCX XE', type: 'machine', keywords: [] }],
+      [],
+      [{ id: 'g1', name: '机器分组', type: 'machine', keywords: ['组内词'] }]
+    );
+    const copy = await store.copyLibrary(PF, srcId, '复制版');
+    assert.strictEqual(copy.groups.length, 1);
+    assert.strictEqual(copy.groups[0].name, '机器分组');
+    // 复制后的分组是深拷贝，改动互不影响
+    copy.groups[0].keywords.push({ text: '只在副本里加的词', category: '其它' });
+    assert.strictEqual(store.getLibrary(PF, srcId).groups[0].keywords.length, 1);
   });
 
   await tAsync('天猫和京东两个平台的词库完全独立，互不影响', async () => {
@@ -679,6 +734,39 @@ async function run() {
     assert.strictEqual(store.getLibrary('tmall').name, '默认词库');
     assert.strictEqual(store.getLibrary('tmall').products[0].name, 'GCX XE');
     assert.strictEqual(store.listLibraries('jd').length, 1);
+  });
+
+  await tAsync('load() 把非空的旧版机器组通用词迁移成一个自动分组，同类型产品自动加入', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
+    const mcDir = path.join(dir, 'materialcheck');
+    await fsp.mkdir(mcDir, { recursive: true });
+    await fsp.writeFile(path.join(mcDir, 'products.json'), JSON.stringify({
+      tmall: {
+        id: 'lib_old', name: '默认词库',
+        products: [
+          { id: 'p1', name: 'GCX XE', type: 'machine', keywords: ['瑞士精工'] },
+          { id: 'p2', name: 'F8 滤芯', type: 'filter', keywords: ['原装滤芯'] }
+        ],
+        universalKeywords: ['顺丰包邮'],
+        machineSharedKeywords: ['机器组老通用词'], filterSharedKeywords: [], accessorySharedKeywords: []
+      },
+      jd: { id: 'lib_jd', name: '默认词库', products: [], universalKeywords: [], machineSharedKeywords: [], filterSharedKeywords: [], accessorySharedKeywords: [] }
+    }));
+
+    const store = new MaterialCheckStore(mcDir, path.join(dir, 'uploads'));
+    await store.load();
+    const lib = store.getLibrary('tmall');
+    assert.strictEqual(lib.groups.length, 1);
+    assert.strictEqual(lib.groups[0].type, 'machine');
+    assert.deepStrictEqual(lib.groups[0].keywords, ['机器组老通用词']); // load() 只做结构迁移，不清洗成 {text,category}，那是 saveProducts 的活
+    const machineProduct = lib.products.find((p) => p.id === 'p1');
+    const filterProduct = lib.products.find((p) => p.id === 'p2');
+    assert.strictEqual(machineProduct.groupId, lib.groups[0].id); // 机器类产品自动加入迁移出来的分组
+    assert.strictEqual(filterProduct.groupId, null); // 滤芯类产品不受影响
+
+    // 迁移后落盘应该已经是带 groups 的格式，不再重复触发迁移
+    const raw = JSON.parse(await fsp.readFile(path.join(mcDir, 'products.json'), 'utf8'));
+    assert.ok(Array.isArray(raw.tmall.libraries[0].groups));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
