@@ -443,10 +443,16 @@ const MaterialCheck = (() => {
       <div class="mc-pcard" data-pid="${escapeHtml(p.id)}">
         <div class="mc-pcard-head">
           <button type="button" class="mc-pcard-handle" data-role="handle" aria-label="拖动调整「${escapeHtml(p.name)}」的顺序" title="拖动调整顺序">⠿</button>
-          <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="产品名称 / 型号…" aria-label="产品名称 / 型号">
+          <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="名称/型号…" aria-label="产品名称 / 型号">
+          <input class="mc-kw-input-inline" placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
+          <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
+          <button class="mc-btn" data-role="kw-add">添加</button>
+          <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
+        </div>
+        <div class="mc-pcard-sub">
           <select class="mc-pcard-move" data-role="move" aria-label="移到其它分区" title="移到其它分区">${typeMoveOptionsHtml(p.type || '')}</select>
           ${groupLabel}
-          <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
+          <span class="mc-pcard-sub-spacer"></span>
           <button class="mc-btn" data-role="copy-to" ${copyTargets.length ? '' : 'disabled'}>复制到…</button>
           <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
         </div>
@@ -456,7 +462,6 @@ const MaterialCheck = (() => {
           <button class="mc-btn" data-role="copy-cancel">取消</button>
         </div>
         <div class="mc-chip-editor" data-role="chips"></div>
-        ${keywordAddRowHtml()}
       </div>`;
   }
 
