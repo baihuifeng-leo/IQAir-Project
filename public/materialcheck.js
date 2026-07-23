@@ -473,12 +473,14 @@ const MaterialCheck = (() => {
       <div class="mc-gcard" data-gid="${escapeHtml(g.id)}">
         <div class="mc-gcard-head">
           <input class="mc-gcard-name" data-role="gname" value="${escapeHtml(g.name)}" placeholder="分组名称…" aria-label="分组名称">
+          <input class="mc-kw-input-inline" placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
+          <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
+          <button class="mc-btn" data-role="kw-add">添加</button>
           <button class="mc-btn mc-btn-danger" data-role="gdel">删除分组</button>
         </div>
         <p class="mc-utab-hint">勾选属于这个分组的产品，组内成员之间共用下面这些词，不算缺词/串词</p>
         <div class="mc-gmembers" data-role="gmembers">${memberBoxes}</div>
         <div class="mc-chip-editor" data-role="chips"></div>
-        ${keywordAddRowHtml()}
       </div>`;
   }
 

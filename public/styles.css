@@ -2003,8 +2003,9 @@ body.rpt-presenting .rpt-wm-note {
   border-left-width: 3px;
   border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
 }
-.mc-gcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.mc-gcard-name { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
+/* 分组名+加关键词+删除分组也收在同一行，跟产品卡片保持统一的单行格式 */
+.mc-gcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.mc-gcard-name { flex: 1 1 100px; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
 .mc-gmembers { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 12px; }
 .mc-gmember { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--dim); cursor: pointer; }
 
