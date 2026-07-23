@@ -279,6 +279,19 @@ const MaterialCheck = (() => {
   }
 
   // ── 关键词库 ────────────────────────────────────────
+  const CAT_CLASS = {
+    '产品型号': 'mc-cat-model', '产品利益点': 'mc-cat-benefit', '日常销售利益点': 'mc-cat-daily',
+    '大促销售权益': 'mc-cat-promo', '附加权益': 'mc-cat-extra', '国补': 'mc-cat-subsidy',
+    '价格': 'mc-cat-price', '其它': 'mc-cat-other'
+  };
+  const GROUPS = [
+    ['universal', '全局通用词', '任何产品图上出现都不算问题'],
+    ['machine', '机器组通用词', '机器类产品之间可共用，不算缺词/串词'],
+    ['filter', '滤芯组通用词', '滤芯类产品之间可共用'],
+    ['accessory', '附件组通用词', '附件类产品之间可共用']
+  ];
+  function typeToGroup(type) { return (type === 'machine' || type === 'filter' || type === 'accessory') ? type : 'universal'; }
+
   function wireChipList(list, chipsElId, inputId, addBtnId) {
     const draw = () => {
       A.$('#' + chipsElId).innerHTML = list.map((k, i) => `<span class="mc-chip">${escapeHtml(k)}<i data-i="${i}">×</i></span>`).join('');
@@ -301,41 +314,44 @@ const MaterialCheck = (() => {
     if (role === 'none') { el.innerHTML = '<p class="rv-empty">没有查看关键词库的权限</p>'; return; }
     const readOnly = role !== 'edit';
 
+    const groupLists = { universal: universalKeywords, machine: machineSharedKeywords, filter: filterSharedKeywords, accessory: accessorySharedKeywords };
+
     el.innerHTML = `
       <div class="${readOnly ? 'mc-lib-disabled' : ''}">
         ${readOnly ? '<p class="mc-warning">你只有查看权限，改动不会被保存——找管理员开编辑权限。</p>' : ''}
-        <div class="mc-lib">
-          <div class="mc-lib-products">
-            <div class="mc-lib-head"><h3>产品</h3><button class="mc-btn" id="mc-add-product">+ 新增产品</button></div>
-            <div id="mc-product-list"></div>
-          </div>
-          <div class="mc-lib-detail" id="mc-lib-detail"></div>
-        </div>
-        <div class="mc-universal">
-          <h3>通用词（任何产品图上出现都不算问题）</h3>
-          <div class="mc-chip-editor" id="mc-universal-chips"></div>
-          <div class="mc-kw-add"><input placeholder="输入通用词，回车添加" id="mc-universal-input"><button class="mc-btn" id="mc-universal-add-btn">添加</button></div>
-        </div>
-        <div class="mc-universal">
-          <h3>机器组内通用词（机器类产品之间可共用，不算缺词/串词）</h3>
-          <div class="mc-chip-editor" id="mc-shared-machine-chips"></div>
-          <div class="mc-kw-add"><input placeholder="输入机器组内通用词，回车添加" id="mc-shared-machine-input"><button class="mc-btn" id="mc-shared-machine-add-btn">添加</button></div>
-        </div>
-        <div class="mc-universal">
-          <h3>滤芯组内通用词（滤芯类产品之间可共用）</h3>
-          <div class="mc-chip-editor" id="mc-shared-filter-chips"></div>
-          <div class="mc-kw-add"><input placeholder="输入滤芯组内通用词，回车添加" id="mc-shared-filter-input"><button class="mc-btn" id="mc-shared-filter-add-btn">添加</button></div>
-        </div>
-        <div class="mc-universal">
-          <h3>附件组内通用词（附件类产品之间可共用）</h3>
-          <div class="mc-chip-editor" id="mc-shared-accessory-chips"></div>
-          <div class="mc-kw-add"><input placeholder="输入附件组内通用词，回车添加" id="mc-shared-accessory-input"><button class="mc-btn" id="mc-shared-accessory-add-btn">添加</button></div>
+        <div class="mc-lib-actionbar">
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
           <p class="mc-lib-error" id="mc-lib-error" hidden></p>
+        </div>
+        <div class="mc-lib-card">
+          <div class="mc-lib-head"><h3>产品</h3><button class="mc-btn" id="mc-add-product">+ 新增产品</button></div>
+          <div class="mc-lib">
+            <div class="mc-lib-products"><div id="mc-product-list"></div></div>
+            <div class="mc-lib-detail" id="mc-lib-detail"></div>
+          </div>
+        </div>
+        <div class="mc-lib-card">
+          <div class="mc-lib-head"><h3>通用词库</h3></div>
+          <div class="mc-utabs" id="mc-utabs">
+            ${GROUPS.map(([g, label]) => `<button class="mc-utab" data-group="${g}">${label}</button>`).join('')}
+          </div>
+          ${GROUPS.map(([g, , hint]) => `
+            <div class="mc-utab-panel" data-group="${g}" hidden>
+              <p class="mc-utab-hint">${hint}</p>
+              <div class="mc-chip-editor" id="mc-${g}-chips"></div>
+              <div class="mc-kw-add"><input placeholder="输入关键词，回车添加" id="mc-${g}-input"><button class="mc-btn" id="mc-${g}-add-btn">添加</button></div>
+            </div>`).join('')}
         </div>
       </div>`;
 
     let selected = products[0]?.id || null;
+
+    const showGroup = (g) => {
+      A.$$('#mc-utabs .mc-utab').forEach((b) => b.classList.toggle('is-active', b.dataset.group === g));
+      A.$$('.mc-utab-panel').forEach((p) => { p.hidden = p.dataset.group !== g; });
+    };
+    const syncGroupToSelection = () => showGroup(typeToGroup(products.find((x) => x.id === selected)?.type));
+    A.$$('#mc-utabs .mc-utab').forEach((b) => (b.onclick = () => showGroup(b.dataset.group)));
 
     const drawProductList = () => {
       A.$('#mc-product-list').innerHTML = products.map((p) => `
@@ -343,7 +359,7 @@ const MaterialCheck = (() => {
           <span>${escapeHtml(p.name)}</span><small>${p.keywords.length} 词</small>
         </div>`).join('') || '<p class="rv-empty">还没有产品</p>';
       A.$$('#mc-product-list .mc-product-item').forEach((it) => {
-        it.onclick = () => { selected = it.dataset.id; drawProductList(); drawDetail(); };
+        it.onclick = () => { selected = it.dataset.id; drawProductList(); drawDetail(); syncGroupToSelection(); };
       });
     };
 
@@ -371,14 +387,14 @@ const MaterialCheck = (() => {
 
       const drawChips = () => {
         A.$('#mc-kw-chips').innerHTML = p.keywords.map((k, i) =>
-          `<span class="mc-chip">${escapeHtml(keywordText(k))}<small class="mc-kw-cat">[${escapeHtml(keywordCategory(k))}]</small><i data-i="${i}">×</i></span>`
+          `<span class="mc-chip">${escapeHtml(keywordText(k))}<small class="mc-cat-badge ${CAT_CLASS[keywordCategory(k)]}">${escapeHtml(keywordCategory(k))}</small><i data-i="${i}">×</i></span>`
         ).join('');
         A.$$('#mc-kw-chips i').forEach((x) => (x.onclick = () => { p.keywords.splice(Number(x.dataset.i), 1); drawChips(); drawProductList(); }));
       };
       drawChips();
 
       A.$('.mc-kw-name').oninput = (e) => { p.name = e.target.value; };
-      A.$('#mc-p-type').onchange = (e) => { p.type = e.target.value; };
+      A.$('#mc-p-type').onchange = (e) => { p.type = e.target.value; syncGroupToSelection(); };
 
       const addKw = () => {
         const input = A.$('#mc-kw-input');
@@ -393,19 +409,16 @@ const MaterialCheck = (() => {
       A.$('#mc-del-product').onclick = () => {
         products = products.filter((x) => x.id !== p.id);
         selected = products[0]?.id || null;
-        drawProductList(); drawDetail();
+        drawProductList(); drawDetail(); syncGroupToSelection();
       };
     };
 
     A.$('#mc-add-product').onclick = () => {
       const p = { id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type: '', keywords: [] };
-      products.push(p); selected = p.id; drawProductList(); drawDetail();
+      products.push(p); selected = p.id; drawProductList(); drawDetail(); syncGroupToSelection();
     };
 
-    wireChipList(universalKeywords, 'mc-universal-chips', 'mc-universal-input', 'mc-universal-add-btn');
-    wireChipList(machineSharedKeywords, 'mc-shared-machine-chips', 'mc-shared-machine-input', 'mc-shared-machine-add-btn');
-    wireChipList(filterSharedKeywords, 'mc-shared-filter-chips', 'mc-shared-filter-input', 'mc-shared-filter-add-btn');
-    wireChipList(accessorySharedKeywords, 'mc-shared-accessory-chips', 'mc-shared-accessory-input', 'mc-shared-accessory-add-btn');
+    GROUPS.forEach(([g]) => wireChipList(groupLists[g], `mc-${g}-chips`, `mc-${g}-input`, `mc-${g}-add-btn`));
 
     A.$('#mc-lib-save').onclick = async () => {
       const errEl = A.$('#mc-lib-error');
@@ -427,7 +440,7 @@ const MaterialCheck = (() => {
       }
     };
 
-    drawProductList(); drawDetail();
+    drawProductList(); drawDetail(); syncGroupToSelection();
   }
 
   function init(api) {
