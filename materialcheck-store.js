@@ -181,6 +181,18 @@ class MaterialCheckStore {
     return p.libraries.find((l) => l.id === libraryId) || null;
   }
 
+  /** 词库页展示用：给每个产品附上"最近一条已匹配到它的检测记录的图"，不落盘、只读时算——
+   *  产品自己手动传的封面（imageUrl）优先级更高由前端判断，这里只负责兜底候选。 */
+  withAutoImages(lib, platform, libraryId) {
+    const latest = new Map();
+    for (let i = this.records.length - 1; i >= 0; i--) {
+      const r = this.records[i];
+      if (r.platform !== platform || r.libraryId !== libraryId || !r.productId) continue;
+      if (!latest.has(r.productId)) latest.set(r.productId, r.imagePath);
+    }
+    return { ...lib, products: lib.products.map((p) => ({ ...p, autoImage: latest.get(p.id) || null })) };
+  }
+
   _findLibraryIndex(platform, libraryId) {
     const idx = this.platforms[platform].libraries.findIndex((l) => l.id === libraryId);
     if (idx === -1) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
@@ -249,12 +261,15 @@ class MaterialCheckStore {
     const cleanProducts = (products || []).map((p) => {
       const type = match.PRODUCT_TYPES.includes(p.type) ? p.type : '';
       const price = (p.price === '' || p.price == null) ? null : Number(p.price);
+      // 只接受本站 /uploads/ 下的相对路径，防止存进任意字符串当图片地址用
+      const imageUrl = (typeof p.imageUrl === 'string' && p.imageUrl.startsWith('/uploads/')) ? p.imageUrl : null;
       return {
         id: p.id,
         name: String(p.name || '').trim(),
         type,
         keywords: cleanKeywords(p.keywords),
-        price: Number.isFinite(price) && price > 0 ? price : null
+        price: Number.isFinite(price) && price > 0 ? price : null,
+        imageUrl
       };
     });
 

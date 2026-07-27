@@ -1975,20 +1975,24 @@ body.rpt-presenting .rpt-wm-note {
 .mc-lib-spacer { flex: 1 1 auto; }
 
 .mc-cat-select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
-.mc-chip-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 30px; }
+.mc-chip-editor { display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; gap: 6px; min-height: 30px; }
 .mc-chip-empty { color: var(--dimmer); font-size: 12px; }
 
 /* 关键词内容是这个页面要看的重点，chip 文字明显放大加粗；
    只限定在可编辑的词库 chip 区（分类徽标/其它 chip 场景，比如检测结果里的缺词/多出的词，不受影响，保持原来的紧凑密度） */
 .mc-chip-editor .mc-chip { font-size: 15px; font-weight: 600; padding: 5px 11px; }
+/* chip 增删的进场/离场动画：进场从缩小+透明弹到正常大小，离场反过来缩回去再从 DOM 摘掉 */
+.mc-chip { transition: opacity 0.15s var(--ease), transform 0.15s var(--ease); }
+.mc-chip-enter, .mc-chip-leaving { opacity: 0; transform: scale(0.7); }
 
-/* 产品按机器/滤芯/附件分区：每个分区标题左侧一道专属色条做区分，分区内纵向堆叠产品卡片 */
-.mc-tsection { margin-bottom: 26px; }
+/* 产品按机器/滤芯/附件分区，每个分区一个专属色（--mc-sec）：标题左侧色条、
+   标题文字、折叠箭头、分区内每张卡片的顶部色条/悬浮光晕都跟着这一个变量走 */
+.mc-tsection { margin-bottom: 30px; }
 .mc-tsection-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 2px 0 10px 12px; margin-bottom: 12px; border-left: 3px solid var(--mc-sec, var(--line-soft));
+  padding: 2px 0 10px 12px; margin-bottom: 14px; border-left: 3px solid var(--mc-sec, var(--line-soft));
 }
-.mc-tsection-head h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--mc-sec, var(--text)); letter-spacing: 0.02em; }
+.mc-tsection-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: var(--mc-sec, var(--text)); letter-spacing: 0.02em; }
 /* 标题本身就是折叠开关：点它折叠/展开下面的产品卡片，右侧的+新增产品按钮不受影响 */
 .mc-tsection-toggle {
   display: flex; align-items: center; gap: 8px; min-width: 0;
@@ -1998,25 +2002,63 @@ body.rpt-presenting .rpt-wm-note {
 .mc-tsection-toggle:hover { background: var(--surface-2); }
 .mc-tsection-chevron { display: inline-block; font-size: 12px; color: var(--mc-sec, var(--dimmer)); transition: transform 0.15s ease; }
 .mc-tsection-collapsed .mc-tsection-chevron { transform: rotate(-90deg); }
-.mc-tsection-collapsed .mc-tsection-body { display: none; }
 .mc-tsection-actions { display: flex; gap: 8px; }
+/* 折叠/展开的高度过渡：用 CSS Grid 的 0fr/1fr 技巧，不用写死具体高度数值——
+   内层再包一层 overflow:hidden，网格行还没撑开之前内容不会先冒出来 */
+.mc-tsection-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.32s var(--ease); }
+.mc-tsection-body-inner { overflow: hidden; min-height: 0; }
+.mc-tsection-collapsed .mc-tsection-body { grid-template-rows: 0fr; }
 .mc-tsec-machine   { --mc-sec: #5b8cff; }
 .mc-tsec-filter    { --mc-sec: #3ec9d6; }
 .mc-tsec-accessory { --mc-sec: #f2a355; }
 .mc-tsec-none .mc-tsection-head { border-left-color: var(--line-soft); }
 .mc-tsec-none .mc-tsection-head h3 { color: var(--dimmer); }
 
-/* 产品专属词：一行一个产品卡片，纵向堆叠，超出高度整体滚动，关键词横向铺开自动换行 */
-.mc-pcards-scroll { display: flex; flex-direction: column; gap: 14px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
-.mc-pcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; }
-/* 名称+加关键词+移动分区/复制/删除全部挤在同一行，
-   名称和关键词输入框各占剩余空间一半（flex-basis 相同），其它都是固定宽度的控件 */
-.mc-pcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+/* 产品卡片：响应式多列网格，同一分区内拖拽排序限定在网格内部；
+   卡片本身固定高度，关键词多的时候内部滚动，保证网格里每张卡片视觉上大小一致 */
+.mc-pcards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; max-height: 640px; overflow-y: auto; padding: 4px 4px 10px; }
+.mc-pcard {
+  position: relative; display: flex; flex-direction: column; height: 440px;
+  background: var(--surface); border: 1px solid var(--line-soft); border-top: 3px solid var(--mc-sec, var(--line-soft));
+  border-radius: 14px; overflow: hidden;
+  transition: box-shadow var(--fast), border-color var(--fast), transform var(--fast), opacity 0.16s var(--ease);
+}
+.mc-pcard:hover { transform: translateY(-3px); border-color: var(--mc-sec, var(--line-soft)); box-shadow: 0 16px 30px -16px color-mix(in srgb, var(--mc-sec, #000000) 45%, transparent); }
+/* 新增卡片的进场动画（跟 FLIP 位移动画走同一套 drawAll，没有旧位置可比的卡片才会带这个类） */
+.mc-pcard-enter { opacity: 0; transform: scale(0.94) translateY(8px); }
+/* 删除卡片：先让它自己缩小淡出，等这段过渡播完才真的从数据里摘掉、触发重画 */
+.mc-pcard-leaving { opacity: 0; transform: scale(0.92); pointer-events: none; }
+
+/* 封面图：固定高度，铺满宽度裁切；占位态是分区色的渐变底 + 产品名首字；
+   "更换封面"悬浮在右下角，默认隐藏，hover/聚焦卡片时才显出来 */
+.mc-pcard-cover { position: relative; flex: 0 0 auto; height: 132px; background: var(--field-bg); overflow: hidden; }
+.mc-pcard-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mc-pcard-cover-empty {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  font-size: 44px; font-weight: 800; color: var(--mc-sec, var(--dimmer));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--mc-sec, var(--line-soft)) 18%, var(--field-bg)), var(--field-bg));
+}
+.mc-pcard-cover-btn {
+  position: absolute; right: 8px; bottom: 8px; opacity: 0; transition: opacity var(--fast), background var(--fast);
+  padding: 5px 10px; border-radius: 999px; border: none; cursor: pointer;
+  background: var(--scrim); color: #fff; font-size: 11.5px;
+}
+.mc-pcard:hover .mc-pcard-cover-btn, .mc-pcard-cover-btn:focus-visible { opacity: 1; }
+.mc-pcard-cover-btn:hover { background: #04070dcc; }
+
+.mc-pcard-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px 14px; gap: 8px; }
+/* 名称/价格/词数/移动分区/复制/删除全部挤在同一行，
+   名称占剩余空间，其它都是固定宽度的控件 */
+.mc-pcard-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mc-pcard-name { flex: 1 1 100px; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
 .mc-pcard-price { flex: 0 0 76px; width: 76px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; }
-.mc-kw-input-inline { flex: 1 1 100px; min-width: 90px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 .mc-pcard-move { flex: 0 0 auto; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
+/* 加关键词的输入行，单独一行，跟卡片头部的产品属性控件分开 */
+.mc-pcard-kwrow { display: flex; align-items: center; gap: 8px; }
+.mc-kw-input-inline { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+/* 关键词区：固定高度内部滚动，卡片总高度不会因为词多词少而变——这是"统一大小卡片"的关键 */
+.mc-chip-editor-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; }
 
 /* 拖拽手柄：单独的小按钮而不是整张卡片可拖，避免跟卡片里的输入框/下拉框抢手势 */
 .mc-pcard-handle {
@@ -2029,7 +2071,7 @@ body.rpt-presenting .rpt-wm-note {
 
 /* "复制到…"：跟词库改名那条内联行一样的隐藏/展开模式，同样要钉住 [hidden]，
    否则 .mc-copy-row 的 display:flex 跟 UA 的 [hidden]{display:none} 优先级打平会被覆盖 */
-.mc-copy-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.mc-copy-row { display: flex; gap: 8px; align-items: center; }
 .mc-copy-row[hidden] { display: none; }
 .mc-copy-row select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 

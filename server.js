@@ -734,7 +734,7 @@ const server = http.createServer(async (req, res) => {
       const libraryId = url.searchParams.get('libraryId') || undefined;
       const lib = materialcheck.getLibrary(platform, libraryId);
       if (!lib) return json(res, 400, { error: '这套词库不存在，可能已经被删除' });
-      return json(res, 200, lib);
+      return json(res, 200, materialcheck.withAutoImages(lib, platform, lib.id));
     }
 
     if (p === '/api/materialcheck/products' && req.method === 'PUT') {

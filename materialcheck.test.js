@@ -688,6 +688,31 @@ async function run() {
     assert.strictEqual(store.getLibrary(PF, libId).products.length, 2); // 拒绝后没有把坏数据写进去
   });
 
+  await tAsync('saveProducts 保留 /uploads/ 开头的 imageUrl，拒绝其它任意字符串', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    const saved = await store.saveProducts(PF, libId, [
+      { id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'], imageUrl: '/uploads/abc123.jpg' },
+      { id: 'pb', name: 'GCX XE', keywords: ['GCX XE'], imageUrl: 'javascript:alert(1)' }
+    ]);
+    assert.strictEqual(saved.products[0].imageUrl, '/uploads/abc123.jpg');
+    assert.strictEqual(saved.products[1].imageUrl, null);
+  });
+
+  await tAsync('withAutoImages 给产品附上最近一条已匹配到它的检测记录图，没记录的是 null', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'a1.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
+    await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: 'a2.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
+    const lib = store.getLibrary(PF, libId);
+    const withImgs = store.withAutoImages(lib, PF, libId);
+    const pa = withImgs.products.find((p) => p.id === 'pa');
+    const pb = withImgs.products.find((p) => p.id === 'pb');
+    // 最近一条（a2.jpg）覆盖第一条（a1.jpg）
+    assert.ok(pa.autoImage && pa.autoImage.includes('/uploads/materialcheck/'));
+    assert.strictEqual(pb.autoImage, null); // 没有任何检测记录匹配到这个产品
+  });
+
   await tAsync('load() 能重新读回持久化的数据', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
     const store1 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));

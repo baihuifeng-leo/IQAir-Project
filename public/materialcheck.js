@@ -368,14 +368,20 @@ const MaterialCheck = (() => {
 
     // 显示顺序按分类顺序来（产品型号→产品利益点→…），跟添加先后无关；
     // data-i 仍然指向 list 里的原始下标，删除/改分类操作按这个下标定位，不受显示顺序影响
-    const drawChips = () => {
+    const drawChips = (enterIndex) => {
       const order = list.map((_, i) => i).sort((a, b) => CATEGORIES.indexOf(keywordCategory(list[a])) - CATEGORIES.indexOf(keywordCategory(list[b])));
       chipsEl.innerHTML = order.map((i) => {
         const k = list[i];
         const cat = keywordCategory(k);
         const catOpts = CATEGORIES.map((c) => `<option value="${c}" ${c === cat ? 'selected' : ''}>${c}</option>`).join('');
-        return `<span class="mc-chip">${escapeHtml(keywordText(k))}<select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
+        return `<span class="mc-chip${i === enterIndex ? ' mc-chip-enter' : ''}" data-i="${i}">${escapeHtml(keywordText(k))}<select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
       }).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
+      if (enterIndex != null) {
+        const enterEl = chipsEl.querySelector(`.mc-chip[data-i="${enterIndex}"]`);
+        // 双 rAF：先让浏览器把"刚进场"的初始态（缩小/透明）画上一帧，下一帧再摘掉类触发过渡，
+        // 否则类在同一次 innerHTML 赋值里就已经生效，浏览器观察不到状态变化，动画不会播放
+        if (enterEl) requestAnimationFrame(() => requestAnimationFrame(() => enterEl.classList.remove('mc-chip-enter')));
+      }
       chipsEl.querySelectorAll('.mc-cat-badge-select').forEach((sel) => (sel.onchange = () => {
         const i = Number(sel.dataset.i);
         list[i] = { text: keywordText(list[i]), category: sel.value };
@@ -383,9 +389,16 @@ const MaterialCheck = (() => {
         if (onChange) onChange();
       }));
       chipsEl.querySelectorAll('.mc-chip-del').forEach((x) => (x.onclick = () => {
-        list.splice(Number(x.dataset.i), 1);
-        drawChips();
-        if (onChange) onChange();
+        const i = Number(x.dataset.i);
+        const chipEl = chipsEl.querySelector(`.mc-chip[data-i="${i}"]`);
+        const removeNow = () => {
+          list.splice(i, 1);
+          drawChips();
+          if (onChange) onChange();
+        };
+        if (!chipEl) return removeNow();
+        chipEl.classList.add('mc-chip-leaving');
+        setTimeout(removeNow, 150);
       }));
     };
     drawChips();
@@ -395,7 +408,7 @@ const MaterialCheck = (() => {
       if (!v) return;
       list.push({ text: v, category: catEl.value });
       inputEl.value = '';
-      drawChips();
+      drawChips(list.length - 1);
       if (onChange) onChange();
     };
     addBtn.onclick = add;
@@ -443,30 +456,50 @@ const MaterialCheck = (() => {
     autoSaveTimer = setTimeout(() => saveLibraryNow({ silent: true }), 700);
   }
 
+  /** 卡片封面图：手动传的封面（imageUrl）优先，其次是最近一条已匹配到这个产品的检测记录图（autoImage）；
+   *  两者都没有就是占位图标——灰底 + 产品名首字。 */
+  function productCoverHtml(p) {
+    const src = p.imageUrl || p.autoImage;
+    if (src) return `<img data-role="cover-img" src="${escapeHtml(src)}" alt="" loading="lazy">`;
+    const initial = escapeHtml((String(p.name || '').trim()[0]) || '?');
+    return `<div class="mc-pcard-cover-empty" data-role="cover-empty">${initial}</div>`;
+  }
+
   /** 产品卡片：siblings 是同一批产品（未分类区就是未分类的那批），用来生成"复制到…"的目标产品列表和拖拽排序范围。 */
   function productCardHtml(p, siblings) {
     const copyTargets = (siblings || []).filter((s) => s.id !== p.id);
     const copyOptionsHtml = copyTargets.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
     return `
       <div class="mc-pcard" data-pid="${escapeHtml(p.id)}">
-        <div class="mc-pcard-head">
-          <button type="button" class="mc-pcard-handle" data-role="handle" aria-label="拖动调整「${escapeHtml(p.name)}」的顺序" title="拖动调整顺序">⠿</button>
-          <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="名称/型号…" aria-label="产品名称 / 型号">
-          <input class="mc-pcard-price" data-role="price" type="number" min="0" step="1" value="${p.price != null ? p.price : ''}" placeholder="价格" aria-label="预期价格" title="设置后会强校验：素材图里的价格必须跟这个一致，不一致直接判报错">
-          <input class="mc-kw-input-inline" placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
-          <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
-          <button class="mc-btn" data-role="kw-add">添加</button>
-          <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
-          <select class="mc-pcard-move" data-role="move" aria-label="移到其它分区" title="移到其它分区">${typeMoveOptionsHtml(p.type || '')}</select>
-          <button class="mc-btn" data-role="copy-to" ${copyTargets.length ? '' : 'disabled'}>复制到…</button>
-          <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
+        <div class="mc-pcard-cover" data-role="cover">
+          ${productCoverHtml(p)}
+          <button type="button" class="mc-pcard-cover-btn" data-role="cover-btn" title="更换封面图">更换封面</button>
+          <input type="file" class="mc-pcard-cover-file" data-role="cover-file" accept="image/png,image/jpeg,image/webp" aria-label="上传「${escapeHtml(p.name)}」的封面图" hidden>
         </div>
-        <div class="mc-copy-row" data-role="copy-row" hidden>
-          <select data-role="copy-target" aria-label="复制关键词到哪个产品">${copyOptionsHtml}</select>
-          <button class="mc-btn mc-btn-primary" data-role="copy-confirm">确定覆盖</button>
-          <button class="mc-btn" data-role="copy-cancel">取消</button>
+        <div class="mc-pcard-body">
+          <div class="mc-pcard-head">
+            <button type="button" class="mc-pcard-handle" data-role="handle" aria-label="拖动调整「${escapeHtml(p.name)}」的顺序" title="拖动调整顺序">⠿</button>
+            <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="名称/型号…" aria-label="产品名称 / 型号">
+            <input class="mc-pcard-price" data-role="price" type="number" min="0" step="1" value="${p.price != null ? p.price : ''}" placeholder="价格" aria-label="预期价格" title="设置后会强校验：素材图里的价格必须跟这个一致，不一致直接判报错">
+            <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
+            <select class="mc-pcard-move" data-role="move" aria-label="移到其它分区" title="移到其它分区">${typeMoveOptionsHtml(p.type || '')}</select>
+            <button class="mc-btn" data-role="copy-to" ${copyTargets.length ? '' : 'disabled'}>复制到…</button>
+            <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
+          </div>
+          <div class="mc-copy-row" data-role="copy-row" hidden>
+            <select data-role="copy-target" aria-label="复制关键词到哪个产品">${copyOptionsHtml}</select>
+            <button class="mc-btn mc-btn-primary" data-role="copy-confirm">确定覆盖</button>
+            <button class="mc-btn" data-role="copy-cancel">取消</button>
+          </div>
+          <div class="mc-pcard-kwrow">
+            <input class="mc-kw-input-inline" placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
+            <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
+            <button class="mc-btn" data-role="kw-add">添加</button>
+          </div>
+          <div class="mc-chip-editor-wrap">
+            <div class="mc-chip-editor" data-role="chips"></div>
+          </div>
         </div>
-        <div class="mc-chip-editor" data-role="chips"></div>
       </div>`;
   }
 
@@ -484,7 +517,9 @@ const MaterialCheck = (() => {
           </span>
         </div>
         <div class="mc-tsection-body" data-role="body">
-          <div class="mc-pcards-scroll" data-role="products"></div>
+          <div class="mc-tsection-body-inner">
+            <div class="mc-pcards-grid" data-role="products"></div>
+          </div>
         </div>
       </div>`;
   }
@@ -706,7 +741,7 @@ const MaterialCheck = (() => {
         <div id="mc-tsections"></div>
         <div class="mc-tsection mc-tsec-none" id="mc-tsec-none" hidden>
           <div class="mc-tsection-head"><h3>未分类</h3></div>
-          <div class="mc-pcards-scroll" data-role="products"></div>
+          <div class="mc-pcards-grid" data-role="products"></div>
         </div>
       </div>`;
 
@@ -726,7 +761,9 @@ const MaterialCheck = (() => {
     };
 
     /** 原生拖拽排序，范围限定在同一个分区/未分类列表内部；不重新整体 drawAll()，
-     *  拖拽过程本身已经把 DOM 顺序调整好了，dragend 时只需要把最终顺序同步回数据并触发自动保存。 */
+     *  拖拽过程本身已经把 DOM 顺序调整好了，dragend 时只需要把最终顺序同步回数据并触发自动保存。
+     *  卡片现在是多列网格，"插到前面还是后面"不能只看 Y 轴了：同一行内比较 X 轴，
+     *  跨行才看 Y 轴——用被拖过的卡片跟当前悬停卡片顶边是否接近来判断是不是同一行。 */
     const wireDragReorder = (wrap, list) => {
       let dragCard = null;
       [...wrap.querySelectorAll('.mc-pcard')].forEach((card) => {
@@ -752,7 +789,9 @@ const MaterialCheck = (() => {
           if (!dragCard || dragCard === card) return;
           e.preventDefault();
           const rect = card.getBoundingClientRect();
-          const before = (e.clientY - rect.top) < rect.height / 2;
+          const dragRect = dragCard.getBoundingClientRect();
+          const sameRow = Math.abs(rect.top - dragRect.top) < rect.height / 2;
+          const before = sameRow ? (e.clientX - rect.left) < rect.width / 2 : (e.clientY - rect.top) < rect.height / 2;
           wrap.insertBefore(dragCard, before ? card : card.nextSibling);
         });
       });
@@ -778,10 +817,31 @@ const MaterialCheck = (() => {
           card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
           scheduleAutoSave();
         });
+        // 封面图：优先级最高的是这里手动传的（imageUrl），复用已有的通用图片直传接口，
+        // 不经过素材质检自己的 OCR 流水线——这只是换一张展示图，不是要发起一次检测
+        const coverBtn = card.querySelector('[data-role="cover-btn"]');
+        const coverFile = card.querySelector('[data-role="cover-file"]');
+        coverBtn.onclick = () => coverFile.click();
+        coverFile.onchange = async (e) => {
+          const file = e.target.files[0];
+          e.target.value = '';
+          if (!file) return;
+          try {
+            const result = await call('/api/upload', { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
+            p.imageUrl = result.url;
+            const cover = card.querySelector('[data-role="cover"]');
+            cover.querySelector('[data-role="cover-img"], [data-role="cover-empty"]').remove();
+            coverBtn.insertAdjacentHTML('beforebegin', productCoverHtml(p));
+            scheduleAutoSave();
+          } catch (err) { A.toast(err.message, 'bad'); }
+        };
         card.querySelector('[data-role="del"]').onclick = () => {
-          products = products.filter((x) => x.id !== p.id);
-          drawAll();
-          scheduleAutoSave();
+          card.classList.add('mc-pcard-leaving');
+          setTimeout(() => {
+            products = products.filter((x) => x.id !== p.id);
+            drawAll();
+            scheduleAutoSave();
+          }, 160);
         };
         const copyBtn = card.querySelector('[data-role="copy-to"]');
         if (copyBtn && !copyBtn.disabled) {
@@ -803,7 +863,7 @@ const MaterialCheck = (() => {
       wireDragReorder(wrap, list);
     };
 
-    const drawAll = () => {
+    const renderSections = () => {
       const tsecWrap = A.$('#mc-tsections');
       tsecWrap.innerHTML = TYPE_SECTIONS.map(typeSectionHtml).join('');
       TYPE_SECTIONS.forEach(([type]) => {
@@ -829,6 +889,35 @@ const MaterialCheck = (() => {
       const noneList = productsOfType('');
       noneSec.hidden = noneList.length === 0;
       if (noneList.length) mountProductCards(noneSec, '');
+    };
+
+    // FLIP：新增/删除/换分区/复制这些会整体重画的操作，靠"重画前记住旧位置→重画后
+    // 把每张卡片瞬间摆回旧位置→下一帧统一松开做位移过渡"制造"平滑挪动"的错觉，
+    // 而不是真的逐帧计算布局。新出现的卡片没有旧位置可比，走淡入+缩放的进场动画。
+    const drawAll = () => {
+      const before = new Map([...el.querySelectorAll('.mc-pcard')].map((c) => [c.dataset.pid, c.getBoundingClientRect()]));
+      renderSections();
+      const cards = [...el.querySelectorAll('.mc-pcard')];
+      cards.forEach((c) => {
+        const old = before.get(c.dataset.pid);
+        if (!old) { c.classList.add('mc-pcard-enter'); return; }
+        const now = c.getBoundingClientRect();
+        const dx = old.left - now.left, dy = old.top - now.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        c.style.transition = 'none';
+        c.style.transform = `translate(${dx}px, ${dy}px)`;
+      });
+      void el.offsetHeight; // 强制回流，钉住上面摆好的旧位置，避免直接跳到新位置
+      requestAnimationFrame(() => {
+        cards.forEach((c) => {
+          c.style.transition = 'transform var(--slow)';
+          c.style.transform = '';
+          c.classList.remove('mc-pcard-enter');
+        });
+        // 位移动画播完之后把内联 transition 清掉，不然它会一直只声明 transform 一个属性，
+        // 盖掉样式表里 hover 时阴影/边框颜色本该有的过渡
+        setTimeout(() => cards.forEach((c) => { c.style.transition = ''; }), 450);
+      });
     };
 
     drawAll();
