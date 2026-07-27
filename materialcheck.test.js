@@ -294,8 +294,8 @@ async function run() {
   });
 
   t('matchAgainstProduct 同分组成员之间共享词不算串词', () => {
-    const inGroupA = { id: 'pg1', name: 'GX-1', type: 'machine', groupId: 'g1', keywords: ['GX-1专属词'] };
-    const inGroupB = { id: 'pg2', name: 'GX-2', type: 'machine', groupId: 'g1', keywords: ['GX-2专属词'] };
+    const inGroupA = { id: 'pg1', name: 'GX-1', type: 'machine', groupIds: ['g1'], keywords: ['GX-1专属词'] };
+    const inGroupB = { id: 'pg2', name: 'GX-2', type: 'machine', groupIds: ['g1'], keywords: ['GX-2专属词'] };
     const groups = [{ id: 'g1', name: 'GX系列', type: 'machine', keywords: ['系列共享词'] }];
     const r = M.matchAgainstProduct('系列共享词 GX-1专属词', inGroupA, [inGroupA, inGroupB], groups);
     assert.deepStrictEqual(r.crossedKeywords, []);
@@ -303,8 +303,8 @@ async function run() {
   });
 
   t('matchAgainstProduct 不属于该分组的产品出现分组共享词时判定为串词', () => {
-    const inGroup = { id: 'pg1', name: 'GX-1', type: 'machine', groupId: 'g1', keywords: [] };
-    const outsider = { id: 'pg3', name: '独立产品', type: 'machine', groupId: null, keywords: [] };
+    const inGroup = { id: 'pg1', name: 'GX-1', type: 'machine', groupIds: ['g1'], keywords: [] };
+    const outsider = { id: 'pg3', name: '独立产品', type: 'machine', groupIds: [], keywords: [] };
     const groups = [{ id: 'g1', name: 'GX系列', type: 'machine', keywords: ['系列共享词'] }];
     const r = M.matchAgainstProduct('系列共享词', outsider, [inGroup, outsider], groups);
     assert.strictEqual(r.crossedKeywords.length, 1);
@@ -314,11 +314,41 @@ async function run() {
   });
 
   t('matchAgainstProduct 所在分组的共享词是强关联，缺了也算缺词，标注来源分组名', () => {
-    const inGroupA = { id: 'pg1', name: 'GX-1', type: 'machine', groupId: 'g1', keywords: ['GX-1专属词'] };
+    const inGroupA = { id: 'pg1', name: 'GX-1', type: 'machine', groupIds: ['g1'], keywords: ['GX-1专属词'] };
     const groups = [{ id: 'g1', name: 'GX系列', type: 'machine', keywords: ['系列共享词'] }];
     const r = M.matchAgainstProduct('GX-1专属词', inGroupA, [inGroupA], groups);
     assert.deepStrictEqual(r.missingKeywords, [{ keyword: '系列共享词', source: 'group', groupName: 'GX系列' }]);
     assert.strictEqual(r.status, 'warn');
+  });
+
+  t('matchAgainstProduct 一个产品可以同时属于多个分组，两组共享词都是强关联', () => {
+    const p = { id: 'pg1', name: 'GX-1', type: 'machine', groupIds: ['g1', 'g2'], keywords: [] };
+    const groups = [
+      { id: 'g1', name: '机器通用', type: 'machine', keywords: ['通用词A'] },
+      { id: 'g2', name: '瑞士制造机型', type: 'machine', keywords: ['瑞士精工 原装进口'] }
+    ];
+    const missAll = M.matchAgainstProduct('', p, [p], groups);
+    assert.deepStrictEqual(missAll.missingKeywords, [
+      { keyword: '通用词A', source: 'group', groupName: '机器通用' },
+      { keyword: '瑞士精工 原装进口', source: 'group', groupName: '瑞士制造机型' }
+    ]);
+    assert.strictEqual(missAll.status, 'warn');
+
+    const passBoth = M.matchAgainstProduct('通用词A 瑞士精工 原装进口', p, [p], groups);
+    assert.deepStrictEqual(passBoth.missingKeywords, []);
+    assert.strictEqual(passBoth.status, 'pass');
+  });
+
+  t('matchAgainstProduct 不在其中一个分组里的产品出现该分组共享词时仍判定为串词', () => {
+    const p = { id: 'pg1', name: 'Atem X', type: 'machine', groupIds: ['g1'], keywords: [] }; // 只在机器通用，不在瑞士制造机型
+    const groups = [
+      { id: 'g1', name: '机器通用', type: 'machine', keywords: ['通用词A'] },
+      { id: 'g2', name: '瑞士制造机型', type: 'machine', keywords: ['瑞士精工 原装进口'] }
+    ];
+    const r = M.matchAgainstProduct('通用词A 瑞士精工 原装进口', p, [p], groups);
+    assert.strictEqual(r.crossedKeywords.length, 1);
+    assert.strictEqual(r.crossedKeywords[0].fromProductName, '分组「瑞士制造机型」');
+    assert.strictEqual(r.status, 'error');
   });
 
   // ── materialcheck-store.js ────────────────────────────
@@ -431,17 +461,32 @@ async function run() {
     assert.strictEqual(saved.products[1].type, ''); // 非法 type 兜底为空，不抛错
   });
 
+  await tAsync('saveProducts 一个产品可以同时挂多个分组，类型不匹配的分组会被过滤掉', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    const saved = await store.saveProducts(PF, libId,
+      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupIds: ['g1', 'g2', 'g3'], keywords: [] }],
+      [],
+      [
+        { id: 'g1', name: '机器通用', type: 'machine', keywords: [] },
+        { id: 'g2', name: '瑞士制造机型', type: 'machine', keywords: [] },
+        { id: 'g3', name: '滤芯分组', type: 'filter', keywords: [] } // 跟产品自己的 type 不一致，应该被过滤掉
+      ]
+    );
+    assert.deepStrictEqual(saved.products[0].groupIds, ['g1', 'g2']);
+  });
+
   await tAsync('saveProducts 通用词和分组共享词也归一化成 {text,category}，且跟专属词冲突时拒绝', async () => {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;
     const saved = await store.saveProducts(PF, libId,
-      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupId: 'g1', keywords: ['GC-Multi'] }],
+      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupIds: ['g1'], keywords: ['GC-Multi'] }],
       [{ text: '全局通用词', category: '产品利益点' }],
       [{ id: 'g1', name: '机器分组', type: 'machine', keywords: ['机器组内共享词'] }]
     );
     assert.deepStrictEqual(saved.universalKeywords, [{ text: '全局通用词', category: '产品利益点' }]);
     assert.deepStrictEqual(saved.groups, [{ id: 'g1', name: '机器分组', type: 'machine', keywords: [{ text: '机器组内共享词', category: '其它' }] }]);
-    assert.strictEqual(saved.products[0].groupId, 'g1');
+    assert.deepStrictEqual(saved.products[0].groupIds, ['g1']);
 
     await assert.rejects(
       store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['冲突词'] }], [], [{ id: 'g1', name: '机器分组', type: 'machine', keywords: ['冲突词'] }]),
@@ -461,18 +506,18 @@ async function run() {
     );
 
     const saved = await store.saveProducts(PF, libId,
-      [{ id: 'pa', name: 'GC-Multi', type: 'filter', groupId: 'g1', keywords: [] }],
+      [{ id: 'pa', name: 'GC-Multi', type: 'filter', groupIds: ['g1'], keywords: [] }],
       [],
       [{ id: 'g1', name: '机器分组', type: 'machine', keywords: [] }]
     );
-    assert.strictEqual(saved.products[0].groupId, null); // 产品是 filter 类型，分组是 machine 类型，不匹配就当没分组
+    assert.deepStrictEqual(saved.products[0].groupIds, []); // 产品是 filter 类型，分组是 machine 类型，不匹配就当没这个分组
   });
 
   await tAsync('deleteLibrary/copyLibrary 会带上分组数据一起处理', async () => {
     const store = await freshStore();
     const srcId = store.getLibrary(PF).id;
     await store.saveProducts(PF, srcId,
-      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupId: 'g1', keywords: [] }, { id: 'pb', name: 'GCX XE', type: 'machine', keywords: [] }],
+      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupIds: ['g1'], keywords: [] }, { id: 'pb', name: 'GCX XE', type: 'machine', keywords: [] }],
       [],
       [{ id: 'g1', name: '机器分组', type: 'machine', keywords: ['组内词'] }]
     );
@@ -716,6 +761,27 @@ async function run() {
     assert.strictEqual(store2.records.length, 1);
   });
 
+  await tAsync('load() 兼容磁盘上老的单分组字段 groupId，读入后归一化成 groupIds 数组', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
+    const mcDir = path.join(dir, 'materialcheck');
+    await fsp.mkdir(mcDir, { recursive: true });
+    await fsp.writeFile(path.join(mcDir, 'products.json'), JSON.stringify({
+      tmall: {
+        libraries: [{
+          id: 'lib1', name: '默认词库',
+          products: [{ id: 'p1', name: 'GC-Multi', type: 'machine', groupId: 'g1', keywords: [] }],
+          universalKeywords: [],
+          groups: [{ id: 'g1', name: '机器分组', type: 'machine', keywords: [] }]
+        }]
+      },
+      jd: { libraries: [{ id: 'lib_jd', name: '默认词库', products: [], universalKeywords: [], groups: [] }] }
+    }));
+    const store = new MaterialCheckStore(mcDir, path.join(dir, 'uploads'));
+    await store.load();
+    const product = store.getLibrary('tmall').products[0];
+    assert.deepStrictEqual(product.groupIds, ['g1']);
+  });
+
   await tAsync('load() 自动把 v1 最老的扁平结构迁移成天猫命名空间下的「默认词库」', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
     const mcDir = path.join(dir, 'materialcheck');
@@ -781,8 +847,8 @@ async function run() {
     assert.deepStrictEqual(lib.groups[0].keywords, ['机器组老通用词']); // load() 只做结构迁移，不清洗成 {text,category}，那是 saveProducts 的活
     const machineProduct = lib.products.find((p) => p.id === 'p1');
     const filterProduct = lib.products.find((p) => p.id === 'p2');
-    assert.strictEqual(machineProduct.groupId, lib.groups[0].id); // 机器类产品自动加入迁移出来的分组
-    assert.strictEqual(filterProduct.groupId, null); // 滤芯类产品不受影响
+    assert.deepStrictEqual(machineProduct.groupIds, [lib.groups[0].id]); // 机器类产品自动加入迁移出来的分组
+    assert.deepStrictEqual(filterProduct.groupIds, []); // 滤芯类产品不受影响
 
     // 迁移后落盘应该已经是带 groups 的格式，不再重复触发迁移
     const raw = JSON.parse(await fsp.readFile(path.join(mcDir, 'products.json'), 'utf8'));

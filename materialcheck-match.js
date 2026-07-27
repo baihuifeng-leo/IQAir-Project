@@ -88,11 +88,13 @@ function crossCheckWarning(resolvedProduct, ocrText, products) {
  * 串词 = 其它产品专属关键词，或者不是本产品所在分组的其它分组共享词，出现在了本文本里。
  * 自定义分组：同一个分组内的成员互相共享词，不算串词也不算缺词豁免——恰恰相反，组内
  * 成员本来就该有这些共享词，缺了要报；不同分组之间、或者分组跟未分组产品之间，正常按
- * "是不是自己的词"来判定串词，group.id === product.groupId 才是"自己的"。
+ * "是不是自己的词"来判定串词，product.groupIds 包含 group.id 才算"自己的"——一个产品
+ * 可以同时属于多个分组（比如同时要求"机器通用"和"瑞士制造机型"两组的共享词）。
  *
  * 三态严重程度是固定规则，不做成可配置项：串词 > 缺词 > 通过。
  */
 function matchAgainstProduct(text, product, allProducts, groups = [], universalKeywords = []) {
+  const myGroupIds = product.groupIds || [];
   const missingKeywords = [];
   (product.keywords || [])
     .filter((kw) => findKeywordHits(text, [kw]).length === 0)
@@ -101,7 +103,7 @@ function matchAgainstProduct(text, product, allProducts, groups = [], universalK
     .filter((kw) => findKeywordHits(text, [kw]).length === 0)
     .forEach((kw) => missingKeywords.push({ keyword: keywordText(kw), source: 'universal' }));
   (groups || []).forEach((g) => {
-    if (g.id !== product.groupId) return;
+    if (!myGroupIds.includes(g.id)) return;
     (g.keywords || [])
       .filter((kw) => findKeywordHits(text, [kw]).length === 0)
       .forEach((kw) => missingKeywords.push({ keyword: keywordText(kw), source: 'group', groupName: g.name }));
@@ -115,7 +117,7 @@ function matchAgainstProduct(text, product, allProducts, groups = [], universalK
     });
   });
   (groups || []).forEach((g) => {
-    if (g.id === product.groupId) return;
+    if (myGroupIds.includes(g.id)) return;
     findKeywordHits(text, g.keywords || []).forEach((kw) => {
       crossedKeywords.push({ keyword: keywordText(kw), fromProductId: null, fromProductName: `分组「${g.name}」` });
     });

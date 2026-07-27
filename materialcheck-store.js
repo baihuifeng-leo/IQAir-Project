@@ -58,9 +58,17 @@ function migrateLegacyGroups(r, products) {
     if (!legacyWords.length) return;
     const gid = makeGroupId();
     groups.push({ id: gid, name: `${TYPE_LABEL[type]}组通用词（迁移前）`, type, keywords: legacyWords });
-    products.forEach((p) => { if (p.type === type) p.groupId = gid; });
+    products.forEach((p) => { if (p.type === type) p.groupIds.push(gid); });
   });
   return groups;
+}
+
+/** 兼容老的单分组字段 groupId（string|null）——现在一个产品可以同时属于多个分组，
+ *  所以磁盘/前端传来的可能是老的 groupId，也可能是新的 groupIds 数组，统一成数组。 */
+function normalizeGroupIds(p) {
+  if (Array.isArray(p && p.groupIds)) return p.groupIds.filter((id) => typeof id === 'string' && id);
+  if (p && p.groupId) return [p.groupId];
+  return [];
 }
 
 function normalizeLibrary(raw) {
@@ -68,7 +76,7 @@ function normalizeLibrary(raw) {
   const hasGroups = Array.isArray(r.groups);
   const products = (Array.isArray(r.products) ? r.products : []).map((p) => ({
     id: p.id, name: p.name, type: p.type,
-    groupId: hasGroups ? (p.groupId || null) : null,
+    groupIds: hasGroups ? normalizeGroupIds(p) : [],
     keywords: Array.isArray(p.keywords) ? p.keywords : []
   }));
   const groups = hasGroups
@@ -299,13 +307,17 @@ class MaterialCheckStore {
     const groupById = new Map(cleanGroups.map((g) => [g.id, g]));
     const cleanProducts = (products || []).map((p) => {
       const type = match.PRODUCT_TYPES.includes(p.type) ? p.type : '';
-      const group = p.groupId ? groupById.get(p.groupId) : null;
+      // 分组的类型必须跟产品自己的类型一致，否则视为没这个分组——正常操作下前端不会产出这种数据，这里只是兜底；
+      // 一个产品现在可以同时属于多个分组（比如"机器通用"+"瑞士制造机型"两个分组的共享词都要求）
+      const groupIds = normalizeGroupIds(p).filter((gid) => {
+        const group = groupById.get(gid);
+        return group && group.type === type;
+      });
       return {
         id: p.id,
         name: String(p.name || '').trim(),
         type,
-        // 分组的类型必须跟产品自己的类型一致，否则视为没分组——正常操作下前端不会产出这种数据，这里只是兜底
-        groupId: (group && group.type === type) ? group.id : null,
+        groupIds,
         keywords: cleanKeywords(p.keywords)
       };
     });

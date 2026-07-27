@@ -463,8 +463,11 @@ const MaterialCheck = (() => {
   /** 产品卡片：groupsOfType 用来显示"当前属于哪个分组"（分组成员是在分组卡片上勾选的，这里只读展示）；
    *  siblings 是同一批产品（未分类区就是未分类的那批），用来生成"复制到…"的目标产品列表和拖拽排序范围。 */
   function productCardHtml(p, groupsOfType, siblings) {
-    const group = (groupsOfType || []).find((g) => g.id === p.groupId);
-    const groupLabel = group ? `<span class="mc-pcard-group">分组：${escapeHtml(group.name)}</span>` : '';
+    const myGroupIds = p.groupIds || [];
+    const myGroups = (groupsOfType || []).filter((g) => myGroupIds.includes(g.id));
+    const groupLabel = myGroups.length
+      ? `<span class="mc-pcard-group">分组：${myGroups.map((g) => escapeHtml(g.name)).join('、')}</span>`
+      : '';
     const copyTargets = (siblings || []).filter((s) => s.id !== p.id);
     const copyOptionsHtml = copyTargets.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
     return `
@@ -494,7 +497,7 @@ const MaterialCheck = (() => {
   function groupCardHtml(g, typeProducts) {
     const memberBoxes = (typeProducts || []).map((p) => `
         <label class="mc-gmember">
-          <input type="checkbox" data-role="member" data-pid="${escapeHtml(p.id)}" ${p.groupId === g.id ? 'checked' : ''}>
+          <input type="checkbox" data-role="member" data-pid="${escapeHtml(p.id)}" ${(p.groupIds || []).includes(g.id) ? 'checked' : ''}>
           <span data-role="mname">${escapeHtml(p.name)}</span>
         </label>`).join('') || '<span class="mc-chip-empty">这个分区还没有产品</span>';
     return `
@@ -638,7 +641,7 @@ const MaterialCheck = (() => {
           });
           scheduleAutoSave();
         };
-        card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; p.groupId = null; drawAll(); scheduleAutoSave(); };
+        card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; p.groupIds = []; drawAll(); scheduleAutoSave(); };
         mountKeywordEditor(card, p.keywords, () => {
           card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
           scheduleAutoSave();
@@ -695,14 +698,16 @@ const MaterialCheck = (() => {
           gcard.querySelectorAll('[data-role="member"]').forEach((cb) => {
             cb.onchange = (e) => {
               const product = products.find((x) => x.id === e.target.dataset.pid);
-              product.groupId = e.target.checked ? g.id : null;
+              const ids = new Set(product.groupIds || []);
+              if (e.target.checked) ids.add(g.id); else ids.delete(g.id);
+              product.groupIds = [...ids];
               drawAll();
               scheduleAutoSave();
             };
           });
           gcard.querySelector('[data-role="gdel"]').onclick = () => {
-            if (!confirm(`删除分组「${g.name}」？组内产品会变回未分组，这个分组的共享词会一并清除。`)) return;
-            products.forEach((p) => { if (p.groupId === g.id) p.groupId = null; });
+            if (!confirm(`删除分组「${g.name}」？组内产品会退出这个分组（如果还在其它分组里，那些不受影响），这个分组的共享词会一并清除。`)) return;
+            products.forEach((p) => { p.groupIds = (p.groupIds || []).filter((id) => id !== g.id); });
             groups = groups.filter((x) => x.id !== g.id);
             drawAll();
             scheduleAutoSave();
@@ -716,7 +721,7 @@ const MaterialCheck = (() => {
 
         mountProductCards(root, type);
         root.querySelector('[data-role="add-product"]').onclick = () => {
-          products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, groupId: null, keywords: [] });
+          products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, groupIds: [], keywords: [] });
           drawAll();
           scheduleAutoSave();
         };
