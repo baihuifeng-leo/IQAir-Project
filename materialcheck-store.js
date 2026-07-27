@@ -77,7 +77,9 @@ function normalizeLibrary(raw) {
   const products = (Array.isArray(r.products) ? r.products : []).map((p) => ({
     id: p.id, name: p.name, type: p.type,
     groupIds: hasGroups ? normalizeGroupIds(p) : [],
-    keywords: Array.isArray(p.keywords) ? p.keywords : []
+    keywords: Array.isArray(p.keywords) ? p.keywords : [],
+    // 没配置过预期价格的产品（老数据/还没填的产品）就是 null，不参与价格校验
+    price: (typeof p.price === 'number' && Number.isFinite(p.price)) ? p.price : null
   }));
   const groups = hasGroups
     ? r.groups.map((g) => ({
@@ -313,12 +315,14 @@ class MaterialCheckStore {
         const group = groupById.get(gid);
         return group && group.type === type;
       });
+      const price = (p.price === '' || p.price == null) ? null : Number(p.price);
       return {
         id: p.id,
         name: String(p.name || '').trim(),
         type,
         groupIds,
-        keywords: cleanKeywords(p.keywords)
+        keywords: cleanKeywords(p.keywords),
+        price: Number.isFinite(price) && price > 0 ? price : null
       };
     });
 
@@ -427,11 +431,11 @@ class MaterialCheckStore {
   }
 
   async _finish({ platform, libraryId, product, allProducts, groups, universalKeywords, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning }) {
-    const { missingKeywords, crossedKeywords, status } = match.matchAgainstProduct(ocrText, product, allProducts, groups, universalKeywords);
+    const { missingKeywords, crossedKeywords, priceIssue, status } = match.matchAgainstProduct(ocrText, product, allProducts, groups, universalKeywords);
     const record = {
       id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId,
       filename, imagePath, productId: product.id, productName: product.name, matchMethod: method,
-      ocrText, ocrConfidence, missingKeywords, crossedKeywords, status, warning
+      ocrText, ocrConfidence, missingKeywords, crossedKeywords, priceIssue, status, warning
     };
     await this.append(record);
     return record;

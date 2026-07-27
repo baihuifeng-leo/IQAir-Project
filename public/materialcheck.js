@@ -58,6 +58,13 @@ const MaterialCheck = (() => {
     return text;
   }
 
+  /** priceIssue = {expected, found}，found 是图里实际找到的候选价格数字数组（可能是空数组）。 */
+  function priceIssueLabel(pi) {
+    const expected = `￥${pi.expected}`;
+    if (!pi.found || !pi.found.length) return `${expected}（图里没找到价格）`;
+    return `${expected}（图里写的是 ￥${pi.found.join('、￥')}）`;
+  }
+
   async function loadLibraries() {
     const j = await call(`/api/materialcheck/libraries?platform=${encodeURIComponent(platform)}`);
     libraries = j.libraries;
@@ -228,6 +235,9 @@ const MaterialCheck = (() => {
     if (result.crossedKeywords?.length) {
       detail += `<div class="mc-chip-row">串词：${result.crossedKeywords.map((c) => `<span class="mc-chip mc-chip-bad">${escapeHtml(c.keyword)} · 属于「${escapeHtml(c.fromProductName)}」</span>`).join('')}</div>`;
     }
+    if (result.priceIssue) {
+      detail += `<div class="mc-chip-row">价格不对：<span class="mc-chip mc-chip-bad">${priceIssueLabel(result.priceIssue)}</span></div>`;
+    }
     if (result.warning) detail += `<div class="mc-warning">⚠ ${escapeHtml(result.warning)}</div>`;
 
     row.innerHTML = `
@@ -347,10 +357,14 @@ const MaterialCheck = (() => {
     });
     const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-warn">${missingKeywordLabel(k)}</span>`).join('') || '（无缺词）';
     const crossed = (r.crossedKeywords || []).map((c) => `<span class="mc-chip mc-chip-bad">${escapeHtml(c.keyword)} · 属于「${escapeHtml(c.fromProductName)}」</span>`).join('') || '（无串词）';
+    const priceRow = r.priceIssue
+      ? `<div class="mc-chip-row"><b>价格：</b><span class="mc-chip mc-chip-bad">${priceIssueLabel(r.priceIssue)}</span></div>`
+      : '';
     detailBody.innerHTML = `
       <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')}</p>
       <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
       <div class="mc-chip-row"><b>串词：</b>${crossed}</div>
+      ${priceRow}
       <pre class="mc-ocr-text">${html}</pre>`;
     detailMask.hidden = false;
   }
@@ -475,6 +489,7 @@ const MaterialCheck = (() => {
         <div class="mc-pcard-head">
           <button type="button" class="mc-pcard-handle" data-role="handle" aria-label="拖动调整「${escapeHtml(p.name)}」的顺序" title="拖动调整顺序">⠿</button>
           <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="名称/型号…" aria-label="产品名称 / 型号">
+          <input class="mc-pcard-price" data-role="price" type="number" min="0" step="1" value="${p.price != null ? p.price : ''}" placeholder="价格" aria-label="预期价格" title="设置后会强校验：素材图里的价格必须跟这个一致，不一致直接判报错">
           <input class="mc-kw-input-inline" placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
           <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
           <button class="mc-btn" data-role="kw-add">添加</button>
@@ -641,6 +656,11 @@ const MaterialCheck = (() => {
           });
           scheduleAutoSave();
         };
+        card.querySelector('[data-role="price"]').oninput = (e) => {
+          const v = e.target.value.trim();
+          p.price = v === '' ? null : Number(v);
+          scheduleAutoSave();
+        };
         card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; p.groupIds = []; drawAll(); scheduleAutoSave(); };
         mountKeywordEditor(card, p.keywords, () => {
           card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
@@ -721,7 +741,7 @@ const MaterialCheck = (() => {
 
         mountProductCards(root, type);
         root.querySelector('[data-role="add-product"]').onclick = () => {
-          products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, groupIds: [], keywords: [] });
+          products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, groupIds: [], keywords: [], price: null });
           drawAll();
           scheduleAutoSave();
         };

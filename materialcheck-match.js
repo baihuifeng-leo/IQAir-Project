@@ -24,6 +24,43 @@ function findKeywordHits(text, keywords) {
 }
 
 /**
+ * 从 OCR 文字里提取"看起来像价格"的数字。PaddleOCR 按视觉位置逐行识别，¥/￥ 符号
+ * 跟数字的前后顺序、是否隔着换行都不固定（同一张图有时候是"775\n¥"，有时候是
+ * "￥\n399"），所以不要求符号紧贴数字，只要求隔着不超过几个字符/一次换行。
+ * "元"作为后缀就不用符号也能判定（比如"选购价5880元"）。
+ */
+function extractPriceCandidates(text) {
+  const s = String(text || '');
+  const nums = new Set();
+  const patterns = [
+    /[¥￥][\s\S]{0,4}?([\d,]{2,7})/g,
+    /([\d,]{2,7})[\s\S]{0,4}?[¥￥]/g,
+    /([\d,]{2,7})\s*元/g
+  ];
+  patterns.forEach((re) => {
+    let m;
+    while ((m = re.exec(s))) {
+      const n = Number(m[1].replace(/,/g, ''));
+      if (Number.isFinite(n) && n > 0) nums.add(n);
+    }
+  });
+  return nums;
+}
+
+/**
+ * 价格强校验：product.price 配置了预期价格，就必须在素材文字里找到一模一样的数字，
+ * 找不到（不管是压根没出现价格，还是出现了别的数字）都算价格不对——这条比缺词/
+ * 串词都更需要"零容忍"，因为写错价、写低价直接导致过投诉。没配置 price 的产品
+ * 不做这项校验（历史数据/还没配置的产品不应该被误判）。
+ */
+function checkPrice(text, product) {
+  if (product.price == null) return null;
+  const candidates = extractPriceCandidates(text);
+  if (candidates.has(product.price)) return null;
+  return { expected: product.price, found: [...candidates] };
+}
+
+/**
  * 校验关键词库唯一性：同一个词不能出现在两处——产品之间、产品词与通用词之间、
  * 或者跟自定义分组的共享词之间都不行。一个词只能属于唯一一个"归属"。
  * groups 是可选的第三参数（[{id,name,type,keywords}, ...]），不传时行为跟老版本
@@ -91,7 +128,10 @@ function crossCheckWarning(resolvedProduct, ocrText, products) {
  * "是不是自己的词"来判定串词，product.groupIds 包含 group.id 才算"自己的"——一个产品
  * 可以同时属于多个分组（比如同时要求"机器通用"和"瑞士制造机型"两组的共享词）。
  *
- * 三态严重程度是固定规则，不做成可配置项：串词 > 缺词 > 通过。
+ * 价格 = product.price 配置了预期价格时的强校验，跟串词同级——图里的价格跟预期
+ * 对不上（不管是写错了还是压根没出现），都直接算报错，不走缺词那套"提醒"档位。
+ *
+ * 三态严重程度是固定规则，不做成可配置项：串词/价格不对 > 缺词 > 通过。
  */
 function matchAgainstProduct(text, product, allProducts, groups = [], universalKeywords = []) {
   const myGroupIds = product.groupIds || [];
@@ -123,12 +163,15 @@ function matchAgainstProduct(text, product, allProducts, groups = [], universalK
     });
   });
 
-  const status = crossedKeywords.length > 0 ? 'error' : missingKeywords.length > 0 ? 'warn' : 'pass';
-  return { missingKeywords, crossedKeywords, status };
+  const priceIssue = checkPrice(text, product);
+
+  const status = (crossedKeywords.length > 0 || priceIssue) ? 'error' : missingKeywords.length > 0 ? 'warn' : 'pass';
+  return { missingKeywords, crossedKeywords, priceIssue, status };
 }
 
 module.exports = {
   CATEGORIES, PRODUCT_TYPES,
   normalize, keywordText, keywordCategory, findKeywordHits, validateLibrary, resolveByFilename,
-  resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct
+  resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct,
+  extractPriceCandidates, checkPrice
 };

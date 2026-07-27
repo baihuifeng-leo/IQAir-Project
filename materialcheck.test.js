@@ -351,6 +351,38 @@ async function run() {
     assert.strictEqual(r.status, 'error');
   });
 
+  t('extractPriceCandidates 能识别符号跟数字隔着换行、或数字在符号前面的情况', () => {
+    assert.deepStrictEqual(M.extractPriceCandidates('预估活动到手价\n775\n￥'), new Set([775]));
+    assert.deepStrictEqual(M.extractPriceCandidates('晒单即享\n￥399'), new Set([399]));
+    assert.deepStrictEqual(M.extractPriceCandidates('选购价5880元'), new Set([5880]));
+    assert.deepStrictEqual(M.extractPriceCandidates('没有任何价格的文字'), new Set());
+  });
+
+  t('checkPrice 没配置 price 的产品不校验；价格对上/图里没价格/价格对不上分别处理', () => {
+    const noPrice = { id: 'p1', name: 'X', price: null };
+    assert.strictEqual(M.checkPrice('随便什么文字￥299', noPrice), null);
+
+    const withPrice = { id: 'p2', name: 'Y', price: 399 };
+    assert.strictEqual(M.checkPrice('晒单即享￥399', withPrice), null); // 价格对上，没问题
+
+    const missing = M.checkPrice('这张图完全没有价格数字', withPrice);
+    assert.deepStrictEqual(missing, { expected: 399, found: [] });
+
+    const wrong = M.checkPrice('促销价￥299', withPrice);
+    assert.deepStrictEqual(wrong, { expected: 399, found: [299] });
+  });
+
+  t('matchAgainstProduct 价格不对时归为报错状态，跟串词同级', () => {
+    const p = { id: 'p1', name: '空气净化器', type: 'machine', groupIds: [], keywords: ['空气净化器'], price: 399 };
+    const rWrong = M.matchAgainstProduct('空气净化器 促销价￥299', p, [p]);
+    assert.deepStrictEqual(rWrong.priceIssue, { expected: 399, found: [299] });
+    assert.strictEqual(rWrong.status, 'error');
+
+    const rOk = M.matchAgainstProduct('空气净化器 促销价￥399', p, [p]);
+    assert.strictEqual(rOk.priceIssue, null);
+    assert.strictEqual(rOk.status, 'pass');
+  });
+
   // ── materialcheck-store.js ────────────────────────────
   const { MaterialCheckStore, PLATFORMS } = require('./materialcheck-store.js');
   const stubOcr = (text, confidence = 1) => async () => ({ text, confidence });
@@ -447,6 +479,23 @@ async function run() {
   await tAsync('saveProducts 拒绝不存在的词库 id', async () => {
     const store = await freshStore();
     await assert.rejects(store.saveProducts(PF, 'lib_不存在', [], []), /不存在/);
+  });
+
+  await tAsync('saveProducts 清洗 price 字段：合法数字保留，非法/未填的归一化成 null', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    const saved = await store.saveProducts(PF, libId, [
+      { id: 'pa', name: 'A', price: 399, keywords: [] },
+      { id: 'pb', name: 'B', price: '299', keywords: [] }, // 前端 number input 传字符串也要认
+      { id: 'pc', name: 'C', price: -50, keywords: [] }, // 非正数当没填
+      { id: 'pd', name: 'D', price: '', keywords: [] },
+      { id: 'pe', name: 'E', keywords: [] } // 完全没给 price 字段
+    ], []);
+    assert.strictEqual(saved.products[0].price, 399);
+    assert.strictEqual(saved.products[1].price, 299);
+    assert.strictEqual(saved.products[2].price, null);
+    assert.strictEqual(saved.products[3].price, null);
+    assert.strictEqual(saved.products[4].price, null);
   });
 
   await tAsync('saveProducts 把关键词归一化成 {text,category} 对象，产品 type 校验非法值兜底为空', async () => {
@@ -679,6 +728,25 @@ async function run() {
     });
     assert.strictEqual(result.status, 'error');
     assert.strictEqual(result.crossedKeywords[0].fromProductName, 'GCX XE');
+  });
+
+  await tAsync('detectFile 配置了 price 的产品，图里价格不对时报错并把 priceIssue 写进历史记录', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await store.saveProducts(PF, libId,
+      [
+        { id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi', '抗菌滤网认证号XXX'], price: 399 },
+        { id: 'pb', name: 'GCX XE', keywords: ['GCX XE', '静音悬浮马达'] }
+      ],
+      ['7天无理由退换']
+    );
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF, libraryId: libId,
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX 7天无理由退换 ￥299')
+    });
+    assert.strictEqual(result.status, 'error');
+    assert.deepStrictEqual(result.priceIssue, { expected: 399, found: [299] });
+    assert.deepStrictEqual(store.records[0].priceIssue, { expected: 399, found: [299] });
   });
 
   await tAsync('listRecords 按产品和状态过滤，最新的排最前', async () => {

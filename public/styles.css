@@ -2040,6 +2040,7 @@ body.rpt-presenting .rpt-wm-note {
    名称和关键词输入框各占剩余空间一半（flex-basis 相同），其它都是固定宽度的控件 */
 .mc-pcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .mc-pcard-name { flex: 1 1 100px; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
+.mc-pcard-price { flex: 0 0 76px; width: 76px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; }
 .mc-kw-input-inline { flex: 1 1 100px; min-width: 90px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 .mc-pcard-move { flex: 0 0 auto; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
