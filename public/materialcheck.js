@@ -457,12 +457,22 @@ const MaterialCheck = (() => {
   }
 
   /** 卡片封面图：手动传的封面（imageUrl）优先，其次是最近一条已匹配到这个产品的检测记录图（autoImage）；
-   *  两者都没有就是占位图标——灰底 + 产品名首字。 */
+   *  两者都没有就是占位图标——分区色底 + 完整产品名（不再缩成首字，名字长的话最多显示三行）。 */
   function productCoverHtml(p) {
     const src = p.imageUrl || p.autoImage;
     if (src) return `<img data-role="cover-img" src="${escapeHtml(src)}" alt="" loading="lazy">`;
-    const initial = escapeHtml((String(p.name || '').trim()[0]) || '?');
-    return `<div class="mc-pcard-cover-empty" data-role="cover-empty">${initial}</div>`;
+    const name = escapeHtml(String(p.name || '').trim() || '未命名产品');
+    return `<div class="mc-pcard-cover-empty" data-role="cover-empty">${name}</div>`;
+  }
+
+  /** 封面操作按钮：删除封面只在确实传过手动封面（imageUrl）时才出现——
+   *  没传过就没什么好删的，删了也只是退回 autoImage/占位图，不是清空数据。 */
+  function coverActionsHtml(p) {
+    return `
+      <div class="mc-pcard-cover-actions">
+        <button type="button" class="mc-pcard-cover-btn" data-role="cover-btn" title="更换封面图">更换封面</button>
+        ${p.imageUrl ? '<button type="button" class="mc-pcard-cover-btn" data-role="cover-remove" title="删除封面图，恢复自动封面">删除封面</button>' : ''}
+      </div>`;
   }
 
   /** 产品卡片：siblings 是同一批产品（未分类区就是未分类的那批），用来生成"复制到…"的目标产品列表和拖拽排序范围。 */
@@ -473,7 +483,7 @@ const MaterialCheck = (() => {
       <div class="mc-pcard" data-pid="${escapeHtml(p.id)}">
         <div class="mc-pcard-cover" data-role="cover">
           ${productCoverHtml(p)}
-          <button type="button" class="mc-pcard-cover-btn" data-role="cover-btn" title="更换封面图">更换封面</button>
+          ${coverActionsHtml(p)}
           <input type="file" class="mc-pcard-cover-file" data-role="cover-file" accept="image/png,image/jpeg,image/webp" aria-label="上传「${escapeHtml(p.name)}」的封面图" hidden>
         </div>
         <div class="mc-pcard-body">
@@ -818,10 +828,27 @@ const MaterialCheck = (() => {
           scheduleAutoSave();
         });
         // 封面图：优先级最高的是这里手动传的（imageUrl），复用已有的通用图片直传接口，
-        // 不经过素材质检自己的 OCR 流水线——这只是换一张展示图，不是要发起一次检测
-        const coverBtn = card.querySelector('[data-role="cover-btn"]');
+        // 不经过素材质检自己的 OCR 流水线——这只是换一张展示图，不是要发起一次检测。
+        // "更换封面"/"删除封面"按钮是否显示取决于当前有没有手动封面，改动后要整体重画
+        // 封面区（图/占位 + 操作按钮），所以抽成 refreshCover 统一处理，两条路径都调它。
+        const cover = card.querySelector('[data-role="cover"]');
         const coverFile = card.querySelector('[data-role="cover-file"]');
-        coverBtn.onclick = () => coverFile.click();
+        const wireCoverButtons = () => {
+          cover.querySelector('[data-role="cover-btn"]').onclick = () => coverFile.click();
+          const removeBtn = cover.querySelector('[data-role="cover-remove"]');
+          if (removeBtn) removeBtn.onclick = () => {
+            p.imageUrl = null;
+            refreshCover();
+            scheduleAutoSave();
+          };
+        };
+        const refreshCover = () => {
+          cover.querySelectorAll('[data-role="cover-img"], [data-role="cover-empty"], .mc-pcard-cover-actions').forEach((n) => n.remove());
+          cover.insertAdjacentHTML('afterbegin', productCoverHtml(p));
+          coverFile.insertAdjacentHTML('beforebegin', coverActionsHtml(p));
+          wireCoverButtons();
+        };
+        wireCoverButtons();
         coverFile.onchange = async (e) => {
           const file = e.target.files[0];
           e.target.value = '';
@@ -829,9 +856,7 @@ const MaterialCheck = (() => {
           try {
             const result = await call('/api/upload', { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
             p.imageUrl = result.url;
-            const cover = card.querySelector('[data-role="cover"]');
-            cover.querySelector('[data-role="cover-img"], [data-role="cover-empty"]').remove();
-            coverBtn.insertAdjacentHTML('beforebegin', productCoverHtml(p));
+            refreshCover();
             scheduleAutoSave();
           } catch (err) { A.toast(err.message, 'bad'); }
         };

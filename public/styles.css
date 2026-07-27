@@ -2015,8 +2015,9 @@ body.rpt-presenting .rpt-wm-note {
 .mc-tsec-none .mc-tsection-head h3 { color: var(--dimmer); }
 
 /* 产品卡片：响应式多列网格，同一分区内拖拽排序限定在网格内部；
-   卡片本身固定高度，关键词多的时候内部滚动，保证网格里每张卡片视觉上大小一致 */
-.mc-pcards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; max-height: 640px; overflow-y: auto; padding: 4px 4px 10px; }
+   卡片本身固定高度，关键词多的时候内部滚动，保证网格里每张卡片视觉上大小一致。
+   分区本身不单独限高/内部滚动——铺开显示全部卡片，整页跟着 #mc-scroll 一起滑动 */
+.mc-pcards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; padding: 4px 4px 10px; }
 .mc-pcard {
   position: relative; display: flex; flex-direction: column; height: 440px;
   background: var(--surface); border: 1px solid var(--line-soft); border-top: 3px solid var(--mc-sec, var(--line-soft));
@@ -2029,21 +2030,30 @@ body.rpt-presenting .rpt-wm-note {
 /* 删除卡片：先让它自己缩小淡出，等这段过渡播完才真的从数据里摘掉、触发重画 */
 .mc-pcard-leaving { opacity: 0; transform: scale(0.92); pointer-events: none; }
 
-/* 封面图：固定高度，铺满宽度裁切；占位态是分区色的渐变底 + 产品名首字；
-   "更换封面"悬浮在右下角，默认隐藏，hover/聚焦卡片时才显出来 */
+/* 封面图：固定高度的展示区，但图片本身用 contain 完整显示、不裁切——
+   素材原图是什么比例就按什么比例收进这个区域，长宽不够的地方露出背后的底色；
+   占位态是分区色的渐变底 + 完整产品名（最多三行，超出省略号）；
+   "更换封面/删除封面"悬浮在右下角，默认隐藏，hover/聚焦卡片时才显出来 */
 .mc-pcard-cover { position: relative; flex: 0 0 auto; height: 132px; background: var(--field-bg); overflow: hidden; }
-.mc-pcard-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mc-pcard-cover img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .mc-pcard-cover-empty {
-  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-  font-size: 44px; font-weight: 800; color: var(--mc-sec, var(--dimmer));
+  width: 100%; height: 100%; padding: 10px 14px; text-align: center;
+  font-size: 15px; font-weight: 700; line-height: 1.35;
+  color: var(--mc-sec, var(--dimmer));
   background: linear-gradient(135deg, color-mix(in srgb, var(--mc-sec, var(--line-soft)) 18%, var(--field-bg)), var(--field-bg));
+  /* -webkit-box（旧版 flexbox）而不是标准 flex：这样 -webkit-line-clamp 才能生效，
+     顺便用 -webkit-box-pack/-webkit-box-align 兼职做水平垂直居中，不用再叠一层 flex */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  -webkit-box-pack: center; -webkit-box-align: center;
+  overflow: hidden;
 }
+.mc-pcard-cover-actions { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity var(--fast); }
+.mc-pcard:hover .mc-pcard-cover-actions, .mc-pcard-cover-actions:focus-within { opacity: 1; }
 .mc-pcard-cover-btn {
-  position: absolute; right: 8px; bottom: 8px; opacity: 0; transition: opacity var(--fast), background var(--fast);
+  transition: background var(--fast);
   padding: 5px 10px; border-radius: 999px; border: none; cursor: pointer;
   background: var(--scrim); color: #fff; font-size: 11.5px;
 }
-.mc-pcard:hover .mc-pcard-cover-btn, .mc-pcard-cover-btn:focus-visible { opacity: 1; }
 .mc-pcard-cover-btn:hover { background: #04070dcc; }
 
 .mc-pcard-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px 14px; gap: 8px; }
