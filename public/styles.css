@@ -1911,8 +1911,12 @@ body.rpt-presenting .rpt-wm-note {
 .mc-subtab { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line-soft); background: transparent; color: var(--dim); font-size: 12.5px; cursor: pointer; transition: background var(--fast), color var(--fast); }
 .mc-subtab.is-active { background: var(--mint-dim); color: var(--mint); border-color: var(--mint); }
 
+/* 检测页上传入口按素材比例拆成两个并排的区域——1:1 和 3:4 素材的必需词不一样，
+   拖进哪个区域就按哪个比例判定，不需要再额外选一次 */
+.mc-upload-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .mc-upload-zone { border: 2px dashed var(--line-soft); border-radius: 14px; padding: 40px; text-align: center; color: var(--dim); cursor: pointer; transition: border-color var(--fast); }
-.mc-upload-zone:hover { border-color: var(--mint); }
+.mc-upload-zone strong { display: block; margin-bottom: 6px; color: var(--text); font-size: 14px; }
+.mc-upload-zone:hover, .mc-upload-zone.drop-hot { border-color: var(--mint); }
 
 .mc-batch-summary { margin: 14px 0; font-size: 13px; color: var(--dim); font-family: var(--f-mono); }
 
@@ -2015,11 +2019,12 @@ body.rpt-presenting .rpt-wm-note {
 .mc-tsec-none .mc-tsection-head h3 { color: var(--dimmer); }
 
 /* 产品卡片：响应式多列网格，同一分区内拖拽排序限定在网格内部；
-   卡片本身固定高度，关键词多的时候内部滚动，保证网格里每张卡片视觉上大小一致。
+   卡片高度自适应内容——关键词要全部平铺展示出来（不再固定高度+内部滚动），
+   词多的产品卡片自然更高，网格里同一行的卡片不强行等高（align-items:start）。
    分区本身不单独限高/内部滚动——铺开显示全部卡片，整页跟着 #mc-scroll 一起滑动 */
-.mc-pcards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; padding: 4px 4px 10px; }
+.mc-pcards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; gap: 18px; padding: 4px 4px 10px; }
 .mc-pcard {
-  position: relative; display: flex; flex-direction: column; height: 440px;
+  position: relative; display: flex; flex-direction: column;
   background: var(--surface); border: 1px solid var(--line-soft); border-top: 3px solid var(--mc-sec, var(--line-soft));
   border-radius: 14px; overflow: hidden;
   transition: box-shadow var(--fast), border-color var(--fast), transform var(--fast), opacity 0.16s var(--ease);
@@ -2065,10 +2070,11 @@ body.rpt-presenting .rpt-wm-note {
 .mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 .mc-pcard-move { flex: 0 0 auto; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
 /* 加关键词的输入行，单独一行，跟卡片头部的产品属性控件分开 */
-.mc-pcard-kwrow { display: flex; align-items: center; gap: 8px; }
+.mc-pcard-kwrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mc-kw-input-inline { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
-/* 关键词区：固定高度内部滚动，卡片总高度不会因为词多词少而变——这是"统一大小卡片"的关键 */
-.mc-chip-editor-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.mc-ratio-select { flex: 0 0 auto; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; }
+/* 关键词区：不再固定高度/内部滚动——全部平铺展示，卡片跟着词数自然变高 */
+.mc-chip-editor-wrap { padding-right: 4px; }
 
 /* 拖拽手柄：单独的小按钮而不是整张卡片可拖，避免跟卡片里的输入框/下拉框抢手势 */
 .mc-pcard-handle {
@@ -2103,12 +2109,24 @@ body.rpt-presenting .rpt-wm-note {
 .mc-cat-badge-select.mc-cat-model   { color: var(--blue); }
 .mc-cat-badge-select.mc-cat-other   { color: var(--dim); }
 
+/* 适用比例徽标：通用词不特别显眼（半透明、跟分类徽标区分开），1:1/3:4 专属词
+   各自一个小色块——扫一眼平铺的关键词列表就能看出哪些词是比例专属的 */
+.mc-ratio-badge-select {
+  appearance: none; -webkit-appearance: none; border: none; cursor: pointer; font-family: inherit;
+  border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 700; margin-left: 2px;
+}
+.mc-ratio-badge-select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.mc-ratio-both { background: transparent; color: var(--dimmer); opacity: 0.6; }
+.mc-ratio-11   { background: #143a2e; color: #7be0b0; }
+.mc-ratio-34   { background: #3a1a3a; color: #e0a3f0; }
+
 /* 批量自动识别的审核页 */
 .mc-ab-unresolved { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-soft); margin-bottom: 8px; background: var(--surface); }
 .mc-ab-group { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
 .mc-ab-group-head { display: flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 8px; }
 .mc-ab-cands { display: flex; flex-wrap: wrap; gap: 8px 14px; }
 .mc-ab-cand { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.mc-ab-cand-ratio { font-size: 10px; padding: 1px 6px; border-radius: 5px; }
 .mc-ab-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; position: sticky; bottom: 0; background: var(--surface); padding-top: 10px; }
 
 .mc-lib-error { color: var(--bad-text); font-size: 12.5px; margin: 0 0 16px; }
@@ -2219,6 +2237,8 @@ body.rpt-presenting .rpt-wm-note {
 [data-theme="light"] .mc-cat-extra { background: #eae2fb; color: #6a44c9; }
 [data-theme="light"] .mc-cat-subsidy { background: #fbdcea; color: #a52e6b; }
 [data-theme="light"] .mc-cat-price { background: #d8f2f7; color: #14707f; }
+[data-theme="light"] .mc-ratio-11 { background: #d8f1ea; color: #0f7a63; }
+[data-theme="light"] .mc-ratio-34 { background: #f2e2fb; color: #7a2ea3; }
 
 /* 素材质检·分区色条：深色下的亮色在浅底上偏刺眼/对比不够，换成同色系压深的版本 */
 [data-theme="light"] .mc-tsec-machine   { --mc-sec: #3358c9; }

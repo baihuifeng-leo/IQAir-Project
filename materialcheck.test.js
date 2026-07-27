@@ -296,6 +296,48 @@ async function run() {
     assert.strictEqual(rOk.status, 'pass');
   });
 
+  t('keywordRatio 兼容纯字符串和脏数据，没配置/不合法值一律归到 both', () => {
+    assert.strictEqual(M.keywordRatio('纯字符串词'), 'both');
+    assert.strictEqual(M.keywordRatio({ text: '词', ratio: '1:1' }), '1:1');
+    assert.strictEqual(M.keywordRatio({ text: '词', ratio: '3:4' }), '3:4');
+    assert.strictEqual(M.keywordRatio({ text: '词', ratio: '不合法比例' }), 'both');
+    assert.strictEqual(M.keywordRatio({ text: '词' }), 'both');
+  });
+
+  t('keywordApplies：没传 materialRatio 时不过滤（兼容旧调用方）；传了就按 both/精确匹配过滤', () => {
+    const kwBoth = { text: 'x', ratio: 'both' };
+    const kw11 = { text: 'x', ratio: '1:1' };
+    const kw34 = { text: 'x', ratio: '3:4' };
+    assert.strictEqual(M.keywordApplies(kw11, undefined), true);
+    assert.strictEqual(M.keywordApplies(kwBoth, '1:1'), true);
+    assert.strictEqual(M.keywordApplies(kwBoth, '3:4'), true);
+    assert.strictEqual(M.keywordApplies(kw11, '1:1'), true);
+    assert.strictEqual(M.keywordApplies(kw11, '3:4'), false);
+    assert.strictEqual(M.keywordApplies(kw34, '1:1'), false);
+    assert.strictEqual(M.keywordApplies(kw34, '3:4'), true);
+  });
+
+  t('matchAgainstProduct 按素材比例过滤必需词：1:1 素材不因缺了仅3:4专属词报缺词，反之亦然', () => {
+    const p = {
+      id: 'p1', name: '满赠产品',
+      keywords: [
+        { text: '八大数据', ratio: 'both' },
+        { text: '赠品套装', ratio: '3:4' },
+        { text: '实时监测', ratio: '1:1' }
+      ]
+    };
+    const rFor11 = M.matchAgainstProduct('八大数据 实时监测', p, [p], '1:1');
+    assert.deepStrictEqual(rFor11.missingKeywords, []); // 仅3:4专属的"赠品套装"不该被要求
+    assert.strictEqual(rFor11.status, 'pass');
+
+    const rFor34 = M.matchAgainstProduct('八大数据 赠品套装', p, [p], '3:4');
+    assert.deepStrictEqual(rFor34.missingKeywords, []); // 仅1:1专属的"实时监测"不该被要求
+    assert.strictEqual(rFor34.status, 'pass');
+
+    const rFor11Missing = M.matchAgainstProduct('八大数据', p, [p], '1:1');
+    assert.deepStrictEqual(rFor11Missing.missingKeywords, ['实时监测']); // 1:1 自己的专属词缺了照样要报
+  });
+
   t('isPriceLikeLine 整行只有符号+数字（可选"元"）才算价格行', () => {
     assert.strictEqual(M.isPriceLikeLine('¥951'), true);
     assert.strictEqual(M.isPriceLikeLine('￥ 951'), true);
@@ -338,6 +380,19 @@ async function run() {
   const { MaterialCheckStore, PLATFORMS } = require('./materialcheck-store.js');
   const stubOcr = (text, confidence = 1) => async () => ({ text, confidence });
   const PF = 'tmall';
+
+  /** 造一个"够用"的假 PNG buffer：只需要 sniffImageSize() 读的那几个固定偏移量对得上
+   *  （signature + IHDR 里的宽高），不需要真的能被图片解码器打开——这里没有真实像素/
+   *  CRC 数据，纯粹用来测宽高探测和比例交叉校验这条逻辑。 */
+  function fakePng(width, height) {
+    const buf = Buffer.alloc(33);
+    buf.write('\x89PNG\r\n\x1a\n', 0, 'binary');
+    buf.writeUInt32BE(13, 8);
+    buf.write('IHDR', 12, 'ascii');
+    buf.writeUInt32BE(width, 16);
+    buf.writeUInt32BE(height, 20);
+    return buf;
+  }
 
   async function freshStore() {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
@@ -445,14 +500,17 @@ async function run() {
     assert.strictEqual(saved.products[4].price, null);
   });
 
-  await tAsync('saveProducts 把关键词归一化成 {text,category} 对象，产品 type 校验非法值兜底为空', async () => {
+  await tAsync('saveProducts 把关键词归一化成 {text,category,ratio} 对象，产品 type 校验非法值兜底为空', async () => {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;
     const saved = await store.saveProducts(PF, libId, [
-      { id: 'pa', name: 'GC-Multi', type: 'machine', keywords: [{ text: 'GC-Multi', category: '产品型号' }, '国补价1999'] },
+      { id: 'pa', name: 'GC-Multi', type: 'machine', keywords: [{ text: 'GC-Multi', category: '产品型号', ratio: '3:4' }, '国补价1999'] },
       { id: 'pb', name: 'GCX XE', type: '不合法类型', keywords: ['GCX XE'] }
     ]);
-    assert.deepStrictEqual(saved.products[0].keywords, [{ text: 'GC-Multi', category: '产品型号' }, { text: '国补价1999', category: '其它' }]);
+    assert.deepStrictEqual(saved.products[0].keywords, [
+      { text: 'GC-Multi', category: '产品型号', ratio: '3:4' },
+      { text: '国补价1999', category: '其它', ratio: 'both' }
+    ]);
     assert.strictEqual(saved.products[0].type, 'machine');
     assert.strictEqual(saved.products[1].type, ''); // 非法 type 兜底为空，不抛错
   });
@@ -566,6 +624,76 @@ async function run() {
     assert.strictEqual(resolved.platform, PF);
     assert.strictEqual(resolved.libraryId, libId);
     assert.strictEqual(store.records.length, 2); // pending 本身没落库，resolvePending 后 + 上面那条 filename 判定的
+  });
+
+  await tAsync('detectFile 按传入的 ratio 过滤必需词，并把 ratio 写进检测记录', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await store.saveProducts(PF, libId, [
+      { id: 'pa', name: 'GC-Multi', keywords: [{ text: 'GC-Multi', ratio: 'both' }, { text: '仅3:4专属词', ratio: '3:4' }] },
+      { id: 'pb', name: 'GCX XE', keywords: ['GCX XE', '静音悬浮马达'] }
+    ]);
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, libraryId: libId,
+      batchId: 'b1', uploadedBy: 'li', ratio: '1:1', ocr: stubOcr('GC-Multi')
+    });
+    assert.strictEqual(result.ratio, '1:1');
+    assert.deepStrictEqual(result.missingKeywords, []); // 仅3:4专属的词不该在 1:1 素材上报缺
+    assert.strictEqual(result.status, 'pass');
+  });
+
+  await tAsync('detectFile 传入不合法/缺失的 ratio 时兜底为 null，不过滤任何词（等价于旧行为）', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await store.saveProducts(PF, libId, [
+      { id: 'pa', name: 'GC-Multi', keywords: [{ text: '仅3:4专属词', ratio: '3:4' }] }
+    ]);
+    const result = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, libraryId: libId,
+      batchId: 'b1', uploadedBy: 'li', ratio: '不合法比例', ocr: stubOcr('')
+    });
+    assert.strictEqual(result.ratio, null);
+    assert.deepStrictEqual(result.missingKeywords, ['仅3:4专属词']); // 没有可信的比例上下文，照旧全量校验
+  });
+
+  await tAsync('detectFile 素材实际像素比例跟选的入口对不上时，报警但仍按选的入口判定，不拦截', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await store.saveProducts(PF, libId, [
+      { id: 'pa', name: 'GC-Multi', keywords: [{ text: '仅3:4专属词', ratio: '3:4' }] }
+    ]);
+    // 图片实际是 1440x1920（3:4），但用户选了 1:1 入口
+    const result = await store.detectFile({
+      buf: fakePng(1440, 1920), ext: '.png', filename: 'GC-Multi_a.png', platform: PF, libraryId: libId,
+      batchId: 'b1', uploadedBy: 'li', ratio: '1:1', ocr: stubOcr('')
+    });
+    assert.strictEqual(result.ratio, '1:1'); // 判定仍以入口选择为准
+    assert.deepStrictEqual(result.missingKeywords, []); // 按 1:1 过滤，3:4 专属词不算缺
+    assert.ok(result.warning && result.warning.includes('3:4'), '应该提示实际像素比例跟选的入口不一致');
+  });
+
+  await tAsync('detectFile 素材像素比例跟入口一致时不产生比例提示', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    const result = await store.detectFile({
+      buf: fakePng(1440, 1920), ext: '.png', filename: 'GC-Multi_a.png', platform: PF, libraryId: libId,
+      batchId: 'b1', uploadedBy: 'li', ratio: '3:4', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX 7天无理由退换')
+    });
+    assert.strictEqual(result.warning, null);
+  });
+
+  await tAsync('resolvePending 人工选择产品后，pending 阶段算出的比例提示仍然带在最终记录里', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    const pending = await store.detectFile({
+      buf: fakePng(1440, 1920), ext: '.png', filename: 'IMG_0099.png', platform: PF, libraryId: libId,
+      batchId: 'b1', uploadedBy: 'li', ratio: '1:1', ocr: stubOcr('完全无关的文字')
+    });
+    assert.strictEqual(pending.needsManualPick, true);
+    assert.ok(pending.ratioMismatch && pending.ratioMismatch.includes('3:4'));
+    const resolved = await store.resolvePending(pending.pendingId, 'pa', 'li');
+    assert.strictEqual(resolved.ratio, '1:1');
+    assert.strictEqual(resolved.warning, pending.ratioMismatch);
   });
 
   await tAsync('detectFile 整体识别置信度低时转人工核对，即便文件名本可判定产品', async () => {
@@ -775,6 +903,16 @@ async function run() {
     assert.deepStrictEqual(result.candidates, ['新的卖点一']);
     assert.strictEqual(result.candidateProducts.length, 0);
     assert.strictEqual(store.records.length, before); // 只是扫描预览，不落检测记录
+  });
+
+  await tAsync('autobuildScan 把传入的 ratio 原样带回结果，并在像素比例对不上入口时给出提示', async () => {
+    const store = await freshStore();
+    const ocr = stubOcr('GC-Multi\n新的卖点一', 0.95);
+    const result = await store.autobuildScan({
+      buf: fakePng(1440, 1920), ext: '.png', filename: 'GC-Multi.png', platform: PF, libraryId: store.getLibrary(PF).id, ratio: '1:1', ocr
+    });
+    assert.strictEqual(result.ratio, '1:1');
+    assert.ok(result.ratioMismatch && result.ratioMismatch.includes('3:4'));
   });
 
   await tAsync('autobuildScan 文件名和 OCR 都判断不出产品时，返回待人工指定，候选词为空', async () => {

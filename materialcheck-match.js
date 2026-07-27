@@ -2,6 +2,10 @@
 
 const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
 const PRODUCT_TYPES = ['machine', 'filter', 'accessory'];
+// 同一个产品的 1:1 和 3:4 素材文案有重叠也有差异（比如 3:4 素材下方多一段满赠权益，
+// 1:1 裁掉了）——RATIOS 是关键词"专属于"某个比例时的合法取值；不在这两个值里
+// （包括没配置过）一律按 keywordRatio() 归到 'both'，也就是两种比例的素材都要求它。
+const RATIOS = ['1:1', '3:4'];
 
 function normalize(s) {
   return String(s || '').replace(/\s+/g, '');
@@ -16,6 +20,22 @@ function keywordText(k) {
 function keywordCategory(k) {
   const c = k && typeof k === 'object' ? k.category : null;
   return CATEGORIES.includes(c) ? c : '其它';
+}
+
+/** 同上，取适用比例；不是合法值（或没给，包括这次改造之前建的老词）一律归到 'both'——
+ *  宁可两边都校验，也不要因为迁移期间的空值让某个比例悄悄漏检。 */
+function keywordRatio(k) {
+  const r = k && typeof k === 'object' ? k.ratio : null;
+  return RATIOS.includes(r) ? r : 'both';
+}
+
+/** 这个词是否要求出现在 materialRatio 这个比例的素材里。materialRatio 没传
+ *  （比如老代码路径/单测没有比例上下文）就当作不做比例过滤，一律要求——
+ *  保持这个函数加入之前的全部行为不变。 */
+function keywordApplies(k, materialRatio) {
+  if (!materialRatio) return true;
+  const r = keywordRatio(k);
+  return r === 'both' || r === materialRatio;
 }
 
 function findKeywordHits(text, keywords) {
@@ -148,8 +168,9 @@ function crossCheckWarning(resolvedProduct, ocrText, products) {
  *
  * 三态严重程度是固定规则，不做成可配置项：多出的词/价格不对 > 缺词 > 通过。
  */
-function matchAgainstProduct(text, product, allProducts) {
+function matchAgainstProduct(text, product, allProducts, materialRatio) {
   const missingKeywords = (product.keywords || [])
+    .filter((kw) => keywordApplies(kw, materialRatio))
     .filter((kw) => findKeywordHits(text, [kw]).length === 0)
     .map((kw) => keywordText(kw));
 
@@ -173,8 +194,8 @@ function matchAgainstProduct(text, product, allProducts) {
 }
 
 module.exports = {
-  CATEGORIES, PRODUCT_TYPES,
-  normalize, keywordText, keywordCategory, findKeywordHits, resolveByFilename,
+  CATEGORIES, PRODUCT_TYPES, RATIOS,
+  normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct,
   extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates
 };

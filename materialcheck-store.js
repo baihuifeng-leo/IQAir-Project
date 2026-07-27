@@ -24,9 +24,65 @@ function cleanKeywords(keywords) {
   return (keywords || [])
     .map((k) => {
       const text = String(match.keywordText(k)).trim();
-      return text ? { text, category: match.keywordCategory(k) } : null;
+      return text ? { text, category: match.keywordCategory(k), ratio: match.keywordRatio(k) } : null;
     })
     .filter(Boolean);
+}
+
+/**
+ * 零依赖的图片宽高探测（不引入 image-size/sharp 这类三方库，跟项目里 xlsx-lite.js
+ * 手写解析的路子一致）：只认 PNG/JPEG/WebP 三种素材质检本来就限定的格式，
+ * 解不出来（格式认不出/文件损坏）就返回 null，调用方按"探测不出比例"处理，
+ * 不阻断流程。
+ */
+function sniffImageSize(buf) {
+  if (buf.length >= 24 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+  }
+  if (buf.length >= 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 9 < buf.length) {
+      if (buf[offset] !== 0xff) { offset++; continue; }
+      const marker = buf[offset + 1];
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { offset += 2; continue; }
+      if (marker === 0xd9) break;
+      const segLen = buf.readUInt16BE(offset + 2);
+      const isSOF = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+      if (isSOF) return { height: buf.readUInt16BE(offset + 5), width: buf.readUInt16BE(offset + 7) };
+      offset += 2 + segLen;
+    }
+    return null;
+  }
+  if (buf.length >= 30 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
+    const fourcc = buf.toString('ascii', 12, 16);
+    if (fourcc === 'VP8X') return { width: 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16)), height: 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16)) };
+    if (fourcc === 'VP8 ') return { width: buf.readUInt16LE(26) & 0x3fff, height: buf.readUInt16LE(28) & 0x3fff };
+  }
+  return null;
+}
+
+/** 像素尺寸粗分 1:1（近似正方形）/3:4（近似竖形海报），落在这两档之外（比如宽图、
+ *  其它比例的裁切）就返回 null，不强行归类——只用来跟用户选的入口做交叉校验提醒。 */
+function classifyRatioFromSize(size) {
+  if (!size || !size.width || !size.height) return null;
+  const r = size.width / size.height;
+  if (r > 0.9 && r < 1.1112) return '1:1';
+  if (r > 0.6 && r < 0.85) return '3:4';
+  return null;
+}
+
+/** claimedRatio 是用户选的入口（1:1/3:4 两个上传按钮之一），跟素材实际像素比例
+ *  对不上就给一条软提示——不拦截、不改判定用的比例，判定始终以入口选择为准。 */
+function ratioMismatchWarning(claimedRatio, buf) {
+  if (!claimedRatio) return null;
+  const detected = classifyRatioFromSize(sniffImageSize(buf));
+  if (!detected || detected === claimedRatio) return null;
+  return `这张图看起来更像 ${detected} 比例的素材，不是选的 ${claimedRatio}，请确认传对了入口`;
+}
+
+function combineWarnings(...parts) {
+  const list = parts.filter(Boolean);
+  return list.length ? list.join('；') : null;
 }
 
 function emptyLibrary(name) {
@@ -305,16 +361,19 @@ class MaterialCheckStore {
     }
   }
 
-  async detectFile({ buf, ext, filename, batchId, uploadedBy, platform, libraryId, ocr = runOcr }) {
+  async detectFile({ buf, ext, filename, batchId, uploadedBy, platform, libraryId, ratio, ocr = runOcr }) {
     this._assertPlatform(platform);
     const lib = this.getLibrary(platform, libraryId);
     if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
     if (!lib.products.length) throw new Error('还没有配置任何产品的关键词，先去「关键词库」里加一个产品');
 
+    const claimedRatio = match.RATIOS.includes(ratio) ? ratio : null;
+
     const name = crypto.randomBytes(9).toString('hex') + ext;
     const imagePath = path.join(this.uploadDir, name);
     await fsp.writeFile(imagePath, buf);
     const url = '/uploads/materialcheck/' + name;
+    const ratioMismatch = ratioMismatchWarning(claimedRatio, buf);
 
     let ocrText, ocrConfidence;
     try {
@@ -324,7 +383,7 @@ class MaterialCheckStore {
     } catch (e) {
       const record = {
         id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId: lib.id,
-        filename, imagePath: url, productId: null, productName: null, matchMethod: null,
+        filename, imagePath: url, productId: null, productName: null, matchMethod: null, ratio: claimedRatio,
         ocrText: '', ocrConfidence: null, missingKeywords: [], extraKeywords: [], status: 'ocr_failed', warning: e.message
       };
       await this.append(record);
@@ -340,18 +399,19 @@ class MaterialCheckStore {
       this._cleanupPending();
       const pendingId = 'mcp_' + crypto.randomBytes(6).toString('hex');
       this.pending.set(pendingId, {
-        imagePath: url, filename, ocrText, ocrConfidence, batchId, uploadedBy, platform, libraryId: lib.id, expiresAt: Date.now() + PENDING_TTL_MS
+        imagePath: url, filename, ocrText, ocrConfidence, batchId, uploadedBy, platform, libraryId: lib.id, ratio: claimedRatio, ratioMismatch, expiresAt: Date.now() + PENDING_TTL_MS
       });
-      return { needsManualPick: true, pendingId, ocrText, filename, candidates: resolution.candidates, lowConfidence };
+      return { needsManualPick: true, pendingId, ocrText, filename, candidates: resolution.candidates, lowConfidence, ratioMismatch };
     }
 
-    const warning = resolution.method === 'filename'
-      ? match.crossCheckWarning(resolution.product, ocrText, lib.products)
-      : null;
+    const warning = combineWarnings(
+      resolution.method === 'filename' ? match.crossCheckWarning(resolution.product, ocrText, lib.products) : null,
+      ratioMismatch
+    );
 
     return this._finish({
       platform, libraryId: lib.id, product: resolution.product, allProducts: lib.products, method: resolution.method,
-      ocrText, ocrConfidence, imagePath: url, filename, batchId, uploadedBy, warning
+      ocrText, ocrConfidence, imagePath: url, filename, batchId, uploadedBy, warning, ratio: claimedRatio
     });
   }
 
@@ -360,23 +420,25 @@ class MaterialCheckStore {
    * 词库维护动作），也不直接改词库——候选词要经过前端的审核页面，人工确认后才会
    * 通过已有的 saveProducts（PUT /api/materialcheck/products）真正落盘。
    */
-  async autobuildScan({ buf, ext, filename, platform, libraryId, ocr = runOcr }) {
+  async autobuildScan({ buf, ext, filename, platform, libraryId, ratio, ocr = runOcr }) {
     this._assertPlatform(platform);
     const lib = this.getLibrary(platform, libraryId);
     if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
     if (!lib.products.length) throw new Error('还没有配置任何产品的关键词，先去「关键词库」里加一个产品');
+    const claimedRatio = match.RATIOS.includes(ratio) ? ratio : null;
 
     const name = crypto.randomBytes(9).toString('hex') + ext;
     const imagePath = path.join(this.uploadDir, name);
     await fsp.writeFile(imagePath, buf);
     const url = '/uploads/materialcheck/' + name;
+    const ratioMismatch = ratioMismatchWarning(claimedRatio, buf);
 
     const { text: ocrText, confidence: ocrConfidence } = await this._runOcrQueued(imagePath, ocr);
     const resolution = match.resolveProductForUpload(filename, ocrText, lib.products);
 
     if (!resolution.product) {
       return {
-        filename, imagePath: url, ocrText, ocrConfidence,
+        filename, imagePath: url, ocrText, ocrConfidence, ratio: claimedRatio, ratioMismatch,
         productId: null, productName: null,
         candidateProducts: (resolution.candidates || []).map((p) => ({ id: p.id, name: p.name })),
         candidates: []
@@ -384,7 +446,7 @@ class MaterialCheckStore {
     }
 
     return {
-      filename, imagePath: url, ocrText, ocrConfidence,
+      filename, imagePath: url, ocrText, ocrConfidence, ratio: claimedRatio, ratioMismatch,
       productId: resolution.product.id, productName: resolution.product.name,
       candidateProducts: [],
       candidates: match.buildKeywordCandidates(ocrText, resolution.product)
@@ -412,15 +474,15 @@ class MaterialCheckStore {
     this.pending.delete(pendingId);
     return this._finish({
       platform: p.platform, libraryId: lib.id, product, allProducts: lib.products, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence,
-      imagePath: p.imagePath, filename: p.filename, batchId: p.batchId, uploadedBy: p.uploadedBy || uploadedBy, warning: null
+      imagePath: p.imagePath, filename: p.filename, batchId: p.batchId, uploadedBy: p.uploadedBy || uploadedBy, warning: p.ratioMismatch, ratio: p.ratio
     });
   }
 
-  async _finish({ platform, libraryId, product, allProducts, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning }) {
-    const { missingKeywords, extraKeywords, priceIssue, status } = match.matchAgainstProduct(ocrText, product, allProducts);
+  async _finish({ platform, libraryId, product, allProducts, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning, ratio }) {
+    const { missingKeywords, extraKeywords, priceIssue, status } = match.matchAgainstProduct(ocrText, product, allProducts, ratio);
     const record = {
       id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId,
-      filename, imagePath, productId: product.id, productName: product.name, matchMethod: method,
+      filename, imagePath, productId: product.id, productName: product.name, matchMethod: method, ratio,
       ocrText, ocrConfidence, missingKeywords, extraKeywords, priceIssue, status, warning
     };
     await this.append(record);

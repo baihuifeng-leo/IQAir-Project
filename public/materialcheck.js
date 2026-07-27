@@ -5,6 +5,12 @@ const MaterialCheck = (() => {
   let products = [];
 
   const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
+  // 同一个产品的 1:1 和 3:4 素材文案有重叠也有差异（3:4 通常比 1:1 多一段满赠/权益说明），
+  // 关键词加一个"适用比例"属性：通用（both，默认）/仅1:1/仅3:4——检测页判定缺词时
+  // 只按上传素材实际的比例去要求对应子集，不再一刀切要求全部词都出现在两种比例里。
+  const RATIO_OPTIONS = ['both', '1:1', '3:4'];
+  const RATIO_LABEL = { both: '通用', '1:1': '仅1:1', '3:4': '仅3:4' };
+  const RATIO_CLASS = { both: 'mc-ratio-both', '1:1': 'mc-ratio-11', '3:4': 'mc-ratio-34' };
   // pass/warn/error 是新三态；fail 是 v2 上线前的旧记录留下的值，不迁移，历史筛选里仍要能选到
   const STATUS_META = {
     pass: { cls: 'mc-row-ok', badge: '✓ 通过' },
@@ -31,6 +37,7 @@ const MaterialCheck = (() => {
 
   function keywordText(k) { return typeof k === 'string' ? k : String((k && k.text) || ''); }
   function keywordCategory(k) { return (k && typeof k === 'object' && CATEGORIES.includes(k.category)) ? k.category : '其它'; }
+  function keywordRatio(k) { return (k && typeof k === 'object' && RATIO_OPTIONS.includes(k.ratio)) ? k.ratio : 'both'; }
 
   /** priceIssue = {expected, found}，found 是图里实际找到的候选价格数字数组（可能是空数组）。 */
   function priceIssueLabel(pi) {
@@ -93,17 +100,42 @@ const MaterialCheck = (() => {
   }
 
   // ── 检测台 ──────────────────────────────────────────
+  // 1:1 和 3:4 素材的文案不完全一样（词库那边已经按比例细分了必需词），
+  // 检测时必须知道这张图是哪个比例才能套对应的必需词子集，所以入口按比例拆成两个，
+  // 而不是一个入口再让用户额外选一次——拖进哪个区域就按哪个比例处理。
   function renderCheckView() {
     const el = A.$('#mc-check-view');
     el.innerHTML = `
-      <div class="mc-upload-zone" id="mc-upload-zone">点击选择图片，或把图片拖进这个区域（支持多选批量上传）</div>
+      <div class="mc-upload-row">
+        <div class="mc-upload-zone" id="mc-upload-zone-11"><strong>1:1 素材</strong><br>点击选择图片，或拖进这个区域（支持多选批量上传）</div>
+        <div class="mc-upload-zone" id="mc-upload-zone-34"><strong>3:4 素材</strong><br>点击选择图片，或拖进这个区域（支持多选批量上传）</div>
+      </div>
+      <input type="file" id="mc-file-11" accept="image/png,image/jpeg,image/webp" multiple hidden>
+      <input type="file" id="mc-file-34" accept="image/png,image/jpeg,image/webp" multiple hidden>
       <div class="mc-batch-summary" id="mc-batch-summary"></div>
       <div class="mc-progress" id="mc-progress" hidden><div class="mc-progress-bar" id="mc-progress-bar"></div></div>
       <div id="mc-result-list"></div>`;
-    A.$('#mc-upload-zone').onclick = () => A.$('#mc-file').click();
+
+    [['11', '1:1'], ['34', '3:4']].forEach(([suffix, ratio]) => {
+      const zone = A.$(`#mc-upload-zone-${suffix}`);
+      const fileInput = A.$(`#mc-file-${suffix}`);
+      zone.onclick = () => fileInput.click();
+      fileInput.onchange = (e) => {
+        const files = [...e.target.files];
+        e.target.value = '';
+        if (files.length) uploadFiles(files, ratio);
+      };
+      ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('drop-hot'); }));
+      ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, () => zone.classList.remove('drop-hot')));
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const files = [...e.dataTransfer.files].filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type));
+        if (files.length) uploadFiles(files, ratio);
+      });
+    });
   }
 
-  async function uploadFiles(fileList) {
+  async function uploadFiles(fileList, ratio) {
     if (!products.length) return A.toast('先去「关键词库」配置至少一个产品', 'bad');
     const batchId = Date.now().toString(36) + Math.random().toString(36).slice(2);
     const uploadPlatform = platform;
@@ -138,7 +170,7 @@ const MaterialCheck = (() => {
       entry.row.innerHTML = `<span class="mc-row-name">${escapeHtml(entry.file.name)}</span><span class="mc-row-status"><i class="mc-spin"></i> 识别中…</span>`;
       updateSummary();
       try {
-        const result = await call(`/api/materialcheck/upload?filename=${encodeURIComponent(entry.file.name)}&batchId=${encodeURIComponent(batchId)}&platform=${encodeURIComponent(uploadPlatform)}&libraryId=${encodeURIComponent(uploadLibraryId)}`, {
+        const result = await call(`/api/materialcheck/upload?filename=${encodeURIComponent(entry.file.name)}&batchId=${encodeURIComponent(batchId)}&platform=${encodeURIComponent(uploadPlatform)}&libraryId=${encodeURIComponent(uploadLibraryId)}&ratio=${encodeURIComponent(ratio)}`, {
           method: 'POST',
           headers: { 'Content-Type': entry.file.type },
           body: entry.file
@@ -214,7 +246,7 @@ const MaterialCheck = (() => {
 
     row.innerHTML = `
       <span class="mc-row-name">${escapeHtml(result.filename)}</span>
-      <span class="mc-row-status">${meta.badge} · ${escapeHtml(result.productName || '')}${methodLabel ? ' · 匹配方式：' + methodLabel : ''}${failed ? ' <button class="mc-btn mc-row-retry">重试</button>' : ''}</span>
+      <span class="mc-row-status">${meta.badge} · ${escapeHtml(result.productName || '')}${result.ratio ? ' · ' + result.ratio + ' 素材' : ''}${methodLabel ? ' · 匹配方式：' + methodLabel : ''}${failed ? ' <button class="mc-btn mc-row-retry">重试</button>' : ''}</span>
       ${detail}`;
 
     if (failed) {
@@ -358,12 +390,14 @@ const MaterialCheck = (() => {
   let collapsedSections = new Set();
 
   const catOptionsHtml = CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
+  const ratioOptionsHtml = RATIO_OPTIONS.map((r) => `<option value="${r}" ${r === 'both' ? 'selected' : ''}>${RATIO_LABEL[r]}</option>`).join('');
 
-  /** 关键词编辑器：chip 展示 + 分类徽标 + 输入/分类下拉/添加按钮，产品卡片和通用词卡片共用同一份逻辑。 */
+  /** 关键词编辑器：chip 展示 + 分类/比例徽标 + 输入/分类/比例下拉/添加按钮，产品卡片和通用词卡片共用同一份逻辑。 */
   function mountKeywordEditor(root, list, onChange) {
     const chipsEl = root.querySelector('[data-role="chips"]');
     const inputEl = root.querySelector('[data-role="kw-input"]');
     const catEl = root.querySelector('[data-role="kw-cat"]');
+    const ratioEl = root.querySelector('[data-role="kw-ratio"]');
     const addBtn = root.querySelector('[data-role="kw-add"]');
 
     // 显示顺序按分类顺序来（产品型号→产品利益点→…），跟添加先后无关；
@@ -373,8 +407,10 @@ const MaterialCheck = (() => {
       chipsEl.innerHTML = order.map((i) => {
         const k = list[i];
         const cat = keywordCategory(k);
+        const ratio = keywordRatio(k);
         const catOpts = CATEGORIES.map((c) => `<option value="${c}" ${c === cat ? 'selected' : ''}>${c}</option>`).join('');
-        return `<span class="mc-chip${i === enterIndex ? ' mc-chip-enter' : ''}" data-i="${i}">${escapeHtml(keywordText(k))}<select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
+        const ratioOpts = RATIO_OPTIONS.map((r) => `<option value="${r}" ${r === ratio ? 'selected' : ''}>${RATIO_LABEL[r]}</option>`).join('');
+        return `<span class="mc-chip${i === enterIndex ? ' mc-chip-enter' : ''}" data-i="${i}">${escapeHtml(keywordText(k))}<select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><select class="mc-ratio-badge-select ${RATIO_CLASS[ratio]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的适用比例">${ratioOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
       }).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
       if (enterIndex != null) {
         const enterEl = chipsEl.querySelector(`.mc-chip[data-i="${enterIndex}"]`);
@@ -384,7 +420,13 @@ const MaterialCheck = (() => {
       }
       chipsEl.querySelectorAll('.mc-cat-badge-select').forEach((sel) => (sel.onchange = () => {
         const i = Number(sel.dataset.i);
-        list[i] = { text: keywordText(list[i]), category: sel.value };
+        list[i] = { text: keywordText(list[i]), category: sel.value, ratio: keywordRatio(list[i]) };
+        drawChips();
+        if (onChange) onChange();
+      }));
+      chipsEl.querySelectorAll('.mc-ratio-badge-select').forEach((sel) => (sel.onchange = () => {
+        const i = Number(sel.dataset.i);
+        list[i] = { text: keywordText(list[i]), category: keywordCategory(list[i]), ratio: sel.value };
         drawChips();
         if (onChange) onChange();
       }));
@@ -406,7 +448,7 @@ const MaterialCheck = (() => {
     const add = () => {
       const v = inputEl.value.trim();
       if (!v) return;
-      list.push({ text: v, category: catEl.value });
+      list.push({ text: v, category: catEl.value, ratio: ratioEl ? ratioEl.value : 'both' });
       inputEl.value = '';
       drawChips(list.length - 1);
       if (onChange) onChange();
@@ -504,6 +546,7 @@ const MaterialCheck = (() => {
           <div class="mc-pcard-kwrow">
             <input class="mc-kw-input-inline" placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
             <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
+            <select class="mc-ratio-select" data-role="kw-ratio" aria-label="关键词适用比例" title="这个词只出现在1:1或3:4素材里，还是两种都要求？">${ratioOptionsHtml}</select>
             <button class="mc-btn" data-role="kw-add">添加</button>
           </div>
           <div class="mc-chip-editor-wrap">
@@ -554,7 +597,9 @@ const MaterialCheck = (() => {
     autobuildMask.onclick = (e) => { if (e.target === autobuildMask) autobuildMask.hidden = true; };
   }
 
-  /** 按产品分组候选词：同一个产品可能有好几张图，候选词要合并去重（按去空格后的文字）。 */
+  /** 按产品分组候选词：同一个产品可能有好几张图，候选词要合并去重（按去空格后的文字）。
+   *  每个候选词带着扫描它那张图所属的比例入口（e.ratio）；同一个词如果在 1:1 和 3:4
+   *  两边的扫描里都出现过，说明是两种素材共用的，升级成"通用"。 */
   function autobuildGroups(entries) {
     const groups = new Map();
     entries.forEach((e) => {
@@ -563,7 +608,9 @@ const MaterialCheck = (() => {
       if (!g) { g = { productName: e.productName, cands: new Map() }; groups.set(e.productId, g); }
       e.candidates.forEach((text) => {
         const norm = stripSpaces(text);
-        if (!g.cands.has(norm)) g.cands.set(norm, { text, checked: true });
+        const existing = g.cands.get(norm);
+        if (!existing) g.cands.set(norm, { text, checked: true, ratio: e.ratio });
+        else if (existing.ratio !== e.ratio) existing.ratio = 'both';
       });
     });
     return groups;
@@ -608,7 +655,7 @@ const MaterialCheck = (() => {
         return `<div class="mc-ab-group" data-pid="${escapeHtml(pid)}">
           <div class="mc-ab-group-head">${escapeHtml(g.productName)}<span class="mc-pcard-count">${items.length} 条新候选</span></div>
           <div class="mc-ab-cands">${items.map(([norm, c]) =>
-            `<label class="mc-ab-cand"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''}>${escapeHtml(c.text)}</label>`
+            `<label class="mc-ab-cand"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''}>${escapeHtml(c.text)}<span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></label>`
           ).join('')}</div>
         </div>`;
       }).join('');
@@ -664,7 +711,7 @@ const MaterialCheck = (() => {
           if (!product) return;
           g.cands.forEach((c) => {
             if (!c.checked) return;
-            product.keywords.push({ text: c.text, category: '其它' });
+            product.keywords.push({ text: c.text, category: '其它', ratio: c.ratio });
             addedCount++;
           });
         });
@@ -677,11 +724,11 @@ const MaterialCheck = (() => {
 
   let autobuildSeq = 0;
 
-  async function openAutobuild(fileList) {
+  async function openAutobuild(fileList, ratio) {
     if (!products.length) return A.toast('先去下面新增至少一个产品，再批量识别', 'bad');
     if (!autobuildMask) buildAutobuildSheet();
     const entries = fileList.map((file) => ({
-      eid: 'e' + (autobuildSeq++), file, filename: file.name, status: 'scanning',
+      eid: 'e' + (autobuildSeq++), file, filename: file.name, status: 'scanning', ratio,
       productId: null, productName: null, candidates: [], candidateProducts: [], ocrText: '', errorMsg: ''
     }));
     autobuildMask.hidden = false;
@@ -690,9 +737,10 @@ const MaterialCheck = (() => {
     const scanPlatform = platform, scanLibraryId = libraryId;
     async function scanOne(e) {
       try {
-        const result = await call(`/api/materialcheck/autobuild/scan?filename=${encodeURIComponent(e.filename)}&platform=${encodeURIComponent(scanPlatform)}&libraryId=${encodeURIComponent(scanLibraryId)}`, {
+        const result = await call(`/api/materialcheck/autobuild/scan?filename=${encodeURIComponent(e.filename)}&platform=${encodeURIComponent(scanPlatform)}&libraryId=${encodeURIComponent(scanLibraryId)}&ratio=${encodeURIComponent(e.ratio)}`, {
           method: 'POST', headers: { 'Content-Type': e.file.type }, body: e.file
         });
+        if (result.ratioMismatch) A.toast(`${e.filename}：${result.ratioMismatch}`, 'bad');
         e.ocrText = result.ocrText;
         if (result.productId) {
           e.status = 'resolved';
@@ -743,8 +791,10 @@ const MaterialCheck = (() => {
             <button class="mc-btn" id="mc-lib-name-cancel">取消</button>
           </div>
           <span class="mc-lib-spacer"></span>
-          <button class="mc-btn" id="mc-lib-autobuild">批量自动识别…</button>
-          <input type="file" id="mc-autobuild-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+          <button class="mc-btn" id="mc-lib-autobuild-11">批量识别 1:1 素材…</button>
+          <button class="mc-btn" id="mc-lib-autobuild-34">批量识别 3:4 素材…</button>
+          <input type="file" id="mc-autobuild-file-11" accept="image/png,image/jpeg,image/webp" multiple hidden>
+          <input type="file" id="mc-autobuild-file-34" accept="image/png,image/jpeg,image/webp" multiple hidden>
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
         </div>
         <p class="mc-lib-error" id="mc-lib-error" hidden></p>
@@ -1029,13 +1079,15 @@ const MaterialCheck = (() => {
     });
 
     if (!readOnly) {
-      const abFile = A.$('#mc-autobuild-file');
-      A.$('#mc-lib-autobuild').onclick = () => abFile.click();
-      abFile.onchange = (e) => {
-        const files = [...e.target.files];
-        e.target.value = '';
-        if (files.length) openAutobuild(files);
-      };
+      [['11', '1:1'], ['34', '3:4']].forEach(([suffix, ratio]) => {
+        const abFile = A.$(`#mc-autobuild-file-${suffix}`);
+        A.$(`#mc-lib-autobuild-${suffix}`).onclick = () => abFile.click();
+        abFile.onchange = (e) => {
+          const files = [...e.target.files];
+          e.target.value = '';
+          if (files.length) openAutobuild(files, ratio);
+        };
+      });
     }
   }
 
@@ -1043,7 +1095,6 @@ const MaterialCheck = (() => {
     A = api;
     A.$('#mc-tab-library').hidden = libraryRole() === 'none';
     A.$$('#mc-subview-switch .mc-subtab').forEach((b) => (b.onclick = () => switchSub(b.dataset.sub)));
-    A.$('#mc-file').onchange = (e) => { const files = [...e.target.files]; e.target.value = ''; if (files.length) uploadFiles(files); };
 
     platform = sessionStorage.getItem('mc-platform') || 'tmall';
     const platformSwitch = A.$('#mc-platform-switch');
@@ -1062,16 +1113,6 @@ const MaterialCheck = (() => {
         renderCheckView();
       } catch (e) { A.toast(e.message, 'bad'); }
     })();
-
-    const scroll = A.$('#mc-scroll');
-    ['dragenter', 'dragover'].forEach((ev) => scroll.addEventListener(ev, (e) => { e.preventDefault(); scroll.classList.add('drop-hot'); }));
-    ['dragleave', 'drop'].forEach((ev) => scroll.addEventListener(ev, () => scroll.classList.remove('drop-hot')));
-    scroll.addEventListener('drop', (e) => {
-      e.preventDefault();
-      if (subView !== 'check') return;
-      const files = [...e.dataTransfer.files].filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type));
-      if (files.length) uploadFiles(files);
-    });
   }
 
   return { init };

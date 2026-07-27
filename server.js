@@ -764,10 +764,12 @@ const server = http.createServer(async (req, res) => {
       const libraryId = url.searchParams.get('libraryId') || undefined;
       const filename = decodeURIComponent(url.searchParams.get('filename') || ('upload' + ext));
       const batchId = url.searchParams.get('batchId') || ('b_' + crypto.randomBytes(6).toString('hex'));
+      const ratio = url.searchParams.get('ratio') || undefined;
+      if (!['1:1', '3:4'].includes(ratio)) return json(res, 400, { error: '缺少素材比例参数，只能是 1:1 或 3:4' });
       const buf = await readBinary(req, MAX_IMAGE);
       if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
       let result;
-      try { result = await materialcheck.detectFile({ buf, ext, filename, batchId, uploadedBy: me.name, platform, libraryId }); }
+      try { result = await materialcheck.detectFile({ buf, ext, filename, batchId, uploadedBy: me.name, platform, libraryId, ratio }); }
       catch (e) { return json(res, 400, { error: e.message }); }
       if (!result.needsManualPick) {
         const label = { pass: '通过', warn: '提醒', error: '报错', ocr_failed: '识别失败' }[result.status] || result.status;
@@ -784,10 +786,12 @@ const server = http.createServer(async (req, res) => {
       if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
       const libraryId = url.searchParams.get('libraryId') || undefined;
       const filename = decodeURIComponent(url.searchParams.get('filename') || ('upload' + ext));
+      const ratio = url.searchParams.get('ratio') || undefined;
+      if (!['1:1', '3:4'].includes(ratio)) return json(res, 400, { error: '缺少素材比例参数，只能是 1:1 或 3:4' });
       const buf = await readBinary(req, MAX_IMAGE);
       if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
       let result;
-      try { result = await materialcheck.autobuildScan({ buf, ext, filename, platform, libraryId }); }
+      try { result = await materialcheck.autobuildScan({ buf, ext, filename, platform, libraryId, ratio }); }
       catch (e) { return json(res, 400, { error: e.message }); }
       return json(res, 200, result);
     }
