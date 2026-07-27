@@ -60,26 +60,6 @@ function checkPrice(text, product) {
   return { expected: product.price, found: [...candidates] };
 }
 
-/**
- * 校验关键词库唯一性：同一个词不能出现在两处——产品之间、产品词与通用词之间、
- * 或者跟自定义分组的共享词之间都不行。一个词只能属于唯一一个"归属"。
- * groups 是可选的第三参数（[{id,name,type,keywords}, ...]），不传时行为跟老版本
- * 一致，只查产品词和全局通用词。
- */
-function validateLibrary(products, universalKeywords, groups = []) {
-  const seen = new Map();
-  const conflicts = [];
-  const record = (kw, where) => {
-    const text = keywordText(kw);
-    if (seen.has(text)) conflicts.push({ keyword: text, first: seen.get(text), second: where });
-    else seen.set(text, where);
-  };
-  (products || []).forEach((p) => (p.keywords || []).forEach((kw) => record(kw, p.name)));
-  (universalKeywords || []).forEach((kw) => record(kw, '通用词'));
-  (groups || []).forEach((g) => (g.keywords || []).forEach((kw) => record(kw, `分组「${g.name}」`)));
-  return conflicts;
-}
-
 function resolveByFilename(filename, products) {
   const norm = normalize(filename).toLowerCase();
   const matches = products.filter((p) => norm.includes(normalize(p.name).toLowerCase()));
@@ -120,58 +100,45 @@ function crossCheckWarning(resolvedProduct, ocrText, products) {
 }
 
 /**
- * 缺词 = 本产品专属关键词、全局通用词、本产品所在分组的共享词——这三类都是强关联，
- * 每一条都必须在素材文字里各自独立出现，少哪条就是哪条缺词（不是"沾边就算过"）。
- * 串词 = 其它产品专属关键词，或者不是本产品所在分组的其它分组共享词，出现在了本文本里。
- * 自定义分组：同一个分组内的成员互相共享词，不算串词也不算缺词豁免——恰恰相反，组内
- * 成员本来就该有这些共享词，缺了要报；不同分组之间、或者分组跟未分组产品之间，正常按
- * "是不是自己的词"来判定串词，product.groupIds 包含 group.id 才算"自己的"——一个产品
- * 可以同时属于多个分组（比如同时要求"机器通用"和"瑞士制造机型"两组的共享词）。
+ * 产品与关键词强绑定：每个产品自己维护一份完整清单，同一个词可以在多个产品里各自
+ * 重复出现，互不冲突（不再要求全局唯一）。
  *
- * 价格 = product.price 配置了预期价格时的强校验，跟串词同级——图里的价格跟预期
- * 对不上（不管是写错了还是压根没出现），都直接算报错，不走缺词那套"提醒"档位。
+ * 缺词 = 本产品自己清单里的词，没能在素材文字里找到。
+ * 多出的词 = 素材文字里出现了某个别的产品的词，但这个词不在本产品自己清单里——
+ * 如果这个词本产品也有（说明是有意重复录入的共享词），就不算多出的，是正常的自己的词。
  *
- * 三态严重程度是固定规则，不做成可配置项：串词/价格不对 > 缺词 > 通过。
+ * 价格 = product.price 配置了预期价格时的强校验，跟"多出的词"同级——图里的价格跟
+ * 预期对不上（不管是写错了还是压根没出现），都直接算报错，不走缺词那套"提醒"档位。
+ *
+ * 三态严重程度是固定规则，不做成可配置项：多出的词/价格不对 > 缺词 > 通过。
  */
-function matchAgainstProduct(text, product, allProducts, groups = [], universalKeywords = []) {
-  const myGroupIds = product.groupIds || [];
-  const missingKeywords = [];
-  (product.keywords || [])
+function matchAgainstProduct(text, product, allProducts) {
+  const missingKeywords = (product.keywords || [])
     .filter((kw) => findKeywordHits(text, [kw]).length === 0)
-    .forEach((kw) => missingKeywords.push({ keyword: keywordText(kw), source: 'own' }));
-  (universalKeywords || [])
-    .filter((kw) => findKeywordHits(text, [kw]).length === 0)
-    .forEach((kw) => missingKeywords.push({ keyword: keywordText(kw), source: 'universal' }));
-  (groups || []).forEach((g) => {
-    if (!myGroupIds.includes(g.id)) return;
-    (g.keywords || [])
-      .filter((kw) => findKeywordHits(text, [kw]).length === 0)
-      .forEach((kw) => missingKeywords.push({ keyword: keywordText(kw), source: 'group', groupName: g.name }));
-  });
+    .map((kw) => keywordText(kw));
 
-  const crossedKeywords = [];
+  const myKeywordTexts = new Set((product.keywords || []).map((kw) => keywordText(kw)));
+  const extraKeywords = [];
+  const seen = new Set();
   allProducts.forEach((other) => {
     if (other.id === product.id) return;
     findKeywordHits(text, other.keywords || []).forEach((kw) => {
-      crossedKeywords.push({ keyword: keywordText(kw), fromProductId: other.id, fromProductName: other.name });
-    });
-  });
-  (groups || []).forEach((g) => {
-    if (myGroupIds.includes(g.id)) return;
-    findKeywordHits(text, g.keywords || []).forEach((kw) => {
-      crossedKeywords.push({ keyword: keywordText(kw), fromProductId: null, fromProductName: `分组「${g.name}」` });
+      const t = keywordText(kw);
+      if (myKeywordTexts.has(t) || seen.has(t)) return;
+      seen.add(t);
+      extraKeywords.push(t);
     });
   });
 
   const priceIssue = checkPrice(text, product);
 
-  const status = (crossedKeywords.length > 0 || priceIssue) ? 'error' : missingKeywords.length > 0 ? 'warn' : 'pass';
-  return { missingKeywords, crossedKeywords, priceIssue, status };
+  const status = (extraKeywords.length > 0 || priceIssue) ? 'error' : missingKeywords.length > 0 ? 'warn' : 'pass';
+  return { missingKeywords, extraKeywords, priceIssue, status };
 }
 
 module.exports = {
   CATEGORIES, PRODUCT_TYPES,
-  normalize, keywordText, keywordCategory, findKeywordHits, validateLibrary, resolveByFilename,
+  normalize, keywordText, keywordCategory, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct,
   extractPriceCandidates, checkPrice
 };

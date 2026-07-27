@@ -1974,49 +1974,22 @@ body.rpt-presenting .rpt-wm-note {
 .mc-lib-name-row input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); min-width: 200px; }
 .mc-lib-spacer { flex: 1 1 auto; }
 
-.mc-lib-card {
-  background: var(--group-card); border: 1px solid var(--hair); border-radius: 16px;
-  padding: 20px 22px; margin-bottom: 20px;
-}
-.mc-lib-card > h3 { font-size: 14px; letter-spacing: 0.01em; }
-
-.mc-kw-add input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-cat-select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
-.mc-kw-add { display: flex; gap: 8px; margin-top: 10px; }
 .mc-chip-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 30px; }
 .mc-chip-empty { color: var(--dimmer); font-size: 12px; }
 
-.mc-utab-hint { color: var(--dimmer); font-size: 12px; margin: 2px 0 0; }
-
 /* 关键词内容是这个页面要看的重点，chip 文字明显放大加粗；
-   只限定在可编辑的词库 chip 区（分类徽标/其它 chip 场景，比如检测结果里的缺词/串词，不受影响，保持原来的紧凑密度） */
+   只限定在可编辑的词库 chip 区（分类徽标/其它 chip 场景，比如检测结果里的缺词/多出的词，不受影响，保持原来的紧凑密度） */
 .mc-chip-editor .mc-chip { font-size: 15px; font-weight: 600; padding: 5px 11px; }
 
-/* 自定义共享分组：跟产品卡片一样的可编辑 chip 区，多加一段"勾选哪些产品属于这个分组"的成员列表 */
-/* 分组卡片继承所在分区的强调色（--mc-sec 由 .mc-tsec-machine/filter/accessory 定义），
-   靠"有色边框+淡色底"和产品卡片的素色区分开——不是分组的另一套颜色体系，是同一套强调色的延伸，
-   color-mix() 不支持的旧浏览器会让这条 background 声明整体失效，退化成继承背景，不会破版 */
-.mc-gcard {
-  background: var(--surface);
-  background: color-mix(in srgb, var(--surface) 90%, var(--mc-sec, transparent) 10%);
-  border: 1px solid var(--mc-sec, var(--line-soft));
-  border-left-width: 3px;
-  border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
-}
-/* 分组名+加关键词+删除分组也收在同一行，跟产品卡片保持统一的单行格式 */
-.mc-gcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.mc-gcard-name { flex: 1 1 100px; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
-.mc-gmembers { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 12px; }
-.mc-gmember { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--dim); cursor: pointer; }
-
-/* 产品按机器/滤芯/附件分区：每个分区标题左侧一道专属色条做区分，分区内先放自定义共享分组，再纵向堆叠产品卡片 */
+/* 产品按机器/滤芯/附件分区：每个分区标题左侧一道专属色条做区分，分区内纵向堆叠产品卡片 */
 .mc-tsection { margin-bottom: 26px; }
 .mc-tsection-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 2px 0 10px 12px; margin-bottom: 12px; border-left: 3px solid var(--mc-sec, var(--line-soft));
 }
 .mc-tsection-head h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--mc-sec, var(--text)); letter-spacing: 0.02em; }
-/* 标题本身就是折叠开关：点它折叠/展开下面的分组+产品卡片，右侧的+新建分组/+新增产品按钮不受影响 */
+/* 标题本身就是折叠开关：点它折叠/展开下面的产品卡片，右侧的+新增产品按钮不受影响 */
 .mc-tsection-toggle {
   display: flex; align-items: center; gap: 8px; min-width: 0;
   background: none; border: none; padding: 2px 4px; margin: -2px -4px;
@@ -2036,7 +2009,7 @@ body.rpt-presenting .rpt-wm-note {
 /* 产品专属词：一行一个产品卡片，纵向堆叠，超出高度整体滚动，关键词横向铺开自动换行 */
 .mc-pcards-scroll { display: flex; flex-direction: column; gap: 14px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
 .mc-pcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; }
-/* 名称+加关键词+移动分区/分组归属/复制/删除全部挤在同一行，
+/* 名称+加关键词+移动分区/复制/删除全部挤在同一行，
    名称和关键词输入框各占剩余空间一半（flex-basis 相同），其它都是固定宽度的控件 */
 .mc-pcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .mc-pcard-name { flex: 1 1 100px; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
@@ -2044,7 +2017,6 @@ body.rpt-presenting .rpt-wm-note {
 .mc-kw-input-inline { flex: 1 1 100px; min-width: 90px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 .mc-pcard-move { flex: 0 0 auto; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
-.mc-pcard-group { flex: 0 0 auto; color: var(--dimmer); font-size: 12px; white-space: nowrap; }
 
 /* 拖拽手柄：单独的小按钮而不是整张卡片可拖，避免跟卡片里的输入框/下拉框抢手势 */
 .mc-pcard-handle {

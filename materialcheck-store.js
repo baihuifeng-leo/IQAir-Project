@@ -15,14 +15,9 @@ const OVERALL_MIN_CONFIDENCE = 0.7;
 
 const PLATFORMS = ['tmall', 'jd'];
 const DEFAULT_LIBRARY_NAME = '默认词库';
-const TYPE_LABEL = { machine: '机器', filter: '滤芯', accessory: '附件' };
 
 function makeLibraryId() {
   return 'lib_' + crypto.randomBytes(6).toString('hex');
-}
-
-function makeGroupId() {
-  return 'grp_' + crypto.randomBytes(6).toString('hex');
 }
 
 function cleanKeywords(keywords) {
@@ -35,67 +30,26 @@ function cleanKeywords(keywords) {
 }
 
 function emptyLibrary(name) {
-  return {
-    id: makeLibraryId(), name,
-    products: [], universalKeywords: [], groups: []
-  };
+  return { id: makeLibraryId(), name, products: [] };
 }
 
 function emptyPlatform() {
   return { libraries: [emptyLibrary(DEFAULT_LIBRARY_NAME)] };
 }
 
-/**
- * 磁盘上的库如果还没有 groups 数组，说明是"机器/滤芯/附件三套固定组内通用词"的旧结构。
- * 旧结构里这三套通用词是整库共享、不区分具体是哪几个产品在共用的，所以迁移策略是：
- * 每一套非空的旧通用词，自动建一个包含"该类型下所有产品"的分组，原样保留旧的共享效果——
- * 迁移后这些产品事实上还是互相共享这些词，用户可以在页面上再手动拆分成更细的分组。
- */
-function migrateLegacyGroups(r, products) {
-  const groups = [];
-  match.PRODUCT_TYPES.forEach((type) => {
-    const legacyWords = Array.isArray(r[type + 'SharedKeywords']) ? r[type + 'SharedKeywords'] : [];
-    if (!legacyWords.length) return;
-    const gid = makeGroupId();
-    groups.push({ id: gid, name: `${TYPE_LABEL[type]}组通用词（迁移前）`, type, keywords: legacyWords });
-    products.forEach((p) => { if (p.type === type) p.groupIds.push(gid); });
-  });
-  return groups;
-}
-
-/** 兼容老的单分组字段 groupId（string|null）——现在一个产品可以同时属于多个分组，
- *  所以磁盘/前端传来的可能是老的 groupId，也可能是新的 groupIds 数组，统一成数组。 */
-function normalizeGroupIds(p) {
-  if (Array.isArray(p && p.groupIds)) return p.groupIds.filter((id) => typeof id === 'string' && id);
-  if (p && p.groupId) return [p.groupId];
-  return [];
-}
-
+/** 产品与关键词强绑定，每个产品自己一份完整清单（不再有分组/全局通用词这层）。
+ *  兼容磁盘上仍是旧结构（带 groups/universalKeywords/groupIds）的情况：这里只按
+ *  当前格式读 products 自己的 keywords，旧结构里分组/通用词的内容不会自动带过来——
+ *  那部分内容需要用一次性脚本先下沉到各个产品自己的 keywords 里，再读这份文件。 */
 function normalizeLibrary(raw) {
   const r = raw || {};
-  const hasGroups = Array.isArray(r.groups);
   const products = (Array.isArray(r.products) ? r.products : []).map((p) => ({
     id: p.id, name: p.name, type: p.type,
-    groupIds: hasGroups ? normalizeGroupIds(p) : [],
     keywords: Array.isArray(p.keywords) ? p.keywords : [],
     // 没配置过预期价格的产品（老数据/还没填的产品）就是 null，不参与价格校验
     price: (typeof p.price === 'number' && Number.isFinite(p.price)) ? p.price : null
   }));
-  const groups = hasGroups
-    ? r.groups.map((g) => ({
-      id: String((g && g.id) || makeGroupId()),
-      name: String((g && g.name) || '未命名分组'),
-      type: match.PRODUCT_TYPES.includes(g && g.type) ? g.type : 'machine',
-      keywords: Array.isArray(g && g.keywords) ? g.keywords : []
-    }))
-    : migrateLegacyGroups(r, products);
-  return {
-    id: String(r.id || makeLibraryId()),
-    name: String(r.name || '未命名词库'),
-    products,
-    universalKeywords: Array.isArray(r.universalKeywords) ? r.universalKeywords : [],
-    groups
-  };
+  return { id: String(r.id || makeLibraryId()), name: String(r.name || '未命名词库'), products };
 }
 
 /**
@@ -127,11 +81,10 @@ function loadPlatforms(raw) {
   return { tmall: emptyPlatform(), jd: emptyPlatform() };
 }
 
-/** 读到的磁盘数据里，只要有一个库还不是当前格式（没有 libraries 包装，或者库里没有 groups 数组），就说明发生了迁移。 */
+/** 读到的磁盘数据里，只要有一个平台还没有 libraries 包装，就说明是还没升级到多词库结构的老格式。 */
 function detectsLegacyFormat(raw) {
   if (!raw) return false;
-  const libraryIsCurrent = (l) => l && Array.isArray(l.groups);
-  const platformIsCurrent = (p) => p && Array.isArray(p.libraries) && p.libraries.every(libraryIsCurrent);
+  const platformIsCurrent = (p) => p && Array.isArray(p.libraries);
   if (raw.tmall || raw.jd) return !(platformIsCurrent(raw.tmall) && platformIsCurrent(raw.jd));
   return true; // 连 tmall/jd 命名空间都没有，是最老的扁平格式
 }
@@ -260,9 +213,7 @@ class MaterialCheckStore {
     const lib = {
       id: makeLibraryId(),
       name: trimmed,
-      products: JSON.parse(JSON.stringify(src.products)),
-      universalKeywords: JSON.parse(JSON.stringify(src.universalKeywords)),
-      groups: JSON.parse(JSON.stringify(src.groups))
+      products: JSON.parse(JSON.stringify(src.products))
     };
     this.platforms[platform].libraries.push(lib);
     await this._persistPlatforms();
@@ -289,54 +240,28 @@ class MaterialCheckStore {
     await this._persistPlatforms();
   }
 
-  async saveProducts(platform, libraryId, products, universalKeywords, groups = []) {
+  async saveProducts(platform, libraryId, products) {
     this._assertPlatform(platform);
     const idx = this._findLibraryIndex(platform, libraryId);
     if ((products || []).some((p) => !String(p.name || '').trim())) {
       throw new Error('产品名称不能为空');
     }
-    const cleanGroups = (groups || [])
-      .map((g) => {
-        const name = String((g && g.name) || '').trim();
-        const type = g && g.type;
-        if (!name || !match.PRODUCT_TYPES.includes(type)) return null;
-        return { id: String((g && g.id) || makeGroupId()), name, type, keywords: cleanKeywords(g && g.keywords) };
-      })
-      .filter(Boolean);
-    const dupGroup = cleanGroups.find((g, i) => cleanGroups.some((g2, j) => j !== i && g2.type === g.type && g2.name === g.name));
-    if (dupGroup) throw new Error(`分组名「${dupGroup.name}」在同一个类型下重复了，换个名字`);
-
-    const groupById = new Map(cleanGroups.map((g) => [g.id, g]));
     const cleanProducts = (products || []).map((p) => {
       const type = match.PRODUCT_TYPES.includes(p.type) ? p.type : '';
-      // 分组的类型必须跟产品自己的类型一致，否则视为没这个分组——正常操作下前端不会产出这种数据，这里只是兜底；
-      // 一个产品现在可以同时属于多个分组（比如"机器通用"+"瑞士制造机型"两个分组的共享词都要求）
-      const groupIds = normalizeGroupIds(p).filter((gid) => {
-        const group = groupById.get(gid);
-        return group && group.type === type;
-      });
       const price = (p.price === '' || p.price == null) ? null : Number(p.price);
       return {
         id: p.id,
         name: String(p.name || '').trim(),
         type,
-        groupIds,
         keywords: cleanKeywords(p.keywords),
         price: Number.isFinite(price) && price > 0 ? price : null
       };
     });
 
-    const conflicts = match.validateLibrary(cleanProducts, universalKeywords, cleanGroups);
-    if (conflicts.length) {
-      const c = conflicts[0];
-      throw new Error(`关键词「${c.keyword}」重复出现在「${c.first}」和「${c.second}」，一个词只能属于一处`);
-    }
     const clean = {
       id: libraryId,
       name: this.platforms[platform].libraries[idx].name,
-      products: cleanProducts,
-      universalKeywords: cleanKeywords(universalKeywords),
-      groups: cleanGroups
+      products: cleanProducts
     };
     this.platforms[platform].libraries[idx] = clean;
     await this._persistPlatforms();
@@ -385,7 +310,7 @@ class MaterialCheckStore {
       const record = {
         id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId: lib.id,
         filename, imagePath: url, productId: null, productName: null, matchMethod: null,
-        ocrText: '', ocrConfidence: null, missingKeywords: [], crossedKeywords: [], status: 'ocr_failed', warning: e.message
+        ocrText: '', ocrConfidence: null, missingKeywords: [], extraKeywords: [], status: 'ocr_failed', warning: e.message
       };
       await this.append(record);
       return record;
@@ -410,7 +335,7 @@ class MaterialCheckStore {
       : null;
 
     return this._finish({
-      platform, libraryId: lib.id, product: resolution.product, allProducts: lib.products, groups: lib.groups, universalKeywords: lib.universalKeywords, method: resolution.method,
+      platform, libraryId: lib.id, product: resolution.product, allProducts: lib.products, method: resolution.method,
       ocrText, ocrConfidence, imagePath: url, filename, batchId, uploadedBy, warning
     });
   }
@@ -425,17 +350,17 @@ class MaterialCheckStore {
     if (!product) throw new Error('选的这个产品不存在');
     this.pending.delete(pendingId);
     return this._finish({
-      platform: p.platform, libraryId: lib.id, product, allProducts: lib.products, groups: lib.groups, universalKeywords: lib.universalKeywords, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence,
+      platform: p.platform, libraryId: lib.id, product, allProducts: lib.products, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence,
       imagePath: p.imagePath, filename: p.filename, batchId: p.batchId, uploadedBy: p.uploadedBy || uploadedBy, warning: null
     });
   }
 
-  async _finish({ platform, libraryId, product, allProducts, groups, universalKeywords, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning }) {
-    const { missingKeywords, crossedKeywords, priceIssue, status } = match.matchAgainstProduct(ocrText, product, allProducts, groups, universalKeywords);
+  async _finish({ platform, libraryId, product, allProducts, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning }) {
+    const { missingKeywords, extraKeywords, priceIssue, status } = match.matchAgainstProduct(ocrText, product, allProducts);
     const record = {
       id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId,
       filename, imagePath, productId: product.id, productName: product.name, matchMethod: method,
-      ocrText, ocrConfidence, missingKeywords, crossedKeywords, priceIssue, status, warning
+      ocrText, ocrConfidence, missingKeywords, extraKeywords, priceIssue, status, warning
     };
     await this.append(record);
     return record;

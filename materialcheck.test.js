@@ -137,7 +137,6 @@ async function run() {
   const productA = { id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi', '抗菌滤网认证号XXX'] };
   const productB = { id: 'pb', name: 'GCX XE', keywords: ['GCX XE', '静音悬浮马达'] };
   const products = [productA, productB];
-  const universal = ['7天无理由退换', '包邮'];
 
   t('findKeywordHits 找出命中的关键词，忽略空白', () => {
     const hits = M.findKeywordHits('这款 GC-Multi 带 抗菌滤网认证号XXX 效果好', ['GC-Multi', '抗菌滤网认证号XXX', 'GCX XE']);
@@ -147,23 +146,6 @@ async function run() {
   t('findKeywordHits 忽略文本中的换行空格', () => {
     const hits = M.findKeywordHits('这款 GC\n-Multi 不错', ['GC-Multi']);
     assert.deepStrictEqual(hits, ['GC-Multi']);
-  });
-
-  t('validateLibrary 无冲突时返回空数组', () => {
-    assert.deepStrictEqual(M.validateLibrary(products, universal), []);
-  });
-
-  t('validateLibrary 检出跨产品重复关键词', () => {
-    const dup = [productA, { id: 'pc', name: 'C', keywords: ['GC-Multi'] }];
-    const conflicts = M.validateLibrary(dup, []);
-    assert.strictEqual(conflicts.length, 1);
-    assert.strictEqual(conflicts[0].keyword, 'GC-Multi');
-  });
-
-  t('validateLibrary 检出产品词和通用词重复', () => {
-    const conflicts = M.validateLibrary(products, ['GC-Multi']);
-    assert.strictEqual(conflicts.length, 1);
-    assert.strictEqual(conflicts[0].keyword, 'GC-Multi');
   });
 
   t('resolveByFilename 文件名唯一命中一个产品', () => {
@@ -223,48 +205,48 @@ async function run() {
     assert.ok(w && w.includes('GCX XE'));
   });
 
-  t('matchAgainstProduct 全部命中且无串词时通过', () => {
-    const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX 7天无理由退换', productA, products);
+  t('matchAgainstProduct 全部命中且无多出的词时通过', () => {
+    const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX', productA, products);
     assert.deepStrictEqual(r.missingKeywords, []);
-    assert.deepStrictEqual(r.crossedKeywords, []);
+    assert.deepStrictEqual(r.extraKeywords, []);
     assert.strictEqual(r.status, 'pass');
   });
 
   t('matchAgainstProduct 缺词判定为提醒状态', () => {
     const r = M.matchAgainstProduct('GC-Multi', productA, products);
-    assert.deepStrictEqual(r.missingKeywords, [{ keyword: '抗菌滤网认证号XXX', source: 'own' }]);
+    assert.deepStrictEqual(r.missingKeywords, ['抗菌滤网认证号XXX']);
     assert.strictEqual(r.status, 'warn');
   });
 
-  t('matchAgainstProduct 串词判定为报错状态，标注来源产品', () => {
+  t('matchAgainstProduct 出现别的产品的词时判定为多出的词、报错状态', () => {
     const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX GCX XE', productA, products);
     assert.deepStrictEqual(r.missingKeywords, []);
-    assert.strictEqual(r.crossedKeywords.length, 1);
-    assert.strictEqual(r.crossedKeywords[0].keyword, 'GCX XE');
-    assert.strictEqual(r.crossedKeywords[0].fromProductId, 'pb');
+    assert.deepStrictEqual(r.extraKeywords, ['GCX XE']);
     assert.strictEqual(r.status, 'error');
   });
 
-  t('matchAgainstProduct 既有串词又有缺词时，报错优先，但详情仍分别列出', () => {
+  t('matchAgainstProduct 既有多出的词又有缺词时，报错优先，但详情仍分别列出', () => {
     const r = M.matchAgainstProduct('GCX XE', productA, products);
-    assert.deepStrictEqual(r.missingKeywords, [
-      { keyword: 'GC-Multi', source: 'own' },
-      { keyword: '抗菌滤网认证号XXX', source: 'own' }
-    ]);
-    assert.strictEqual(r.crossedKeywords.length, 1);
+    assert.deepStrictEqual(r.missingKeywords, ['GC-Multi', '抗菌滤网认证号XXX']);
+    assert.deepStrictEqual(r.extraKeywords, ['GCX XE']);
     assert.strictEqual(r.status, 'error');
   });
 
-  t('matchAgainstProduct 全局通用词是强关联，没命中的每一条都算缺词，标注来源', () => {
-    const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX 7天无理由退换', productA, products, [], universal);
-    assert.deepStrictEqual(r.missingKeywords, [{ keyword: '包邮', source: 'universal' }]);
-    assert.strictEqual(r.status, 'warn');
+  t('matchAgainstProduct 产品与关键词强绑定：两个产品都重复录入同一个词，这个词对谁都不算多出的', () => {
+    const shared1 = { id: 'ps1', name: '共享词产品A', keywords: ['专属词A', '分期免息'] };
+    const shared2 = { id: 'ps2', name: '共享词产品B', keywords: ['专属词B', '分期免息'] };
+    const r = M.matchAgainstProduct('专属词A 分期免息', shared1, [shared1, shared2]);
+    assert.deepStrictEqual(r.missingKeywords, []);
+    assert.deepStrictEqual(r.extraKeywords, []);
+    assert.strictEqual(r.status, 'pass');
   });
 
-  t('matchAgainstProduct 全局通用词全部命中时不产生缺词', () => {
-    const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX 7天无理由退换 包邮', productA, products, [], universal);
-    assert.deepStrictEqual(r.missingKeywords, []);
-    assert.strictEqual(r.status, 'pass');
+  t('matchAgainstProduct 多个别的产品都有同一个多出的词时只报一次，不重复', () => {
+    const target = { id: 'pt', name: '目标产品', keywords: ['目标专属词'] };
+    const other1 = { id: 'po1', name: '别的产品1', keywords: ['共同串出的词'] };
+    const other2 = { id: 'po2', name: '别的产品2', keywords: ['共同串出的词'] };
+    const r = M.matchAgainstProduct('目标专属词 共同串出的词', target, [target, other1, other2]);
+    assert.deepStrictEqual(r.extraKeywords, ['共同串出的词']);
   });
 
   t('keywordText/keywordCategory 兼容纯字符串和 {text,category} 对象两种关键词写法', () => {
@@ -278,77 +260,8 @@ async function run() {
   t('matchAgainstProduct 关键词是 {text,category} 对象时匹配逻辑不受影响', () => {
     const objProduct = { id: 'po', name: 'Obj', keywords: [{ text: 'OBJ-100', category: '产品型号' }, { text: '国补价1999', category: '国补' }] };
     const r = M.matchAgainstProduct('OBJ-100', objProduct, [objProduct]);
-    assert.deepStrictEqual(r.missingKeywords, [{ keyword: '国补价1999', source: 'own' }]);
+    assert.deepStrictEqual(r.missingKeywords, ['国补价1999']);
     assert.strictEqual(r.status, 'warn');
-  });
-
-  t('validateLibrary 检出产品词和自定义分组共享词重复', () => {
-    const conflicts = M.validateLibrary(products, [], [{ id: 'g1', name: '机器组', type: 'machine', keywords: ['GC-Multi'] }]);
-    assert.strictEqual(conflicts.length, 1);
-    assert.strictEqual(conflicts[0].keyword, 'GC-Multi');
-    assert.strictEqual(conflicts[0].second, '分组「机器组」');
-  });
-
-  t('validateLibrary 不传 groups 参数时行为跟老版本一致', () => {
-    assert.deepStrictEqual(M.validateLibrary(products, universal), []);
-  });
-
-  t('matchAgainstProduct 同分组成员之间共享词不算串词', () => {
-    const inGroupA = { id: 'pg1', name: 'GX-1', type: 'machine', groupIds: ['g1'], keywords: ['GX-1专属词'] };
-    const inGroupB = { id: 'pg2', name: 'GX-2', type: 'machine', groupIds: ['g1'], keywords: ['GX-2专属词'] };
-    const groups = [{ id: 'g1', name: 'GX系列', type: 'machine', keywords: ['系列共享词'] }];
-    const r = M.matchAgainstProduct('系列共享词 GX-1专属词', inGroupA, [inGroupA, inGroupB], groups);
-    assert.deepStrictEqual(r.crossedKeywords, []);
-    assert.strictEqual(r.status, 'pass');
-  });
-
-  t('matchAgainstProduct 不属于该分组的产品出现分组共享词时判定为串词', () => {
-    const inGroup = { id: 'pg1', name: 'GX-1', type: 'machine', groupIds: ['g1'], keywords: [] };
-    const outsider = { id: 'pg3', name: '独立产品', type: 'machine', groupIds: [], keywords: [] };
-    const groups = [{ id: 'g1', name: 'GX系列', type: 'machine', keywords: ['系列共享词'] }];
-    const r = M.matchAgainstProduct('系列共享词', outsider, [inGroup, outsider], groups);
-    assert.strictEqual(r.crossedKeywords.length, 1);
-    assert.strictEqual(r.crossedKeywords[0].keyword, '系列共享词');
-    assert.strictEqual(r.crossedKeywords[0].fromProductName, '分组「GX系列」');
-    assert.strictEqual(r.status, 'error');
-  });
-
-  t('matchAgainstProduct 所在分组的共享词是强关联，缺了也算缺词，标注来源分组名', () => {
-    const inGroupA = { id: 'pg1', name: 'GX-1', type: 'machine', groupIds: ['g1'], keywords: ['GX-1专属词'] };
-    const groups = [{ id: 'g1', name: 'GX系列', type: 'machine', keywords: ['系列共享词'] }];
-    const r = M.matchAgainstProduct('GX-1专属词', inGroupA, [inGroupA], groups);
-    assert.deepStrictEqual(r.missingKeywords, [{ keyword: '系列共享词', source: 'group', groupName: 'GX系列' }]);
-    assert.strictEqual(r.status, 'warn');
-  });
-
-  t('matchAgainstProduct 一个产品可以同时属于多个分组，两组共享词都是强关联', () => {
-    const p = { id: 'pg1', name: 'GX-1', type: 'machine', groupIds: ['g1', 'g2'], keywords: [] };
-    const groups = [
-      { id: 'g1', name: '机器通用', type: 'machine', keywords: ['通用词A'] },
-      { id: 'g2', name: '瑞士制造机型', type: 'machine', keywords: ['瑞士精工 原装进口'] }
-    ];
-    const missAll = M.matchAgainstProduct('', p, [p], groups);
-    assert.deepStrictEqual(missAll.missingKeywords, [
-      { keyword: '通用词A', source: 'group', groupName: '机器通用' },
-      { keyword: '瑞士精工 原装进口', source: 'group', groupName: '瑞士制造机型' }
-    ]);
-    assert.strictEqual(missAll.status, 'warn');
-
-    const passBoth = M.matchAgainstProduct('通用词A 瑞士精工 原装进口', p, [p], groups);
-    assert.deepStrictEqual(passBoth.missingKeywords, []);
-    assert.strictEqual(passBoth.status, 'pass');
-  });
-
-  t('matchAgainstProduct 不在其中一个分组里的产品出现该分组共享词时仍判定为串词', () => {
-    const p = { id: 'pg1', name: 'Atem X', type: 'machine', groupIds: ['g1'], keywords: [] }; // 只在机器通用，不在瑞士制造机型
-    const groups = [
-      { id: 'g1', name: '机器通用', type: 'machine', keywords: ['通用词A'] },
-      { id: 'g2', name: '瑞士制造机型', type: 'machine', keywords: ['瑞士精工 原装进口'] }
-    ];
-    const r = M.matchAgainstProduct('通用词A 瑞士精工 原装进口', p, [p], groups);
-    assert.strictEqual(r.crossedKeywords.length, 1);
-    assert.strictEqual(r.crossedKeywords[0].fromProductName, '分组「瑞士制造机型」');
-    assert.strictEqual(r.status, 'error');
   });
 
   t('extractPriceCandidates 能识别符号跟数字隔着换行、或数字在符号前面的情况', () => {
@@ -372,8 +285,8 @@ async function run() {
     assert.deepStrictEqual(wrong, { expected: 399, found: [299] });
   });
 
-  t('matchAgainstProduct 价格不对时归为报错状态，跟串词同级', () => {
-    const p = { id: 'p1', name: '空气净化器', type: 'machine', groupIds: [], keywords: ['空气净化器'], price: 399 };
+  t('matchAgainstProduct 价格不对时归为报错状态，跟多出的词同级', () => {
+    const p = { id: 'p1', name: '空气净化器', type: 'machine', keywords: ['空气净化器'], price: 399 };
     const rWrong = M.matchAgainstProduct('空气净化器 促销价￥299', p, [p]);
     assert.deepStrictEqual(rWrong.priceIssue, { expected: 399, found: [299] });
     assert.strictEqual(rWrong.status, 'error');
@@ -393,14 +306,10 @@ async function run() {
     const store = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
     await store.load();
     const libId = store.getLibrary(PF).id;
-    await store.saveProducts(
-      PF, libId,
-      [
-        { id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi', '抗菌滤网认证号XXX'] },
-        { id: 'pb', name: 'GCX XE', keywords: ['GCX XE', '静音悬浮马达'] }
-      ],
-      ['7天无理由退换']
-    );
+    await store.saveProducts(PF, libId, [
+      { id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi', '抗菌滤网认证号XXX', '7天无理由退换'] },
+      { id: 'pb', name: 'GCX XE', keywords: ['GCX XE', '静音悬浮马达'] }
+    ]);
     return store;
   }
 
@@ -432,7 +341,6 @@ async function run() {
     const copy = await store.copyLibrary(PF, srcId, '复制版');
     assert.notStrictEqual(copy.id, srcId);
     assert.strictEqual(copy.products.length, 2);
-    assert.strictEqual(copy.universalKeywords[0].text, '7天无理由退换');
     // 复制后的产品是深拷贝，改动互不影响
     copy.products[0].name = '改过的名字';
     assert.strictEqual(store.getLibrary(PF, srcId).products[0].name, 'GC-Multi');
@@ -461,24 +369,25 @@ async function run() {
     assert.strictEqual(store.listLibraries(PF).length, 1);
   });
 
-  await tAsync('saveProducts 拒绝重复关键词并保留原有数据', async () => {
+  await tAsync('saveProducts 允许同一个词出现在多个产品里，不再报冲突', async () => {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;
-    await assert.rejects(
-      store.saveProducts(PF, libId, [{ id: 'pa', name: 'A', keywords: ['同一个词'] }, { id: 'pb', name: 'B', keywords: ['同一个词'] }], []),
-      /同一个词/
-    );
-    assert.strictEqual(store.getLibrary(PF, libId).products.length, 2); // 拒绝后没有把坏数据写进去
+    const saved = await store.saveProducts(PF, libId, [
+      { id: 'pa', name: 'A', keywords: ['同一个词'] },
+      { id: 'pb', name: 'B', keywords: ['同一个词'] }
+    ]);
+    assert.strictEqual(saved.products[0].keywords[0].text, '同一个词');
+    assert.strictEqual(saved.products[1].keywords[0].text, '同一个词');
   });
 
   await tAsync('saveProducts 拒绝不认识的平台参数', async () => {
     const store = await freshStore();
-    await assert.rejects(store.saveProducts('pdd', 'lib_x', [], []), /平台参数不对/);
+    await assert.rejects(store.saveProducts('pdd', 'lib_x', []), /平台参数不对/);
   });
 
   await tAsync('saveProducts 拒绝不存在的词库 id', async () => {
     const store = await freshStore();
-    await assert.rejects(store.saveProducts(PF, 'lib_不存在', [], []), /不存在/);
+    await assert.rejects(store.saveProducts(PF, 'lib_不存在', []), /不存在/);
   });
 
   await tAsync('saveProducts 清洗 price 字段：合法数字保留，非法/未填的归一化成 null', async () => {
@@ -490,7 +399,7 @@ async function run() {
       { id: 'pc', name: 'C', price: -50, keywords: [] }, // 非正数当没填
       { id: 'pd', name: 'D', price: '', keywords: [] },
       { id: 'pe', name: 'E', keywords: [] } // 完全没给 price 字段
-    ], []);
+    ]);
     assert.strictEqual(saved.products[0].price, 399);
     assert.strictEqual(saved.products[1].price, 299);
     assert.strictEqual(saved.products[2].price, null);
@@ -504,89 +413,21 @@ async function run() {
     const saved = await store.saveProducts(PF, libId, [
       { id: 'pa', name: 'GC-Multi', type: 'machine', keywords: [{ text: 'GC-Multi', category: '产品型号' }, '国补价1999'] },
       { id: 'pb', name: 'GCX XE', type: '不合法类型', keywords: ['GCX XE'] }
-    ], []);
+    ]);
     assert.deepStrictEqual(saved.products[0].keywords, [{ text: 'GC-Multi', category: '产品型号' }, { text: '国补价1999', category: '其它' }]);
     assert.strictEqual(saved.products[0].type, 'machine');
     assert.strictEqual(saved.products[1].type, ''); // 非法 type 兜底为空，不抛错
   });
 
-  await tAsync('saveProducts 一个产品可以同时挂多个分组，类型不匹配的分组会被过滤掉', async () => {
-    const store = await freshStore();
-    const libId = store.getLibrary(PF).id;
-    const saved = await store.saveProducts(PF, libId,
-      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupIds: ['g1', 'g2', 'g3'], keywords: [] }],
-      [],
-      [
-        { id: 'g1', name: '机器通用', type: 'machine', keywords: [] },
-        { id: 'g2', name: '瑞士制造机型', type: 'machine', keywords: [] },
-        { id: 'g3', name: '滤芯分组', type: 'filter', keywords: [] } // 跟产品自己的 type 不一致，应该被过滤掉
-      ]
-    );
-    assert.deepStrictEqual(saved.products[0].groupIds, ['g1', 'g2']);
-  });
-
-  await tAsync('saveProducts 通用词和分组共享词也归一化成 {text,category}，且跟专属词冲突时拒绝', async () => {
-    const store = await freshStore();
-    const libId = store.getLibrary(PF).id;
-    const saved = await store.saveProducts(PF, libId,
-      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupIds: ['g1'], keywords: ['GC-Multi'] }],
-      [{ text: '全局通用词', category: '产品利益点' }],
-      [{ id: 'g1', name: '机器分组', type: 'machine', keywords: ['机器组内共享词'] }]
-    );
-    assert.deepStrictEqual(saved.universalKeywords, [{ text: '全局通用词', category: '产品利益点' }]);
-    assert.deepStrictEqual(saved.groups, [{ id: 'g1', name: '机器分组', type: 'machine', keywords: [{ text: '机器组内共享词', category: '其它' }] }]);
-    assert.deepStrictEqual(saved.products[0].groupIds, ['g1']);
-
-    await assert.rejects(
-      store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['冲突词'] }], [], [{ id: 'g1', name: '机器分组', type: 'machine', keywords: ['冲突词'] }]),
-      /冲突词/
-    );
-  });
-
-  await tAsync('saveProducts 分组同类型下不能重名；产品挂到跟自己类型不一致的分组时兜底为未分组', async () => {
-    const store = await freshStore();
-    const libId = store.getLibrary(PF).id;
-    await assert.rejects(
-      store.saveProducts(PF, libId, [], [], [
-        { id: 'g1', name: '同名', type: 'machine', keywords: [] },
-        { id: 'g2', name: '同名', type: 'machine', keywords: [] }
-      ]),
-      /同一个类型下重复/
-    );
-
-    const saved = await store.saveProducts(PF, libId,
-      [{ id: 'pa', name: 'GC-Multi', type: 'filter', groupIds: ['g1'], keywords: [] }],
-      [],
-      [{ id: 'g1', name: '机器分组', type: 'machine', keywords: [] }]
-    );
-    assert.deepStrictEqual(saved.products[0].groupIds, []); // 产品是 filter 类型，分组是 machine 类型，不匹配就当没这个分组
-  });
-
-  await tAsync('deleteLibrary/copyLibrary 会带上分组数据一起处理', async () => {
-    const store = await freshStore();
-    const srcId = store.getLibrary(PF).id;
-    await store.saveProducts(PF, srcId,
-      [{ id: 'pa', name: 'GC-Multi', type: 'machine', groupIds: ['g1'], keywords: [] }, { id: 'pb', name: 'GCX XE', type: 'machine', keywords: [] }],
-      [],
-      [{ id: 'g1', name: '机器分组', type: 'machine', keywords: ['组内词'] }]
-    );
-    const copy = await store.copyLibrary(PF, srcId, '复制版');
-    assert.strictEqual(copy.groups.length, 1);
-    assert.strictEqual(copy.groups[0].name, '机器分组');
-    // 复制后的分组是深拷贝，改动互不影响
-    copy.groups[0].keywords.push({ text: '只在副本里加的词', category: '其它' });
-    assert.strictEqual(store.getLibrary(PF, srcId).groups[0].keywords.length, 1);
-  });
-
   await tAsync('天猫和京东两个平台的词库完全独立，互不影响', async () => {
     const store = await freshStore();
     const jdLibId = store.getLibrary('jd').id;
-    await store.saveProducts('jd', jdLibId, [{ id: 'pj', name: '京东专属产品', keywords: ['京东词'] }], []);
+    await store.saveProducts('jd', jdLibId, [{ id: 'pj', name: '京东专属产品', keywords: ['京东词'] }]);
     assert.strictEqual(store.getLibrary('tmall').products.length, 2);
     assert.strictEqual(store.getLibrary('jd').products.length, 1);
     assert.strictEqual(store.getLibrary('jd').products[0].name, '京东专属产品');
     // 同一个词在天猫和京东各自的库里都能用，互不冲突
-    await store.saveProducts('jd', jdLibId, [{ id: 'pj', name: '京东专属产品', keywords: ['GC-Multi'] }], []);
+    await store.saveProducts('jd', jdLibId, [{ id: 'pj', name: '京东专属产品', keywords: ['GC-Multi'] }]);
     assert.strictEqual(store.getLibrary('jd').products[0].keywords[0].text, 'GC-Multi');
   });
 
@@ -594,7 +435,7 @@ async function run() {
     const store = await freshStore();
     const libA = store.getLibrary(PF).id;
     const libB = await store.createLibrary(PF, '词库B');
-    await store.saveProducts(PF, libB.id, [{ id: 'pn', name: '新产品', keywords: ['GC-Multi'] }], []); // 跟词库A里的词重名也没事
+    await store.saveProducts(PF, libB.id, [{ id: 'pn', name: '新产品', keywords: ['GC-Multi'] }]); // 跟词库A里的词重名也没事
     assert.strictEqual(store.getLibrary(PF, libA).products.length, 2);
     assert.strictEqual(store.getLibrary(PF, libB.id).products.length, 1);
   });
@@ -641,10 +482,7 @@ async function run() {
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi')
     });
     assert.strictEqual(result.status, 'warn');
-    assert.deepStrictEqual(result.missingKeywords, [
-      { keyword: '抗菌滤网认证号XXX', source: 'own' },
-      { keyword: '7天无理由退换', source: 'universal' }
-    ]);
+    assert.deepStrictEqual(result.missingKeywords, ['抗菌滤网认证号XXX', '7天无理由退换']);
   });
 
   await tAsync('detectFile OCR 失败时判定为 ocr_failed', async () => {
@@ -719,7 +557,7 @@ async function run() {
     await assert.rejects(store.resolvePending('mcp_不存在', 'pa', 'li'), /过期|不存在/);
   });
 
-  await tAsync('detectFile 串词时标注来源产品，判定为报错状态', async () => {
+  await tAsync('detectFile 出现别的产品的词时判定为多出的词、报错状态', async () => {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;
     const result = await store.detectFile({
@@ -727,22 +565,19 @@ async function run() {
       batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX GCX XE')
     });
     assert.strictEqual(result.status, 'error');
-    assert.strictEqual(result.crossedKeywords[0].fromProductName, 'GCX XE');
+    assert.deepStrictEqual(result.extraKeywords, ['GCX XE']);
   });
 
   await tAsync('detectFile 配置了 price 的产品，图里价格不对时报错并把 priceIssue 写进历史记录', async () => {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;
-    await store.saveProducts(PF, libId,
-      [
-        { id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi', '抗菌滤网认证号XXX'], price: 399 },
-        { id: 'pb', name: 'GCX XE', keywords: ['GCX XE', '静音悬浮马达'] }
-      ],
-      ['7天无理由退换']
-    );
+    await store.saveProducts(PF, libId, [
+      { id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi', '抗菌滤网认证号XXX'], price: 399 },
+      { id: 'pb', name: 'GCX XE', keywords: ['GCX XE', '静音悬浮马达'] }
+    ]);
     const result = await store.detectFile({
       buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi_主图.jpg', platform: PF, libraryId: libId,
-      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX 7天无理由退换 ￥299')
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX ￥299')
     });
     assert.strictEqual(result.status, 'error');
     assert.deepStrictEqual(result.priceIssue, { expected: 399, found: [299] });
@@ -763,7 +598,7 @@ async function run() {
     const store = await freshStore();
     const tmallLibId = store.getLibrary('tmall').id;
     const jdLibId = store.getLibrary('jd').id;
-    await store.saveProducts('jd', jdLibId, [{ id: 'pj', name: '京东产品', keywords: ['京东词'] }], []);
+    await store.saveProducts('jd', jdLibId, [{ id: 'pj', name: '京东产品', keywords: ['京东词'] }]);
     await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: 'tmall', libraryId: tmallLibId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX') });
     await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: '京东产品_a.jpg', platform: 'jd', libraryId: jdLibId, batchId: 'b2', uploadedBy: 'li', ocr: stubOcr('京东词') });
     assert.strictEqual(store.listRecords({ platform: 'tmall' }).length, 1);
@@ -775,7 +610,7 @@ async function run() {
     const store = await freshStore();
     const libA = store.getLibrary(PF).id;
     const libB = await store.createLibrary(PF, '词库B');
-    await store.saveProducts(PF, libB.id, [{ id: 'pn', name: '新产品', keywords: ['新品词'] }], []);
+    await store.saveProducts(PF, libB.id, [{ id: 'pn', name: '新产品', keywords: ['新品词'] }]);
     await store.detectFile({ buf: Buffer.from('1'), ext: '.jpg', filename: 'GC-Multi_a.jpg', platform: PF, libraryId: libA, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi 抗菌滤网认证号XXX') });
     await store.detectFile({ buf: Buffer.from('2'), ext: '.jpg', filename: '新产品_a.jpg', platform: PF, libraryId: libB.id, batchId: 'b2', uploadedBy: 'li', ocr: stubOcr('新品词') });
     assert.strictEqual(store.listRecords({ libraryId: libA }).length, 1);
@@ -787,7 +622,7 @@ async function run() {
     const store = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'), { ocrConcurrency: 1 });
     await store.load();
     const libId = store.getLibrary(PF).id;
-    await store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }], []);
+    await store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }]);
 
     let active = 0, maxActive = 0;
     const controlledOcr = () => new Promise((resolve) => {
@@ -809,7 +644,7 @@ async function run() {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;
     await assert.rejects(
-      store.saveProducts(PF, libId, [{ id: 'pa', name: '   ', keywords: ['GC-Multi'] }, { id: 'pb', name: 'GCX XE', keywords: ['静音悬浮马达'] }], []),
+      store.saveProducts(PF, libId, [{ id: 'pa', name: '   ', keywords: ['GC-Multi'] }, { id: 'pb', name: 'GCX XE', keywords: ['静音悬浮马达'] }]),
       /产品名称不能为空/
     );
     assert.strictEqual(store.getLibrary(PF, libId).products.length, 2); // 拒绝后没有把坏数据写进去
@@ -820,7 +655,7 @@ async function run() {
     const store1 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
     await store1.load();
     const libId = store1.getLibrary(PF).id;
-    await store1.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }], []);
+    await store1.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'] }]);
     await store1.detectFile({ buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi.jpg', platform: PF, libraryId: libId, batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('GC-Multi') });
 
     const store2 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
@@ -829,34 +664,12 @@ async function run() {
     assert.strictEqual(store2.records.length, 1);
   });
 
-  await tAsync('load() 兼容磁盘上老的单分组字段 groupId，读入后归一化成 groupIds 数组', async () => {
-    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
-    const mcDir = path.join(dir, 'materialcheck');
-    await fsp.mkdir(mcDir, { recursive: true });
-    await fsp.writeFile(path.join(mcDir, 'products.json'), JSON.stringify({
-      tmall: {
-        libraries: [{
-          id: 'lib1', name: '默认词库',
-          products: [{ id: 'p1', name: 'GC-Multi', type: 'machine', groupId: 'g1', keywords: [] }],
-          universalKeywords: [],
-          groups: [{ id: 'g1', name: '机器分组', type: 'machine', keywords: [] }]
-        }]
-      },
-      jd: { libraries: [{ id: 'lib_jd', name: '默认词库', products: [], universalKeywords: [], groups: [] }] }
-    }));
-    const store = new MaterialCheckStore(mcDir, path.join(dir, 'uploads'));
-    await store.load();
-    const product = store.getLibrary('tmall').products[0];
-    assert.deepStrictEqual(product.groupIds, ['g1']);
-  });
-
   await tAsync('load() 自动把 v1 最老的扁平结构迁移成天猫命名空间下的「默认词库」', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
     const mcDir = path.join(dir, 'materialcheck');
     await fsp.mkdir(mcDir, { recursive: true });
     await fsp.writeFile(path.join(mcDir, 'products.json'), JSON.stringify({
-      products: [{ id: 'old1', name: '旧产品', keywords: ['旧关键词'] }],
-      universalKeywords: ['旧通用词']
+      products: [{ id: 'old1', name: '旧产品', keywords: ['旧关键词'] }]
     }));
 
     const store = new MaterialCheckStore(mcDir, path.join(dir, 'uploads'));
@@ -864,7 +677,6 @@ async function run() {
     assert.strictEqual(store.getLibrary('tmall').name, '默认词库');
     assert.strictEqual(store.getLibrary('tmall').products.length, 1);
     assert.strictEqual(store.getLibrary('tmall').products[0].name, '旧产品');
-    assert.deepStrictEqual(store.getLibrary('tmall').universalKeywords, ['旧通用词']);
     assert.strictEqual(store.getLibrary('jd').products.length, 0);
     assert.strictEqual(store.getLibrary('jd').name, '默认词库');
 
@@ -878,8 +690,8 @@ async function run() {
     const mcDir = path.join(dir, 'materialcheck');
     await fsp.mkdir(mcDir, { recursive: true });
     await fsp.writeFile(path.join(mcDir, 'products.json'), JSON.stringify({
-      tmall: { products: [{ id: 'p1', name: 'GCX XE', keywords: ['瑞士精工'] }], universalKeywords: ['顺丰包邮'], machineSharedKeywords: [], filterSharedKeywords: [], accessorySharedKeywords: [] },
-      jd: { products: [], universalKeywords: [], machineSharedKeywords: [], filterSharedKeywords: [], accessorySharedKeywords: [] }
+      tmall: { products: [{ id: 'p1', name: 'GCX XE', keywords: ['瑞士精工'] }] },
+      jd: { products: [] }
     }));
 
     const store = new MaterialCheckStore(mcDir, path.join(dir, 'uploads'));
@@ -888,39 +700,6 @@ async function run() {
     assert.strictEqual(store.getLibrary('tmall').name, '默认词库');
     assert.strictEqual(store.getLibrary('tmall').products[0].name, 'GCX XE');
     assert.strictEqual(store.listLibraries('jd').length, 1);
-  });
-
-  await tAsync('load() 把非空的旧版机器组通用词迁移成一个自动分组，同类型产品自动加入', async () => {
-    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
-    const mcDir = path.join(dir, 'materialcheck');
-    await fsp.mkdir(mcDir, { recursive: true });
-    await fsp.writeFile(path.join(mcDir, 'products.json'), JSON.stringify({
-      tmall: {
-        id: 'lib_old', name: '默认词库',
-        products: [
-          { id: 'p1', name: 'GCX XE', type: 'machine', keywords: ['瑞士精工'] },
-          { id: 'p2', name: 'F8 滤芯', type: 'filter', keywords: ['原装滤芯'] }
-        ],
-        universalKeywords: ['顺丰包邮'],
-        machineSharedKeywords: ['机器组老通用词'], filterSharedKeywords: [], accessorySharedKeywords: []
-      },
-      jd: { id: 'lib_jd', name: '默认词库', products: [], universalKeywords: [], machineSharedKeywords: [], filterSharedKeywords: [], accessorySharedKeywords: [] }
-    }));
-
-    const store = new MaterialCheckStore(mcDir, path.join(dir, 'uploads'));
-    await store.load();
-    const lib = store.getLibrary('tmall');
-    assert.strictEqual(lib.groups.length, 1);
-    assert.strictEqual(lib.groups[0].type, 'machine');
-    assert.deepStrictEqual(lib.groups[0].keywords, ['机器组老通用词']); // load() 只做结构迁移，不清洗成 {text,category}，那是 saveProducts 的活
-    const machineProduct = lib.products.find((p) => p.id === 'p1');
-    const filterProduct = lib.products.find((p) => p.id === 'p2');
-    assert.deepStrictEqual(machineProduct.groupIds, [lib.groups[0].id]); // 机器类产品自动加入迁移出来的分组
-    assert.deepStrictEqual(filterProduct.groupIds, []); // 滤芯类产品不受影响
-
-    // 迁移后落盘应该已经是带 groups 的格式，不再重复触发迁移
-    const raw = JSON.parse(await fsp.readFile(path.join(mcDir, 'products.json'), 'utf8'));
-    assert.ok(Array.isArray(raw.tmall.libraries[0].groups));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

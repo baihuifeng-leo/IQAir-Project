@@ -743,15 +743,15 @@ const server = http.createServer(async (req, res) => {
       const libraryId = url.searchParams.get('libraryId');
       if (!libraryId) return json(res, 400, { error: '缺少词库参数' });
       if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
-      const { products, universalKeywords, groups } = await body(req, 1024 * 1024);
-      if (!Array.isArray(products) || !Array.isArray(universalKeywords)) return json(res, 400, { error: '数据格式不对' });
+      const { products } = await body(req, 1024 * 1024);
+      if (!Array.isArray(products)) return json(res, 400, { error: '数据格式不对' });
       let saved;
       try {
-        saved = await materialcheck.saveProducts(platform, libraryId, products, universalKeywords, groups);
+        saved = await materialcheck.saveProducts(platform, libraryId, products);
       }
       catch (e) { return json(res, 400, { error: e.message }); }
       const platformLabel = platform === 'tmall' ? '天猫' : '京东';
-      audit(me, 'materialcheck.products.update', { detail: [`${platformLabel}「${saved.name}」已更新：${saved.products.length} 个产品，${saved.universalKeywords.length} 个通用词，${saved.groups.length} 个分组`] });
+      audit(me, 'materialcheck.products.update', { detail: [`${platformLabel}「${saved.name}」已更新：${saved.products.length} 个产品`] });
       return json(res, 200, saved);
     }
 

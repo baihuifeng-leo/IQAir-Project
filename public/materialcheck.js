@@ -2,7 +2,7 @@ const MaterialCheck = (() => {
   let A, subView = 'check', platform = 'tmall', libraryId = null;
   let libraries = []; // 当前平台下的词库列表 [{id,name,productCount}]
   let libraryDirectory = []; // 历史记录筛选用：两个平台全部词库的扁平列表 [{id,name,platform}]
-  let products = [], universalKeywords = [], groups = [];
+  let products = [];
 
   const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
   // pass/warn/error 是新三态；fail 是 v2 上线前的旧记录留下的值，不迁移，历史筛选里仍要能选到
@@ -32,32 +32,6 @@ const MaterialCheck = (() => {
   function keywordText(k) { return typeof k === 'string' ? k : String((k && k.text) || ''); }
   function keywordCategory(k) { return (k && typeof k === 'object' && CATEGORIES.includes(k.category)) ? k.category : '其它'; }
 
-  /** 跟后端 materialcheck-store.js 里 validateLibrary 的"一词只能归属一处"是同一套规则，
-   *  这里在前端提前查一遍当前词库（产品/通用词/分组），加词那一刻就能挡下冲突，不用等
-   *  autosave 网络往返回来才报错——所以连产品自己的词跟自己所在分组的共享词重复都算冲突，
-   *  跟 validateLibrary 完全没有例外地保持一致。返回冲突所在的归属名，没冲突返回 null。 */
-  function findKeywordOwner(text) {
-    for (const p of products) {
-      if ((p.keywords || []).some((kw) => keywordText(kw) === text)) return p.name;
-    }
-    if (universalKeywords.some((kw) => keywordText(kw) === text)) return '通用词';
-    for (const g of groups) {
-      if ((g.keywords || []).some((kw) => keywordText(kw) === text)) return `分组「${g.name}」`;
-    }
-    return null;
-  }
-
-  /** 缺词现在分三种来源：产品自己的词（不额外标注，保持原样）、全局通用词、
-   *  产品所在分组的共享词——跟串词一样标出"缺失属于哪". 兼容老历史记录里
-   *  missingKeywords 是纯字符串数组的情况（改版之前存的检测记录）。 */
-  function missingKeywordLabel(k) {
-    if (typeof k === 'string') return escapeHtml(k);
-    const text = escapeHtml(k.keyword);
-    if (k.source === 'universal') return `${text} · 缺失通用词`;
-    if (k.source === 'group') return `${text} · 缺失「${escapeHtml(k.groupName)}」共享词`;
-    return text;
-  }
-
   /** priceIssue = {expected, found}，found 是图里实际找到的候选价格数字数组（可能是空数组）。 */
   function priceIssueLabel(pi) {
     const expected = `￥${pi.expected}`;
@@ -83,8 +57,6 @@ const MaterialCheck = (() => {
   async function loadProducts() {
     const j = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}&libraryId=${encodeURIComponent(libraryId)}`);
     products = j.products;
-    universalKeywords = j.universalKeywords;
-    groups = j.groups;
   }
 
   function switchSub(name) {
@@ -230,10 +202,10 @@ const MaterialCheck = (() => {
 
     let detail = '';
     if (result.missingKeywords?.length) {
-      detail += `<div class="mc-chip-row">缺词：${result.missingKeywords.map((k) => `<span class="mc-chip mc-chip-warn">${missingKeywordLabel(k)}</span>`).join('')}</div>`;
+      detail += `<div class="mc-chip-row">缺词：${result.missingKeywords.map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('')}</div>`;
     }
-    if (result.crossedKeywords?.length) {
-      detail += `<div class="mc-chip-row">串词：${result.crossedKeywords.map((c) => `<span class="mc-chip mc-chip-bad">${escapeHtml(c.keyword)} · 属于「${escapeHtml(c.fromProductName)}」</span>`).join('')}</div>`;
+    if (result.extraKeywords?.length) {
+      detail += `<div class="mc-chip-row">多出的词：${result.extraKeywords.map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('')}</div>`;
     }
     if (result.priceIssue) {
       detail += `<div class="mc-chip-row">价格不对：<span class="mc-chip mc-chip-bad">${priceIssueLabel(result.priceIssue)}</span></div>`;
@@ -352,18 +324,18 @@ const MaterialCheck = (() => {
   function openHistoryDetail(r) {
     if (!detailMask) buildDetailSheet();
     let html = escapeHtml(r.ocrText || '（没有识别到文字）');
-    (r.crossedKeywords || []).forEach((c) => {
-      html = html.split(escapeHtml(c.keyword)).join(`<mark class="mc-mark-bad">${escapeHtml(c.keyword)}</mark>`);
+    (r.extraKeywords || []).forEach((k) => {
+      html = html.split(escapeHtml(k)).join(`<mark class="mc-mark-bad">${escapeHtml(k)}</mark>`);
     });
-    const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-warn">${missingKeywordLabel(k)}</span>`).join('') || '（无缺词）';
-    const crossed = (r.crossedKeywords || []).map((c) => `<span class="mc-chip mc-chip-bad">${escapeHtml(c.keyword)} · 属于「${escapeHtml(c.fromProductName)}」</span>`).join('') || '（无串词）';
+    const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('') || '（无缺词）';
+    const extra = (r.extraKeywords || []).map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('') || '（无多出的词）';
     const priceRow = r.priceIssue
       ? `<div class="mc-chip-row"><b>价格：</b><span class="mc-chip mc-chip-bad">${priceIssueLabel(r.priceIssue)}</span></div>`
       : '';
     detailBody.innerHTML = `
       <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')}</p>
       <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
-      <div class="mc-chip-row"><b>串词：</b>${crossed}</div>
+      <div class="mc-chip-row"><b>多出的词：</b>${extra}</div>
       ${priceRow}
       <pre class="mc-ocr-text">${html}</pre>`;
     detailMask.hidden = false;
@@ -413,8 +385,6 @@ const MaterialCheck = (() => {
     const add = () => {
       const v = inputEl.value.trim();
       if (!v) return;
-      const owner = findKeywordOwner(v);
-      if (owner) { A.toast(`关键词「${v}」已经属于「${owner}」，一个词只能属于一处，添加失败`, 'bad'); return; }
       list.push({ text: v, category: catEl.value });
       inputEl.value = '';
       drawChips();
@@ -422,15 +392,6 @@ const MaterialCheck = (() => {
     };
     addBtn.onclick = add;
     inputEl.onkeydown = (e) => { if (e.key === 'Enter') add(); };
-  }
-
-  function keywordAddRowHtml() {
-    return `
-      <div class="mc-kw-add">
-        <input placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
-        <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
-        <button class="mc-btn" data-role="kw-add">添加</button>
-      </div>`;
   }
 
   /** 产品原来的类型主要通过所在分区决定；这个下拉框只用来纠错、把产品挪到别的分区，
@@ -444,20 +405,20 @@ const MaterialCheck = (() => {
   let autoSaveTimer = null;
 
   /** 立即保存当前关键词库。silent=true 用于自动保存：不重画整个页面、不拿服务端返回值
-   *  覆盖本地 products/universalKeywords/groups——这几个变量正被卡片上的 input/checkbox
-   *  事件处理器直接引用着，贸然重新赋值会让后续编辑写到已经跟 DOM 脱钩的旧对象上，
-   *  静默保存失败或者页面上敲的字丢了都不会有提示。手动点"保存关键词库"才做完整刷新。 */
+   *  覆盖本地 products——这个变量正被卡片上的 input/checkbox 事件处理器直接引用着，
+   *  贸然重新赋值会让后续编辑写到已经跟 DOM 脱钩的旧对象上，静默保存失败或者页面上
+   *  敲的字丢了都不会有提示。手动点"保存关键词库"才做完整刷新。 */
   async function saveLibraryNow({ silent = false } = {}) {
     const errEl = A.$('#mc-lib-error');
     try {
       const saved = await call(`/api/materialcheck/products?platform=${encodeURIComponent(platform)}&libraryId=${encodeURIComponent(libraryId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products, universalKeywords, groups })
+        body: JSON.stringify({ products })
       });
       if (errEl) errEl.hidden = true;
       if (!silent) {
-        products = saved.products; universalKeywords = saved.universalKeywords; groups = saved.groups;
+        products = saved.products;
         await loadLibraries();
         renderLibrarySwitch();
         A.toast('关键词库已保存');
@@ -474,14 +435,8 @@ const MaterialCheck = (() => {
     autoSaveTimer = setTimeout(() => saveLibraryNow({ silent: true }), 700);
   }
 
-  /** 产品卡片：groupsOfType 用来显示"当前属于哪个分组"（分组成员是在分组卡片上勾选的，这里只读展示）；
-   *  siblings 是同一批产品（未分类区就是未分类的那批），用来生成"复制到…"的目标产品列表和拖拽排序范围。 */
-  function productCardHtml(p, groupsOfType, siblings) {
-    const myGroupIds = p.groupIds || [];
-    const myGroups = (groupsOfType || []).filter((g) => myGroupIds.includes(g.id));
-    const groupLabel = myGroups.length
-      ? `<span class="mc-pcard-group">分组：${myGroups.map((g) => escapeHtml(g.name)).join('、')}</span>`
-      : '';
+  /** 产品卡片：siblings 是同一批产品（未分类区就是未分类的那批），用来生成"复制到…"的目标产品列表和拖拽排序范围。 */
+  function productCardHtml(p, siblings) {
     const copyTargets = (siblings || []).filter((s) => s.id !== p.id);
     const copyOptionsHtml = copyTargets.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
     return `
@@ -495,7 +450,6 @@ const MaterialCheck = (() => {
           <button class="mc-btn" data-role="kw-add">添加</button>
           <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
           <select class="mc-pcard-move" data-role="move" aria-label="移到其它分区" title="移到其它分区">${typeMoveOptionsHtml(p.type || '')}</select>
-          ${groupLabel}
           <button class="mc-btn" data-role="copy-to" ${copyTargets.length ? '' : 'disabled'}>复制到…</button>
           <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
         </div>
@@ -504,28 +458,6 @@ const MaterialCheck = (() => {
           <button class="mc-btn mc-btn-primary" data-role="copy-confirm">确定覆盖</button>
           <button class="mc-btn" data-role="copy-cancel">取消</button>
         </div>
-        <div class="mc-chip-editor" data-role="chips"></div>
-      </div>`;
-  }
-
-  /** 分组卡片：勾选成员（只列同类型下的产品）+ 一份组内共享关键词，替代原来固定的"XX组通用词"。 */
-  function groupCardHtml(g, typeProducts) {
-    const memberBoxes = (typeProducts || []).map((p) => `
-        <label class="mc-gmember">
-          <input type="checkbox" data-role="member" data-pid="${escapeHtml(p.id)}" ${(p.groupIds || []).includes(g.id) ? 'checked' : ''}>
-          <span data-role="mname">${escapeHtml(p.name)}</span>
-        </label>`).join('') || '<span class="mc-chip-empty">这个分区还没有产品</span>';
-    return `
-      <div class="mc-gcard" data-gid="${escapeHtml(g.id)}">
-        <div class="mc-gcard-head">
-          <input class="mc-gcard-name" data-role="gname" value="${escapeHtml(g.name)}" placeholder="分组名称…" aria-label="分组名称">
-          <input class="mc-kw-input-inline" placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
-          <select class="mc-cat-select" data-role="kw-cat" aria-label="关键词分类">${catOptionsHtml}</select>
-          <button class="mc-btn" data-role="kw-add">添加</button>
-          <button class="mc-btn mc-btn-danger" data-role="gdel">删除分组</button>
-        </div>
-        <p class="mc-utab-hint">勾选属于这个分组的产品，组内成员之间共用下面这些词，不算缺词/串词</p>
-        <div class="mc-gmembers" data-role="gmembers">${memberBoxes}</div>
         <div class="mc-chip-editor" data-role="chips"></div>
       </div>`;
   }
@@ -540,12 +472,10 @@ const MaterialCheck = (() => {
             <h3>${label}</h3>
           </button>
           <span class="mc-tsection-actions">
-            <button class="mc-btn" data-role="add-group">+ 新建分组</button>
             <button class="mc-btn" data-role="add-product">+ 新增产品</button>
           </span>
         </div>
         <div class="mc-tsection-body" data-role="body">
-          <div class="mc-gcards" data-role="groups"></div>
           <div class="mc-pcards-scroll" data-role="products"></div>
         </div>
       </div>`;
@@ -576,12 +506,6 @@ const MaterialCheck = (() => {
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
         </div>
         <p class="mc-lib-error" id="mc-lib-error" hidden></p>
-        <div class="mc-lib-card mc-lib-universal" data-role="universal-card">
-          <h3>全局通用词</h3>
-          <p class="mc-utab-hint">任何产品图上出现都不算问题</p>
-          <div class="mc-chip-editor" data-role="chips"></div>
-          ${keywordAddRowHtml()}
-        </div>
         <div id="mc-tsections"></div>
         <div class="mc-tsection mc-tsec-none" id="mc-tsec-none" hidden>
           <div class="mc-tsection-head"><h3>未分类</h3></div>
@@ -592,8 +516,6 @@ const MaterialCheck = (() => {
     const productsOfType = (type) => type
       ? products.filter((p) => p.type === type)
       : products.filter((p) => !VALID_TYPES.includes(p.type));
-
-    const groupsOfType = (type) => groups.filter((g) => g.type === type);
 
     /** 把 orderedIds（拖拽后某个分区/未分类列表的新顺序）写回全局 products 数组：
      *  这个分区涉及的产品整体搬到它们原来所在的第一个位置，不打乱其它分区产品的相对顺序。 */
@@ -642,18 +564,11 @@ const MaterialCheck = (() => {
     const mountProductCards = (root, type) => {
       const wrap = root.querySelector('[data-role="products"]');
       const list = productsOfType(type);
-      const typeGroups = type ? groupsOfType(type) : [];
-      wrap.innerHTML = list.map((p) => productCardHtml(p, typeGroups, list)).join('') || (type ? '<p class="rv-empty">还没有产品，点上面「+ 新增产品」</p>' : '');
+      wrap.innerHTML = list.map((p) => productCardHtml(p, list)).join('') || (type ? '<p class="rv-empty">还没有产品，点上面「+ 新增产品」</p>' : '');
       [...wrap.querySelectorAll('.mc-pcard')].forEach((card, i) => {
         const p = list[i];
         card.querySelector('[data-role="name"]').oninput = (e) => {
           p.name = e.target.value;
-          // 分组卡片上的勾选项标签是改名时直接patch的文字节点，不是靠drawAll()整体重画——
-          // 重画会打断正在输入的名称输入框的光标位置/焦点
-          root.querySelectorAll(`[data-role="member"][data-pid="${p.id}"]`).forEach((cb) => {
-            const nameSpan = cb.parentElement.querySelector('[data-role="mname"]');
-            if (nameSpan) nameSpan.textContent = p.name;
-          });
           scheduleAutoSave();
         };
         card.querySelector('[data-role="price"]').oninput = (e) => {
@@ -661,7 +576,7 @@ const MaterialCheck = (() => {
           p.price = v === '' ? null : Number(v);
           scheduleAutoSave();
         };
-        card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; p.groupIds = []; drawAll(); scheduleAutoSave(); };
+        card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; drawAll(); scheduleAutoSave(); };
         mountKeywordEditor(card, p.keywords, () => {
           card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
           scheduleAutoSave();
@@ -692,14 +607,10 @@ const MaterialCheck = (() => {
     };
 
     const drawAll = () => {
-      mountKeywordEditor(A.$('[data-role="universal-card"]'), universalKeywords, () => scheduleAutoSave());
-
       const tsecWrap = A.$('#mc-tsections');
       tsecWrap.innerHTML = TYPE_SECTIONS.map(typeSectionHtml).join('');
       TYPE_SECTIONS.forEach(([type]) => {
         const root = tsecWrap.querySelector(`.mc-tsection[data-type="${type}"]`);
-        const typeGroups = groupsOfType(type);
-        const typeProducts = productsOfType(type);
 
         const toggleBtn = root.querySelector('[data-role="toggle-section"]');
         toggleBtn.onclick = () => {
@@ -709,39 +620,9 @@ const MaterialCheck = (() => {
           toggleBtn.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
         };
 
-        const gwrap = root.querySelector('[data-role="groups"]');
-        gwrap.innerHTML = typeGroups.map((g) => groupCardHtml(g, typeProducts)).join('');
-        typeGroups.forEach((g) => {
-          const gcard = gwrap.querySelector(`[data-gid="${g.id}"]`);
-          mountKeywordEditor(gcard, g.keywords, () => scheduleAutoSave());
-          gcard.querySelector('[data-role="gname"]').oninput = (e) => { g.name = e.target.value; scheduleAutoSave(); };
-          gcard.querySelectorAll('[data-role="member"]').forEach((cb) => {
-            cb.onchange = (e) => {
-              const product = products.find((x) => x.id === e.target.dataset.pid);
-              const ids = new Set(product.groupIds || []);
-              if (e.target.checked) ids.add(g.id); else ids.delete(g.id);
-              product.groupIds = [...ids];
-              drawAll();
-              scheduleAutoSave();
-            };
-          });
-          gcard.querySelector('[data-role="gdel"]').onclick = () => {
-            if (!confirm(`删除分组「${g.name}」？组内产品会退出这个分组（如果还在其它分组里，那些不受影响），这个分组的共享词会一并清除。`)) return;
-            products.forEach((p) => { p.groupIds = (p.groupIds || []).filter((id) => id !== g.id); });
-            groups = groups.filter((x) => x.id !== g.id);
-            drawAll();
-            scheduleAutoSave();
-          };
-        });
-        root.querySelector('[data-role="add-group"]').onclick = () => {
-          groups.push({ id: 'grp_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新分组', type, keywords: [] });
-          drawAll();
-          scheduleAutoSave();
-        };
-
         mountProductCards(root, type);
         root.querySelector('[data-role="add-product"]').onclick = () => {
-          products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, groupIds: [], keywords: [], price: null });
+          products.push({ id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2), name: '新产品', type, keywords: [], price: null });
           drawAll();
           scheduleAutoSave();
         };
