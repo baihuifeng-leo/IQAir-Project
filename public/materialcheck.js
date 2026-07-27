@@ -32,6 +32,21 @@ const MaterialCheck = (() => {
   function keywordText(k) { return typeof k === 'string' ? k : String((k && k.text) || ''); }
   function keywordCategory(k) { return (k && typeof k === 'object' && CATEGORIES.includes(k.category)) ? k.category : '其它'; }
 
+  /** 跟后端 materialcheck-store.js 里 validateLibrary 的"一词只能归属一处"是同一套规则，
+   *  这里在前端提前查一遍当前词库（产品/通用词/分组），加词那一刻就能挡下冲突，不用等
+   *  autosave 网络往返回来才报错——所以连产品自己的词跟自己所在分组的共享词重复都算冲突，
+   *  跟 validateLibrary 完全没有例外地保持一致。返回冲突所在的归属名，没冲突返回 null。 */
+  function findKeywordOwner(text) {
+    for (const p of products) {
+      if ((p.keywords || []).some((kw) => keywordText(kw) === text)) return p.name;
+    }
+    if (universalKeywords.some((kw) => keywordText(kw) === text)) return '通用词';
+    for (const g of groups) {
+      if ((g.keywords || []).some((kw) => keywordText(kw) === text)) return `分组「${g.name}」`;
+    }
+    return null;
+  }
+
   /** 缺词现在分三种来源：产品自己的词（不额外标注，保持原样）、全局通用词、
    *  产品所在分组的共享词——跟串词一样标出"缺失属于哪". 兼容老历史记录里
    *  missingKeywords 是纯字符串数组的情况（改版之前存的检测记录）。 */
@@ -384,6 +399,8 @@ const MaterialCheck = (() => {
     const add = () => {
       const v = inputEl.value.trim();
       if (!v) return;
+      const owner = findKeywordOwner(v);
+      if (owner) { A.toast(`关键词「${v}」已经属于「${owner}」，一个词只能属于一处，添加失败`, 'bad'); return; }
       list.push({ text: v, category: catEl.value });
       inputEl.value = '';
       drawChips();
