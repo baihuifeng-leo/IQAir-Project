@@ -367,13 +367,21 @@ const MaterialCheck = (() => {
     const addBtn = root.querySelector('[data-role="kw-add"]');
 
     // 显示顺序按分类顺序来（产品型号→产品利益点→…），跟添加先后无关；
-    // data-i 仍然指向 list 里的原始下标，删除操作按这个下标定位，不受显示顺序影响
+    // data-i 仍然指向 list 里的原始下标，删除/改分类操作按这个下标定位，不受显示顺序影响
     const drawChips = () => {
       const order = list.map((_, i) => i).sort((a, b) => CATEGORIES.indexOf(keywordCategory(list[a])) - CATEGORIES.indexOf(keywordCategory(list[b])));
       chipsEl.innerHTML = order.map((i) => {
         const k = list[i];
-        return `<span class="mc-chip">${escapeHtml(keywordText(k))}<small class="mc-cat-badge ${CAT_CLASS[keywordCategory(k)]}">${escapeHtml(keywordCategory(k))}</small><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
+        const cat = keywordCategory(k);
+        const catOpts = CATEGORIES.map((c) => `<option value="${c}" ${c === cat ? 'selected' : ''}>${c}</option>`).join('');
+        return `<span class="mc-chip">${escapeHtml(keywordText(k))}<select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
       }).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
+      chipsEl.querySelectorAll('.mc-cat-badge-select').forEach((sel) => (sel.onchange = () => {
+        const i = Number(sel.dataset.i);
+        list[i] = { text: keywordText(list[i]), category: sel.value };
+        drawChips();
+        if (onChange) onChange();
+      }));
       chipsEl.querySelectorAll('.mc-chip-del').forEach((x) => (x.onclick = () => {
         list.splice(Number(x.dataset.i), 1);
         drawChips();
@@ -481,6 +489,193 @@ const MaterialCheck = (() => {
       </div>`;
   }
 
+  // ── 批量自动识别（词库维护动作，不写检测记录，也不直接改真实词库——
+  //    候选词先进审核页，人工确认后才走已有的保存关键词库接口落盘） ──
+  let autobuildMask, autobuildBody;
+  function stripSpaces(s) { return String(s || '').replace(/\s+/g, ''); }
+
+  function buildAutobuildSheet() {
+    autobuildMask = document.createElement('div');
+    autobuildMask.className = 'sheet-mask';
+    autobuildMask.hidden = true;
+    autobuildMask.innerHTML = `
+      <div class="sheet sheet-wide" role="dialog">
+        <div class="sheet-head"><h2>批量自动识别</h2><button class="kill" id="mc-ab-close" title="关闭">×</button></div>
+        <div class="sheet-body" id="mc-ab-body"></div>
+      </div>`;
+    document.body.appendChild(autobuildMask);
+    autobuildBody = autobuildMask.querySelector('#mc-ab-body');
+    autobuildMask.querySelector('#mc-ab-close').onclick = () => (autobuildMask.hidden = true);
+    autobuildMask.onclick = (e) => { if (e.target === autobuildMask) autobuildMask.hidden = true; };
+  }
+
+  /** 按产品分组候选词：同一个产品可能有好几张图，候选词要合并去重（按去空格后的文字）。 */
+  function autobuildGroups(entries) {
+    const groups = new Map();
+    entries.forEach((e) => {
+      if (e.status !== 'resolved' || !e.candidates.length) return;
+      let g = groups.get(e.productId);
+      if (!g) { g = { productName: e.productName, cands: new Map() }; groups.set(e.productId, g); }
+      e.candidates.forEach((text) => {
+        const norm = stripSpaces(text);
+        if (!g.cands.has(norm)) g.cands.set(norm, { text, checked: true });
+      });
+    });
+    return groups;
+  }
+
+  function drawAutobuildReview(entries) {
+    const scanning = entries.filter((e) => e.status === 'scanning');
+    const unresolved = entries.filter((e) => e.status === 'unresolved');
+    const errored = entries.filter((e) => e.status === 'error');
+    const groups = autobuildGroups(entries);
+    const doneCount = entries.length - scanning.length;
+
+    let html = '';
+    if (scanning.length) {
+      html += `<div class="mc-progress"><div class="mc-progress-bar" style="width:${Math.round((doneCount / entries.length) * 100)}%"></div></div>
+        <p class="rv-empty">识别中… ${doneCount}/${entries.length}</p>`;
+    }
+
+    if (unresolved.length) {
+      html += `<h3>无法判断产品，需要手动指定（${unresolved.length}）</h3>`;
+      html += unresolved.map((e) => {
+        const pool = e.candidateProducts.length ? e.candidateProducts : products;
+        const opts = pool.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+        return `<div class="mc-ab-unresolved" data-eid="${e.eid}">
+          <span class="mc-row-name">${escapeHtml(e.filename)}</span>
+          <select class="mc-pick-select" data-role="pick"><option value="">— 选择产品 —</option>${opts}</select>
+          <button class="mc-btn" data-role="pick-confirm">确定</button>
+        </div>`;
+      }).join('');
+    }
+
+    if (errored.length) {
+      html += `<h3>识别失败（${errored.length}）</h3>` + errored.map((e) =>
+        `<div class="mc-ab-unresolved"><span class="mc-row-name">${escapeHtml(e.filename)}</span><span class="mc-row-status">${escapeHtml(e.errorMsg)}</span></div>`
+      ).join('');
+    }
+
+    if (groups.size) {
+      html += `<h3>识别出的候选关键词（默认全选，取消勾选不需要的）</h3>`;
+      html += [...groups.entries()].map(([pid, g]) => {
+        const items = [...g.cands.entries()];
+        return `<div class="mc-ab-group" data-pid="${escapeHtml(pid)}">
+          <div class="mc-ab-group-head">${escapeHtml(g.productName)}<span class="mc-pcard-count">${items.length} 条新候选</span></div>
+          <div class="mc-ab-cands">${items.map(([norm, c]) =>
+            `<label class="mc-ab-cand"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''}>${escapeHtml(c.text)}</label>`
+          ).join('')}</div>
+        </div>`;
+      }).join('');
+    } else if (!scanning.length && !unresolved.length) {
+      html += '<p class="rv-empty">没有识别出新的候选关键词</p>';
+    }
+
+    const canConfirm = !scanning.length && groups.size > 0;
+    html += `<div class="mc-ab-actions">
+      <button class="mc-btn" id="mc-ab-cancel">取消</button>
+      <button class="mc-btn mc-btn-primary" id="mc-ab-confirm" ${canConfirm ? '' : 'disabled'}>确认导入</button>
+    </div>`;
+
+    autobuildBody.innerHTML = html;
+
+    autobuildBody.querySelectorAll('[data-role="pick-confirm"]').forEach((btn) => {
+      btn.onclick = async () => {
+        const wrap = btn.closest('.mc-ab-unresolved');
+        const e = entries.find((x) => x.eid === wrap.dataset.eid);
+        const productId = wrap.querySelector('[data-role="pick"]').value;
+        if (!productId) return A.toast('先选一个产品', 'bad');
+        const product = products.find((p) => p.id === productId);
+        try {
+          const j = await call('/api/materialcheck/autobuild/candidates', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform, libraryId, productId, ocrText: e.ocrText })
+          });
+          e.status = 'resolved';
+          e.productId = productId;
+          e.productName = product ? product.name : '';
+          e.candidates = j.candidates;
+        } catch (err) { A.toast(err.message, 'bad'); }
+        drawAutobuildReview(entries);
+      };
+    });
+
+    autobuildBody.querySelectorAll('.mc-ab-group').forEach((groupEl) => {
+      const g = groups.get(groupEl.dataset.pid);
+      groupEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+        cb.onchange = () => { g.cands.get(cb.dataset.norm).checked = cb.checked; };
+      });
+    });
+
+    const cancelBtn = autobuildBody.querySelector('#mc-ab-cancel');
+    if (cancelBtn) cancelBtn.onclick = () => { autobuildMask.hidden = true; };
+
+    const confirmBtn = autobuildBody.querySelector('#mc-ab-confirm');
+    if (confirmBtn && !confirmBtn.disabled) {
+      confirmBtn.onclick = () => {
+        let addedCount = 0;
+        groups.forEach((g, pid) => {
+          const product = products.find((p) => p.id === pid);
+          if (!product) return;
+          g.cands.forEach((c) => {
+            if (!c.checked) return;
+            product.keywords.push({ text: c.text, category: '其它' });
+            addedCount++;
+          });
+        });
+        autobuildMask.hidden = true;
+        A.toast(`已导入 ${addedCount} 条新关键词，正在保存…`);
+        saveLibraryNow({ silent: false });
+      };
+    }
+  }
+
+  let autobuildSeq = 0;
+
+  async function openAutobuild(fileList) {
+    if (!products.length) return A.toast('先去下面新增至少一个产品，再批量识别', 'bad');
+    if (!autobuildMask) buildAutobuildSheet();
+    const entries = fileList.map((file) => ({
+      eid: 'e' + (autobuildSeq++), file, filename: file.name, status: 'scanning',
+      productId: null, productName: null, candidates: [], candidateProducts: [], ocrText: '', errorMsg: ''
+    }));
+    autobuildMask.hidden = false;
+    drawAutobuildReview(entries);
+
+    const scanPlatform = platform, scanLibraryId = libraryId;
+    async function scanOne(e) {
+      try {
+        const result = await call(`/api/materialcheck/autobuild/scan?filename=${encodeURIComponent(e.filename)}&platform=${encodeURIComponent(scanPlatform)}&libraryId=${encodeURIComponent(scanLibraryId)}`, {
+          method: 'POST', headers: { 'Content-Type': e.file.type }, body: e.file
+        });
+        e.ocrText = result.ocrText;
+        if (result.productId) {
+          e.status = 'resolved';
+          e.productId = result.productId;
+          e.productName = result.productName;
+          e.candidates = result.candidates;
+        } else {
+          e.status = 'unresolved';
+          e.candidateProducts = result.candidateProducts || [];
+        }
+      } catch (err) {
+        e.status = 'error';
+        e.errorMsg = err.message;
+      }
+      drawAutobuildReview(entries);
+    }
+
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    async function worker() {
+      while (cursor < entries.length) {
+        const idx = cursor++;
+        await scanOne(entries[idx]);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, entries.length) }, worker));
+  }
+
   async function renderLibrary() {
     const el = A.$('#mc-library-view');
     const role = libraryRole();
@@ -503,6 +698,8 @@ const MaterialCheck = (() => {
             <button class="mc-btn" id="mc-lib-name-cancel">取消</button>
           </div>
           <span class="mc-lib-spacer"></span>
+          <button class="mc-btn" id="mc-lib-autobuild">批量自动识别…</button>
+          <input type="file" id="mc-autobuild-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
         </div>
         <p class="mc-lib-error" id="mc-lib-error" hidden></p>
@@ -716,6 +913,16 @@ const MaterialCheck = (() => {
       clearTimeout(autoSaveTimer); // 手动保存立即执行，不用再等那个待触发的自动保存
       await saveLibraryNow({ silent: false });
     });
+
+    if (!readOnly) {
+      const abFile = A.$('#mc-autobuild-file');
+      A.$('#mc-lib-autobuild').onclick = () => abFile.click();
+      abFile.onchange = (e) => {
+        const files = [...e.target.files];
+        e.target.value = '';
+        if (files.length) openAutobuild(files);
+      };
+    }
   }
 
   function init(api) {

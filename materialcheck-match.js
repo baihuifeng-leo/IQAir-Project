@@ -60,6 +60,42 @@ function checkPrice(text, product) {
   return { expected: product.price, found: [...candidates] };
 }
 
+/**
+ * 判断一整行 OCR 文字是否"纯粹就是价格数字"（比如独立成行的 "¥951"、"951"）——
+ * 这种行不当候选关键词，因为已经有独立的 price 字段+专门的价格校验机制，重新收进
+ * 关键词库只会变成上个月刚清理掉的那种冗余。要求整行掐头去尾之后只剩符号+数字（可选
+ * 跟一个"元"字），只要行里还夹杂别的文字（比如"晒单送10元现金红包"）就不算price。
+ */
+function isPriceLikeLine(line) {
+  const s = String(line || '').trim();
+  if (!s || !/[¥￥\d]/.test(s)) return false;
+  // 把价格相关的字符（符号/数字/逗号/小数点/"元"/空白）都去掉，剩下的是空的，
+  // 就说明整行原本只是价格的呈现——包括单独一行的"￥"（数字被拆到另一行的情况）。
+  return s.replace(/[¥￥\d,.\s元]/g, '') === '';
+}
+
+/**
+ * 批量自动识别词库用：把 OCR 整段文字按行拆开，每一行都是一个候选关键词（不做任何
+ * 语义过滤，宁可混进垃圾/误读行也不能漏掉真词——审核时人工删掉垃圾行的成本，远低于
+ * 漏收一个真关键词又没被发现的成本），只排除两类：整行是价格的（见 isPriceLikeLine）、
+ * 和这个产品自己已经有的词完全一样的（去空格后比较，不做模糊/相似度匹配）。
+ * 同一行在这张图里出现多次只算一个候选。
+ */
+function buildKeywordCandidates(ocrText, product) {
+  const existing = new Set((product.keywords || []).map((k) => normalize(keywordText(k))));
+  const seen = new Set();
+  const candidates = [];
+  String(ocrText || '').split('\n').forEach((raw) => {
+    const line = raw.trim();
+    if (!line) return;
+    const norm = normalize(line);
+    if (seen.has(norm) || existing.has(norm) || isPriceLikeLine(line)) return;
+    seen.add(norm);
+    candidates.push(line);
+  });
+  return candidates;
+}
+
 function resolveByFilename(filename, products) {
   const norm = normalize(filename).toLowerCase();
   const matches = products.filter((p) => norm.includes(normalize(p.name).toLowerCase()));
@@ -140,5 +176,5 @@ module.exports = {
   CATEGORIES, PRODUCT_TYPES,
   normalize, keywordText, keywordCategory, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct,
-  extractPriceCandidates, checkPrice
+  extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates
 };

@@ -340,6 +340,52 @@ class MaterialCheckStore {
     });
   }
 
+  /**
+   * 批量自动识别词库：只做"识别+分派+算候选词"，不写检测记录（这不是合规检测，是
+   * 词库维护动作），也不直接改词库——候选词要经过前端的审核页面，人工确认后才会
+   * 通过已有的 saveProducts（PUT /api/materialcheck/products）真正落盘。
+   */
+  async autobuildScan({ buf, ext, filename, platform, libraryId, ocr = runOcr }) {
+    this._assertPlatform(platform);
+    const lib = this.getLibrary(platform, libraryId);
+    if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
+    if (!lib.products.length) throw new Error('还没有配置任何产品的关键词，先去「关键词库」里加一个产品');
+
+    const name = crypto.randomBytes(9).toString('hex') + ext;
+    const imagePath = path.join(this.uploadDir, name);
+    await fsp.writeFile(imagePath, buf);
+    const url = '/uploads/materialcheck/' + name;
+
+    const { text: ocrText, confidence: ocrConfidence } = await this._runOcrQueued(imagePath, ocr);
+    const resolution = match.resolveProductForUpload(filename, ocrText, lib.products);
+
+    if (!resolution.product) {
+      return {
+        filename, imagePath: url, ocrText, ocrConfidence,
+        productId: null, productName: null,
+        candidateProducts: (resolution.candidates || []).map((p) => ({ id: p.id, name: p.name })),
+        candidates: []
+      };
+    }
+
+    return {
+      filename, imagePath: url, ocrText, ocrConfidence,
+      productId: resolution.product.id, productName: resolution.product.name,
+      candidateProducts: [],
+      candidates: match.buildKeywordCandidates(ocrText, resolution.product)
+    };
+  }
+
+  /** 批量识别时有些图判断不出产品，人工在审核页面里手动指定产品后，用这个补算候选词。 */
+  autobuildCandidatesFor({ platform, libraryId, productId, ocrText }) {
+    this._assertPlatform(platform);
+    const lib = this.getLibrary(platform, libraryId);
+    if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
+    const product = lib.products.find((p) => p.id === productId);
+    if (!product) throw new Error('选的这个产品不存在');
+    return match.buildKeywordCandidates(ocrText, product);
+  }
+
   async resolvePending(pendingId, productId, uploadedBy) {
     this._cleanupPending();
     const p = this.pending.get(pendingId);

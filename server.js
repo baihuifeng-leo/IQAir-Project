@@ -776,6 +776,31 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, result);
     }
 
+    if (p === '/api/materialcheck/autobuild/scan' && req.method === 'POST') {
+      const ct = (req.headers['content-type'] || '').split(';')[0].trim();
+      const ext = IMAGE_EXT[ct];
+      if (!ext) return json(res, 415, { error: '只支持 PNG、JPG、WebP 三种格式' });
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      const libraryId = url.searchParams.get('libraryId') || undefined;
+      const filename = decodeURIComponent(url.searchParams.get('filename') || ('upload' + ext));
+      const buf = await readBinary(req, MAX_IMAGE);
+      if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
+      let result;
+      try { result = await materialcheck.autobuildScan({ buf, ext, filename, platform, libraryId }); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      return json(res, 200, result);
+    }
+
+    if (p === '/api/materialcheck/autobuild/candidates' && req.method === 'POST') {
+      const { platform, libraryId, productId, ocrText } = await body(req, 512 * 1024);
+      if (!platform || !productId) return json(res, 400, { error: '缺少必要参数' });
+      let candidates;
+      try { candidates = materialcheck.autobuildCandidatesFor({ platform, libraryId, productId, ocrText }); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      return json(res, 200, { candidates });
+    }
+
     if (p === '/api/materialcheck/resolve' && req.method === 'POST') {
       const { pendingId, productId } = await body(req, 4096);
       if (!pendingId || !productId) return json(res, 400, { error: '缺少必要参数' });

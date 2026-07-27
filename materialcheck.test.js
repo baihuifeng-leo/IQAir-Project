@@ -296,6 +296,44 @@ async function run() {
     assert.strictEqual(rOk.status, 'pass');
   });
 
+  t('isPriceLikeLine 整行只有符号+数字（可选"元"）才算价格行', () => {
+    assert.strictEqual(M.isPriceLikeLine('¥951'), true);
+    assert.strictEqual(M.isPriceLikeLine('￥ 951'), true);
+    assert.strictEqual(M.isPriceLikeLine('951'), true);
+    assert.strictEqual(M.isPriceLikeLine('1,299元'), true);
+    assert.strictEqual(M.isPriceLikeLine('  ￥399  '), true);
+    assert.strictEqual(M.isPriceLikeLine('3期免息'), false);
+    assert.strictEqual(M.isPriceLikeLine('晒单送10元现金红包'), false);
+    assert.strictEqual(M.isPriceLikeLine('满3w赠'), false);
+    assert.strictEqual(M.isPriceLikeLine(''), false);
+  });
+
+  t('buildKeywordCandidates 每行都是候选词，排除价格行和已有的词，同行重复只留一个', () => {
+    const product = { id: 'p1', name: 'GC HEPA H11 底层滤芯', keywords: ['GC HEPA H11 底层滤芯'] };
+    const ocrText = [
+      'GC HEPA H11 底层滤芯', // 已有，排除
+      '除花粉、宠物毛发、粗尘等',
+      '预估活动到手价',
+      '951', // 价格行，排除
+      '￥', // 价格行，排除
+      '3期免息',
+      '晒单送10元现金红包',
+      '晒单送10元现金红包', // 同行重复，只留一次
+      '' // 空行，排除
+    ].join('\n');
+    assert.deepStrictEqual(M.buildKeywordCandidates(ocrText, product), [
+      '除花粉、宠物毛发、粗尘等', '预估活动到手价', '3期免息', '晒单送10元现金红包'
+    ]);
+  });
+
+  t('buildKeywordCandidates 去重按去空格后的文字比较，不做模糊/相似度匹配', () => {
+    const product = { id: 'p1', name: 'PreScreen 粗筛滤网', keywords: [{ text: '晒单送十元现金红包', category: '附加权益' }] };
+    // 已有词库里的是"晒单送十元现金红包"，OCR 识别出来的是少两个字的"晒单送十元红包"——
+    // 只做精确去重，不合并，这条应该仍然被列为候选
+    const r = M.buildKeywordCandidates('晒单送十元红包', product);
+    assert.deepStrictEqual(r, ['晒单送十元红包']);
+  });
+
   // ── materialcheck-store.js ────────────────────────────
   const { MaterialCheckStore, PLATFORMS } = require('./materialcheck-store.js');
   const stubOcr = (text, confidence = 1) => async () => ({ text, confidence });
@@ -700,6 +738,40 @@ async function run() {
     assert.strictEqual(store.getLibrary('tmall').name, '默认词库');
     assert.strictEqual(store.getLibrary('tmall').products[0].name, 'GCX XE');
     assert.strictEqual(store.listLibraries('jd').length, 1);
+  });
+
+  await tAsync('autobuildScan 文件名可判定产品时，返回排除了已有词和价格行的候选词，不写检测记录', async () => {
+    const store = await freshStore();
+    const before = store.records.length;
+    const ocr = stubOcr('GC-Multi\n抗菌滤网认证号XXX\n新的卖点一\n￥399\n新的卖点一', 0.95);
+    const result = await store.autobuildScan({ buf: Buffer.from('x'), ext: '.jpg', filename: 'GC-Multi.jpg', platform: PF, libraryId: store.getLibrary(PF).id, ocr });
+    assert.strictEqual(result.productId, 'pa');
+    assert.strictEqual(result.productName, 'GC-Multi');
+    assert.deepStrictEqual(result.candidates, ['新的卖点一']);
+    assert.strictEqual(result.candidateProducts.length, 0);
+    assert.strictEqual(store.records.length, before); // 只是扫描预览，不落检测记录
+  });
+
+  await tAsync('autobuildScan 文件名和 OCR 都判断不出产品时，返回待人工指定，候选词为空', async () => {
+    const store = await freshStore();
+    const ocr = stubOcr('随便什么完全不相关的文字', 0.95);
+    const result = await store.autobuildScan({ buf: Buffer.from('x'), ext: '.jpg', filename: 'random.jpg', platform: PF, libraryId: store.getLibrary(PF).id, ocr });
+    assert.strictEqual(result.productId, null);
+    assert.deepStrictEqual(result.candidates, []);
+  });
+
+  await tAsync('autobuildCandidatesFor 人工指定产品后，按该产品自己的词库算候选词', async () => {
+    const store = await freshStore();
+    const candidates = store.autobuildCandidatesFor({
+      platform: PF, libraryId: store.getLibrary(PF).id, productId: 'pb',
+      ocrText: 'GCX XE\n静音悬浮马达\n又一个新卖点'
+    });
+    assert.deepStrictEqual(candidates, ['又一个新卖点']);
+  });
+
+  await tAsync('autobuildCandidatesFor 产品不存在时抛出错误', async () => {
+    const store = await freshStore();
+    assert.throws(() => store.autobuildCandidatesFor({ platform: PF, libraryId: store.getLibrary(PF).id, productId: 'nope', ocrText: '随便' }), /不存在/);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
