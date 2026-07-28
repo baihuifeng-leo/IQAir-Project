@@ -528,6 +528,7 @@ const MaterialCheck = (() => {
           ${coverActionsHtml(p)}
           <input type="file" class="mc-pcard-cover-file" data-role="cover-file" accept="image/png,image/jpeg,image/webp" aria-label="上传「${escapeHtml(p.name)}」的封面图" hidden>
         </div>
+        <button type="button" class="mc-pcard-expand-btn" data-role="expand" title="放大编辑" aria-label="放大编辑「${escapeHtml(p.name)}」">⛶</button>
         <div class="mc-pcard-body">
           <div class="mc-pcard-head">
             <button type="button" class="mc-pcard-handle" data-role="handle" aria-label="拖动调整「${escapeHtml(p.name)}」的顺序" title="拖动调整顺序">⠿</button>
@@ -575,6 +576,51 @@ const MaterialCheck = (() => {
           </div>
         </div>
       </div>`;
+  }
+
+  // ── 产品卡片展开浮窗——不是重新渲染一份内容，是把点开的那张卡片的
+  //    .mc-pcard-cover / .mc-pcard-body 两个节点原样挪进浮窗的两个槽位里，
+  //    关闭时再挪回卡片原来的位置。这样关键词编辑器（mountKeywordEditor）
+  //    绑定的 DOM 引用、闭包里的 onChange/自动保存都还是同一套，不用另外
+  //    维护一份浮窗专用的状态或重新 mount 一次。 ──
+  let expandMask, expandCoverSlot, expandBodySlot, expandedCard;
+
+  function buildExpandSheet() {
+    expandMask = document.createElement('div');
+    expandMask.className = 'sheet-mask mc-expand-mask';
+    expandMask.hidden = true;
+    expandMask.innerHTML = `
+      <div class="mc-expand-sheet" role="dialog" aria-label="放大编辑产品">
+        <button type="button" class="mc-expand-close" id="mc-expand-close" title="关闭">×</button>
+        <div class="mc-expand-layout">
+          <div class="mc-expand-cover-slot" data-role="cover-slot"></div>
+          <div class="mc-expand-body-slot" data-role="body-slot"></div>
+        </div>
+      </div>`;
+    document.body.appendChild(expandMask);
+    expandCoverSlot = expandMask.querySelector('[data-role="cover-slot"]');
+    expandBodySlot = expandMask.querySelector('[data-role="body-slot"]');
+    expandMask.querySelector('#mc-expand-close').onclick = closeExpand;
+    expandMask.onclick = (e) => { if (e.target === expandMask) closeExpand(); };
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !expandMask.hidden) closeExpand(); });
+  }
+
+  function openExpand(card) {
+    if (!expandMask) buildExpandSheet();
+    expandedCard = card;
+    expandCoverSlot.appendChild(card.querySelector('.mc-pcard-cover'));
+    expandBodySlot.appendChild(card.querySelector('.mc-pcard-body'));
+    card.classList.add('mc-pcard-expanding');
+    expandMask.hidden = false;
+  }
+
+  function closeExpand() {
+    if (!expandedCard) return;
+    expandedCard.appendChild(expandCoverSlot.querySelector('.mc-pcard-cover'));
+    expandedCard.appendChild(expandBodySlot.querySelector('.mc-pcard-body'));
+    expandedCard.classList.remove('mc-pcard-expanding');
+    expandedCard = null;
+    expandMask.hidden = true;
   }
 
   // ── 批量自动识别（词库维护动作，不写检测记录，也不直接改真实词库——
@@ -863,6 +909,7 @@ const MaterialCheck = (() => {
       wrap.innerHTML = list.map((p) => productCardHtml(p, list)).join('') || (type ? '<p class="rv-empty">还没有产品，点上面「+ 新增产品」</p>' : '');
       [...wrap.querySelectorAll('.mc-pcard')].forEach((card, i) => {
         const p = list[i];
+        card.querySelector('[data-role="expand"]').onclick = () => openExpand(card);
         card.querySelector('[data-role="name"]').oninput = (e) => {
           p.name = e.target.value;
           scheduleAutoSave();
@@ -970,6 +1017,10 @@ const MaterialCheck = (() => {
     // 把每张卡片瞬间摆回旧位置→下一帧统一松开做位移过渡"制造"平滑挪动"的错觉，
     // 而不是真的逐帧计算布局。新出现的卡片没有旧位置可比，走淡入+缩放的进场动画。
     const drawAll = () => {
+      // 新增/删除/挪分区这些操作的按钮就长在卡片的 .mc-pcard-body 里，展开态时
+      // 这个节点正待在浮窗里——重画前先把它挪回卡片、关掉浮窗，避免整个网格被
+      // 重新渲染之后，浮窗还攥着一个已经从 DOM 里摘掉的旧节点。
+      closeExpand();
       const before = new Map([...el.querySelectorAll('.mc-pcard')].map((c) => [c.dataset.pid, c.getBoundingClientRect()]));
       renderSections();
       const cards = [...el.querySelectorAll('.mc-pcard')];
