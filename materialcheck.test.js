@@ -855,6 +855,18 @@ async function run() {
     assert.strictEqual(store2.records.length, 1);
   });
 
+  await tAsync('load() 重新读盘后 imageUrl 不会丢（normalizeLibrary 要保留这个字段，不只是 saveProducts 存对）', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
+    const store1 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
+    await store1.load();
+    const libId = store1.getLibrary(PF).id;
+    await store1.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', keywords: ['GC-Multi'], imageUrl: '/uploads/abc123.jpg' }]);
+
+    const store2 = new MaterialCheckStore(path.join(dir, 'materialcheck'), path.join(dir, 'uploads'));
+    await store2.load();
+    assert.strictEqual(store2.getLibrary(PF).products[0].imageUrl, '/uploads/abc123.jpg');
+  });
+
   await tAsync('load() 自动把 v1 最老的扁平结构迁移成天猫命名空间下的「默认词库」', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mc-test-'));
     const mcDir = path.join(dir, 'materialcheck');

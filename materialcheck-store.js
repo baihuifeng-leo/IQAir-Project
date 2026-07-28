@@ -103,7 +103,9 @@ function normalizeLibrary(raw) {
     id: p.id, name: p.name, type: p.type,
     keywords: Array.isArray(p.keywords) ? p.keywords : [],
     // 没配置过预期价格的产品（老数据/还没填的产品）就是 null，不参与价格校验
-    price: (typeof p.price === 'number' && Number.isFinite(p.price)) ? p.price : null
+    price: (typeof p.price === 'number' && Number.isFinite(p.price)) ? p.price : null,
+    // 只接受本站 /uploads/ 下的相对路径，跟 saveProducts 的校验保持一致
+    imageUrl: (typeof p.imageUrl === 'string' && p.imageUrl.startsWith('/uploads/')) ? p.imageUrl : null
   }));
   return { id: String(r.id || makeLibraryId()), name: String(r.name || '未命名词库'), products };
 }
