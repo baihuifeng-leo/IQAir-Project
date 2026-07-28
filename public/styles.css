@@ -1989,6 +1989,12 @@ body.rpt-presenting .rpt-wm-note {
 .mc-chip { transition: opacity 0.15s var(--ease), transform 0.15s var(--ease); }
 .mc-chip-enter, .mc-chip-leaving { opacity: 0; transform: scale(0.7); }
 
+/* chip 文字直接点开编辑：平时看着就是普通文字，hover 一下提示能点，
+   点开后原地变成一个跟字号对齐的小输入框，不撑破 chip 的胶囊形状 */
+.mc-chip-text { cursor: text; border-radius: 4px; padding: 0 2px; margin: 0 -2px; transition: background var(--fast); }
+.mc-chip-text:hover { background: var(--overlay-weak); }
+.mc-chip-text-input { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--mint); border-radius: 4px; padding: 0 4px; min-width: 3em; }
+
 /* 产品按机器/滤芯/附件分区，每个分区一个专属色（--mc-sec）：标题左侧色条、
    标题文字、折叠箭头、分区内每张卡片的顶部色条/悬浮光晕都跟着这一个变量走 */
 .mc-tsection { margin-bottom: 30px; }
@@ -2113,7 +2119,25 @@ body.rpt-presenting .rpt-wm-note {
   transition: background var(--fast), color var(--fast);
 }
 .mc-expand-close:hover { background: var(--dis); color: #fff; }
-.mc-expand-layout { flex: 1 1 auto; min-height: 0; display: flex; }
+/* 上一个/下一个：贴在浮窗左右边缘中间，悬浮在内容上方，不占内容区域的宽度 */
+.mc-expand-nav {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+  width: 40px; height: 40px; display: grid; place-items: center;
+  border: none; border-radius: 999px; cursor: pointer;
+  background: var(--overlay-weak); color: var(--dim); font-size: 22px; line-height: 1;
+  transition: background var(--fast), color var(--fast), opacity var(--fast);
+}
+.mc-expand-nav:hover:not(:disabled) { background: var(--dis); color: #fff; }
+.mc-expand-nav:disabled { opacity: 0.3; cursor: default; }
+.mc-expand-prev { left: 14px; }
+.mc-expand-next { right: 14px; }
+.mc-expand-layout { flex: 1 1 auto; min-height: 0; display: flex; transition: opacity 0.16s var(--ease), transform 0.16s var(--ease); }
+/* 左右切换产品时轻微滑动+淡入淡出：先把旧内容往切换方向滑出去，
+   节点换好之后再从对侧滑进来——跟"往哪边看下一个"方向直觉一致 */
+.mc-expand-slide-out-left { opacity: 0; transform: translateX(-18px); }
+.mc-expand-slide-out-right { opacity: 0; transform: translateX(18px); }
+.mc-expand-slide-in-left { opacity: 0; transform: translateX(-18px); transition: none; }
+.mc-expand-slide-in-right { opacity: 0; transform: translateX(18px); transition: none; }
 .mc-expand-cover-slot { flex: 0 0 min(38%, 460px); min-width: 220px; background: var(--field-bg); }
 .mc-expand-cover-slot .mc-pcard-cover { height: 100%; }
 .mc-expand-body-slot { flex: 1 1 auto; min-width: 0; display: flex; }

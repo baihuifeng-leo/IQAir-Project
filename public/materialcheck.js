@@ -410,7 +410,7 @@ const MaterialCheck = (() => {
         const ratio = keywordRatio(k);
         const catOpts = CATEGORIES.map((c) => `<option value="${c}" ${c === cat ? 'selected' : ''}>${c}</option>`).join('');
         const ratioOpts = RATIO_OPTIONS.map((r) => `<option value="${r}" ${r === ratio ? 'selected' : ''}>${RATIO_LABEL[r]}</option>`).join('');
-        return `<span class="mc-chip${i === enterIndex ? ' mc-chip-enter' : ''}" data-i="${i}">${escapeHtml(keywordText(k))}<select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><select class="mc-ratio-badge-select ${RATIO_CLASS[ratio]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的适用比例">${ratioOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
+        return `<span class="mc-chip${i === enterIndex ? ' mc-chip-enter' : ''}" data-i="${i}"><span class="mc-chip-text" data-i="${i}" title="点击编辑文字">${escapeHtml(keywordText(k))}</span><select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><select class="mc-ratio-badge-select ${RATIO_CLASS[ratio]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的适用比例">${ratioOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
       }).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
       if (enterIndex != null) {
         const enterEl = chipsEl.querySelector(`.mc-chip[data-i="${enterIndex}"]`);
@@ -418,6 +418,43 @@ const MaterialCheck = (() => {
         // 否则类在同一次 innerHTML 赋值里就已经生效，浏览器观察不到状态变化，动画不会播放
         if (enterEl) requestAnimationFrame(() => requestAnimationFrame(() => enterEl.classList.remove('mc-chip-enter')));
       }
+      // 关键词文字本身可以点开直接改，不用删了重加——单击文字部分变成输入框，
+      // Enter/失焦提交，Esc 放弃；空文本不允许提交（跟新增关键词一个校验）
+      chipsEl.querySelectorAll('.mc-chip-text').forEach((span) => (span.onclick = () => {
+        if (span.querySelector('input')) return;
+        const i = Number(span.dataset.i);
+        const original = keywordText(list[i]);
+        span.textContent = '';
+        const input = document.createElement('input');
+        input.className = 'mc-chip-text-input';
+        input.value = original;
+        const sizeInput = () => { input.style.width = Math.max(3, input.value.length + 1) + 'ch'; };
+        sizeInput();
+        input.oninput = sizeInput;
+        span.appendChild(input);
+        input.focus();
+        input.select();
+        let settled = false;
+        const commit = () => {
+          if (settled) return;
+          settled = true;
+          const v = input.value.trim();
+          if (v && v !== original) {
+            list[i] = { text: v, category: keywordCategory(list[i]), ratio: keywordRatio(list[i]) };
+            drawChips();
+            if (onChange) onChange();
+          } else {
+            drawChips();
+          }
+        };
+        input.onblur = commit;
+        input.onkeydown = (e) => {
+          // stopPropagation：这个输入框在浮窗里时，Esc 不能既取消文字编辑
+          // 又被浮窗那层全局监听器当成"关闭整个浮窗"，一次按键只该有一个效果
+          if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); commit(); }
+          else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); settled = true; drawChips(); }
+        };
+      }));
       chipsEl.querySelectorAll('.mc-cat-badge-select').forEach((sel) => (sel.onchange = () => {
         const i = Number(sel.dataset.i);
         list[i] = { text: keywordText(list[i]), category: sel.value, ratio: keywordRatio(list[i]) };
@@ -496,6 +533,15 @@ const MaterialCheck = (() => {
   function scheduleAutoSave() {
     clearTimeout(autoSaveTimer);
     autoSaveTimer = setTimeout(() => saveLibraryNow({ silent: true }), 700);
+  }
+
+  /** 有待触发的自动保存定时器时立即执行，不用等 0.7 秒——浮窗里切换到下一个/
+   *  上一个产品前用这个，避免刚改完还没落盘的内容因为立刻挪走节点而丢失。 */
+  function flushAutoSave() {
+    if (!autoSaveTimer) return;
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+    saveLibraryNow({ silent: true });
   }
 
   /** 卡片封面图：手动传的封面（imageUrl）优先，其次是最近一条已匹配到这个产品的检测记录图（autoImage）；
@@ -585,6 +631,64 @@ const MaterialCheck = (() => {
   //    维护一份浮窗专用的状态或重新 mount 一次。 ──
   let expandMask, expandCoverSlot, expandBodySlot, expandedCard;
 
+  /** 光标在任何输入控件里时，方向键应该只是移动光标/选项，不该被浮窗的
+   *  上一个/下一个快捷键抢走。 */
+  function isTypingTarget(el) {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+  }
+
+  /** 浮窗里"上一个/下一个"按的是当前网格里实际显示的卡片顺序（跨分区连续），
+   *  不是 products 数组的原始顺序——用户眼睛看到的排列跟切换顺序要一致。 */
+  function expandGridCards() {
+    return [...document.querySelectorAll('#mc-library-view .mc-pcard')];
+  }
+
+  function expandNeighbor(dir) {
+    const cards = expandGridCards();
+    const idx = cards.indexOf(expandedCard);
+    if (idx === -1) return null;
+    const j = idx + dir;
+    return (j >= 0 && j < cards.length) ? cards[j] : null;
+  }
+
+  function updateExpandNavButtons() {
+    const cards = expandGridCards();
+    const idx = cards.indexOf(expandedCard);
+    expandMask.querySelector('#mc-expand-prev').disabled = idx <= 0;
+    expandMask.querySelector('#mc-expand-next').disabled = idx === -1 || idx >= cards.length - 1;
+  }
+
+  /** 切换到相邻产品：先把当前产品的未落盘修改立即存掉（不等 0.7 秒的自动保存定时器），
+   *  再把封面/内容节点从旧卡片挪到新卡片，中间配合 CSS 类做一次轻微滑动+淡入淡出。 */
+  function switchExpand(dir) {
+    const target = expandNeighbor(dir);
+    if (!target) return;
+    flushAutoSave();
+    const goingNext = dir > 0;
+    const layout = expandMask.querySelector('.mc-expand-layout');
+    layout.classList.add(goingNext ? 'mc-expand-slide-out-left' : 'mc-expand-slide-out-right');
+    setTimeout(() => {
+      const oldCard = expandedCard;
+      oldCard.appendChild(expandCoverSlot.querySelector('.mc-pcard-cover'));
+      oldCard.appendChild(expandBodySlot.querySelector('.mc-pcard-body'));
+      oldCard.classList.remove('mc-pcard-expanding');
+
+      expandedCard = target;
+      expandCoverSlot.appendChild(target.querySelector('.mc-pcard-cover'));
+      expandBodySlot.appendChild(target.querySelector('.mc-pcard-body'));
+      target.classList.add('mc-pcard-expanding');
+
+      layout.classList.remove('mc-expand-slide-out-left', 'mc-expand-slide-out-right');
+      layout.classList.add(goingNext ? 'mc-expand-slide-in-right' : 'mc-expand-slide-in-left');
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        layout.classList.remove('mc-expand-slide-in-right', 'mc-expand-slide-in-left');
+      }));
+      updateExpandNavButtons();
+    }, 160);
+  }
+
   function buildExpandSheet() {
     expandMask = document.createElement('div');
     expandMask.className = 'sheet-mask mc-expand-mask';
@@ -592,6 +696,8 @@ const MaterialCheck = (() => {
     expandMask.innerHTML = `
       <div class="mc-expand-sheet" role="dialog" aria-label="放大编辑产品">
         <button type="button" class="mc-expand-close" id="mc-expand-close" title="关闭">×</button>
+        <button type="button" class="mc-expand-nav mc-expand-prev" id="mc-expand-prev" title="上一个产品" aria-label="上一个产品">‹</button>
+        <button type="button" class="mc-expand-nav mc-expand-next" id="mc-expand-next" title="下一个产品" aria-label="下一个产品">›</button>
         <div class="mc-expand-layout">
           <div class="mc-expand-cover-slot" data-role="cover-slot"></div>
           <div class="mc-expand-body-slot" data-role="body-slot"></div>
@@ -601,8 +707,16 @@ const MaterialCheck = (() => {
     expandCoverSlot = expandMask.querySelector('[data-role="cover-slot"]');
     expandBodySlot = expandMask.querySelector('[data-role="body-slot"]');
     expandMask.querySelector('#mc-expand-close').onclick = closeExpand;
+    expandMask.querySelector('#mc-expand-prev').onclick = () => switchExpand(-1);
+    expandMask.querySelector('#mc-expand-next').onclick = () => switchExpand(1);
     expandMask.onclick = (e) => { if (e.target === expandMask) closeExpand(); };
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !expandMask.hidden) closeExpand(); });
+    document.addEventListener('keydown', (e) => {
+      if (!expandMask || expandMask.hidden) return;
+      if (e.key === 'Escape') { closeExpand(); return; }
+      if (isTypingTarget(document.activeElement)) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); switchExpand(-1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); switchExpand(1); }
+    });
   }
 
   function openExpand(card) {
@@ -612,6 +726,7 @@ const MaterialCheck = (() => {
     expandBodySlot.appendChild(card.querySelector('.mc-pcard-body'));
     card.classList.add('mc-pcard-expanding');
     expandMask.hidden = false;
+    updateExpandNavButtons();
   }
 
   function closeExpand() {
@@ -920,8 +1035,13 @@ const MaterialCheck = (() => {
           scheduleAutoSave();
         };
         card.querySelector('[data-role="move"]').onchange = (e) => { p.type = e.target.value; drawAll(); scheduleAutoSave(); };
+        // 词数徽标在 .mc-pcard-body 里——卡片展开时这个节点被挪进了浮窗，
+        // 不再是 card 的子节点，所以这里要在挂载时就把引用存住，而不是每次
+        // onChange 都从 card 重新查一遍（挪走之后 card.querySelector 会找不到，
+        // 加/删/改关键词只要是在展开态下做的都会当场报错）
+        const countEl = card.querySelector('[data-role="count"]');
         mountKeywordEditor(card, p.keywords, () => {
-          card.querySelector('[data-role="count"]').textContent = `${p.keywords.length} 词`;
+          countEl.textContent = `${p.keywords.length} 词`;
           scheduleAutoSave();
         });
         // 封面图：优先级最高的是这里手动传的（imageUrl），复用已有的通用图片直传接口，
