@@ -410,7 +410,7 @@ const MaterialCheck = (() => {
         const ratio = keywordRatio(k);
         const catOpts = CATEGORIES.map((c) => `<option value="${c}" ${c === cat ? 'selected' : ''}>${c}</option>`).join('');
         const ratioOpts = RATIO_OPTIONS.map((r) => `<option value="${r}" ${r === ratio ? 'selected' : ''}>${RATIO_LABEL[r]}</option>`).join('');
-        return `<span class="mc-chip${i === enterIndex ? ' mc-chip-enter' : ''}" data-i="${i}"><span class="mc-chip-text" data-i="${i}" title="点击编辑文字">${escapeHtml(keywordText(k))}</span><select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><select class="mc-ratio-badge-select ${RATIO_CLASS[ratio]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的适用比例">${ratioOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
+        return `<span class="mc-chip${i === enterIndex ? ' mc-chip-enter' : ''}" data-i="${i}" data-cat="${escapeHtml(cat)}"><span class="mc-chip-text" data-i="${i}" title="点击编辑文字">${escapeHtml(keywordText(k))}</span><select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><select class="mc-ratio-badge-select ${RATIO_CLASS[ratio]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的适用比例">${ratioOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
       }).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
       if (enterIndex != null) {
         const enterEl = chipsEl.querySelector(`.mc-chip[data-i="${enterIndex}"]`);
@@ -639,6 +639,7 @@ const MaterialCheck = (() => {
   //    绑定的 DOM 引用、闭包里的 onChange/自动保存都还是同一套，不用另外
   //    维护一份浮窗专用的状态或重新 mount 一次。 ──
   let expandMask, expandCoverSlot, expandBodySlot, expandedCard;
+  let expandLegendEl, legendActiveCat = null;
 
   /** 光标在任何输入控件里时，方向键应该只是移动光标/选项，不该被浮窗的
    *  上一个/下一个快捷键抢走。 */
@@ -669,6 +670,45 @@ const MaterialCheck = (() => {
     expandMask.querySelector('#mc-expand-next').disabled = idx === -1 || idx >= cards.length - 1;
   }
 
+  /** 分类图例：数每个分类当前渲染出来几个 chip（直接数 DOM，不用另外拿 keywords 数组），
+   *  数量为 0 的分类不显示图例项。点一个分类：其它图例变灰，右侧对应分类的 chip
+   *  放大突出、其余 chip 变灰变淡但留在原位；再点一次已选中的取消筛选。
+   *  不侵入 mountKeywordEditor 内部逻辑——图例状态全靠外部监听 DOM 变化重算。 */
+  function legendCounts() {
+    const counts = {};
+    CATEGORIES.forEach((c) => (counts[c] = 0));
+    expandBodySlot.querySelectorAll('.mc-chip[data-cat]').forEach((el) => {
+      if (counts[el.dataset.cat] != null) counts[el.dataset.cat]++;
+    });
+    return counts;
+  }
+
+  function renderExpandLegend() {
+    if (!expandLegendEl || !expandedCard) return;
+    const counts = legendCounts();
+    expandLegendEl.innerHTML = CATEGORIES.filter((c) => counts[c] > 0).map((c) => {
+      const cls = [CAT_CLASS[c]];
+      if (c === legendActiveCat) cls.push('mc-legend-active');
+      else if (legendActiveCat) cls.push('mc-legend-dim');
+      return `<button type="button" class="mc-legend-item ${cls.join(' ')}" data-cat="${escapeHtml(c)}">` +
+        `<span class="mc-legend-swatch"></span><span class="mc-legend-label">${escapeHtml(c)}</span><span class="mc-legend-count">${counts[c]}</span></button>`;
+    }).join('');
+    expandLegendEl.querySelectorAll('.mc-legend-item').forEach((btn) => (btn.onclick = () => {
+      const c = btn.dataset.cat;
+      legendActiveCat = legendActiveCat === c ? null : c;
+      renderExpandLegend();
+      applyLegendFilterToChips();
+    }));
+  }
+
+  function applyLegendFilterToChips() {
+    expandBodySlot.querySelectorAll('.mc-chip[data-cat]').forEach((chip) => {
+      const match = chip.dataset.cat === legendActiveCat;
+      chip.classList.toggle('mc-chip-legend-focus', !!legendActiveCat && match);
+      chip.classList.toggle('mc-chip-legend-dim', !!legendActiveCat && !match);
+    });
+  }
+
   /** 切换到相邻产品：先把当前产品的未落盘修改立即存掉（不等 0.7 秒的自动保存定时器），
    *  再把封面/内容节点从旧卡片挪到新卡片，中间配合 CSS 类做一次轻微滑动+淡入淡出。 */
   function switchExpand(dir) {
@@ -685,6 +725,7 @@ const MaterialCheck = (() => {
       oldCard.classList.remove('mc-pcard-expanding');
 
       expandedCard = target;
+      legendActiveCat = null; // 切换产品后图例筛选状态清空，避免带着上一个产品的分类筛选看新产品
       expandCoverSlot.appendChild(target.querySelector('.mc-pcard-cover'));
       expandBodySlot.appendChild(target.querySelector('.mc-pcard-body'));
       target.classList.add('mc-pcard-expanding');
@@ -708,13 +749,16 @@ const MaterialCheck = (() => {
         <button type="button" class="mc-expand-nav mc-expand-prev" id="mc-expand-prev" title="上一个产品" aria-label="上一个产品">‹</button>
         <button type="button" class="mc-expand-nav mc-expand-next" id="mc-expand-next" title="下一个产品" aria-label="下一个产品">›</button>
         <div class="mc-expand-layout">
-          <div class="mc-expand-cover-slot" data-role="cover-slot"></div>
+          <div class="mc-expand-cover-slot" data-role="cover-slot">
+            <div class="mc-expand-legend" data-role="legend"></div>
+          </div>
           <div class="mc-expand-body-slot" data-role="body-slot"></div>
         </div>
       </div>`;
     document.body.appendChild(expandMask);
     expandCoverSlot = expandMask.querySelector('[data-role="cover-slot"]');
     expandBodySlot = expandMask.querySelector('[data-role="body-slot"]');
+    expandLegendEl = expandMask.querySelector('[data-role="legend"]');
     expandMask.querySelector('#mc-expand-close').onclick = closeExpand;
     expandMask.querySelector('#mc-expand-prev').onclick = () => switchExpand(-1);
     expandMask.querySelector('#mc-expand-next').onclick = () => switchExpand(1);
@@ -726,11 +770,19 @@ const MaterialCheck = (() => {
       if (e.key === 'ArrowLeft') { e.preventDefault(); switchExpand(-1); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); switchExpand(1); }
     });
+    // 关键词区任何重绘（新增/删除/改分类/文字改名，都走 drawChips() 的 innerHTML 整体替换）
+    // 都会触发这个 childList 变化，图例的分类计数、当前筛选高亮跟着自动重算，
+    // 不用在 mountKeywordEditor 内部埋一个图例专用的回调。
+    new MutationObserver(() => {
+      renderExpandLegend();
+      applyLegendFilterToChips();
+    }).observe(expandBodySlot, { childList: true, subtree: true });
   }
 
   function openExpand(card) {
     if (!expandMask) buildExpandSheet();
     expandedCard = card;
+    legendActiveCat = null;
     expandCoverSlot.appendChild(card.querySelector('.mc-pcard-cover'));
     expandBodySlot.appendChild(card.querySelector('.mc-pcard-body'));
     card.classList.add('mc-pcard-expanding');
@@ -744,6 +796,7 @@ const MaterialCheck = (() => {
     expandedCard.appendChild(expandBodySlot.querySelector('.mc-pcard-body'));
     expandedCard.classList.remove('mc-pcard-expanding');
     expandedCard = null;
+    legendActiveCat = null;
     expandMask.hidden = true;
   }
 

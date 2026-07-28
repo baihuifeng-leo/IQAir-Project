@@ -1986,7 +1986,7 @@ body.rpt-presenting .rpt-wm-note {
    只限定在可编辑的词库 chip 区（分类徽标/其它 chip 场景，比如检测结果里的缺词/多出的词，不受影响，保持原来的紧凑密度） */
 .mc-chip-editor .mc-chip { font-size: 15px; font-weight: 600; padding: 5px 11px; }
 /* chip 增删的进场/离场动画：进场从缩小+透明弹到正常大小，离场反过来缩回去再从 DOM 摘掉 */
-.mc-chip { transition: opacity 0.15s var(--ease), transform 0.15s var(--ease); }
+.mc-chip { transition: opacity 0.15s var(--ease), transform 0.15s var(--ease), filter 0.15s var(--ease); }
 .mc-chip-enter, .mc-chip-leaving { opacity: 0; transform: scale(0.7); }
 
 /* chip 文字直接点开编辑：平时看着就是普通文字，hover 一下提示能点，
@@ -2106,7 +2106,7 @@ body.rpt-presenting .rpt-wm-note {
    flex:1 撑满逻辑，只是这次外层容器给的可用高度大得多）。 */
 .mc-expand-mask { z-index: 200; }
 .mc-expand-sheet {
-  width: min(1400px, 94vw); height: 90vh; max-height: 90vh;
+  width: 90vw; height: 90vh; max-height: 90vh;
   display: flex; flex-direction: column;
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   border: 1px solid var(--line); border-radius: 18px;
@@ -2140,21 +2140,48 @@ body.rpt-presenting .rpt-wm-note {
 .mc-expand-slide-out-right { opacity: 0; transform: translateX(18px); }
 .mc-expand-slide-in-left { opacity: 0; transform: translateX(-18px); transition: none; }
 .mc-expand-slide-in-right { opacity: 0; transform: translateX(18px); transition: none; }
-.mc-expand-cover-slot { flex: 0 0 min(38%, 460px); min-width: 220px; background: var(--field-bg); }
-.mc-expand-cover-slot .mc-pcard-cover { height: 100%; }
+.mc-expand-cover-slot {
+  flex: 0 0 38%; min-width: 220px; background: var(--field-bg);
+  display: flex; flex-direction: column;
+}
+.mc-expand-cover-slot .mc-pcard-cover { order: 0; flex: 1 1 auto; min-height: 0; }
 .mc-expand-body-slot { flex: 1 1 auto; min-width: 0; display: flex; }
 .mc-expand-body-slot .mc-pcard-body { flex: 1 1 auto; padding: 24px 28px 28px; gap: 16px; }
-.mc-expand-body-slot .mc-pcard-name { font-size: 17px; padding: 10px 12px; }
-.mc-expand-body-slot .mc-pcard-price { font-size: 14px; padding: 10px 10px; }
-/* 关键词区尽可能最大：字号、内边距都比收起态卡片里大一圈 */
-.mc-expand-body-slot .mc-chip-editor .mc-chip { font-size: 17px; padding: 8px 15px; gap: 6px; }
-.mc-expand-body-slot .mc-cat-badge-select, .mc-expand-body-slot .mc-ratio-badge-select { font-size: 11.5px; padding: 2px 8px; }
+/* 关键词、名称、价格、分类/比例徽标的字号跟视口宽度走：clamp() 的三段值是按
+   14寸笔记本(~1440px视口)保持现状、27寸4K(~2560px)明显放大、超宽屏(~3840px+)
+   封顶推出来的线性插值，内边距改用 em 让它们跟着字号自动放大，不用每个都单独算。 */
+.mc-expand-body-slot .mc-pcard-name { font-size: clamp(17px, 11.5px + 0.38vw, 26px); padding: 0.6em 0.7em; }
+.mc-expand-body-slot .mc-pcard-price { font-size: clamp(14px, 9.5px + 0.31vw, 21.5px); padding: 0.7em; }
+/* 关键词区尽可能最大：字号、内边距都比收起态卡片里大一圈，且随视口连续放大 */
+.mc-expand-body-slot .mc-chip-editor .mc-chip { font-size: clamp(17px, 11.5px + 0.38vw, 26px); padding: 0.47em 0.88em; gap: 0.35em; }
+.mc-expand-body-slot .mc-cat-badge-select, .mc-expand-body-slot .mc-ratio-badge-select { font-size: clamp(11.5px, 7.8px + 0.25vw, 17.6px); padding: 0.17em 0.7em; }
 .mc-expand-body-slot .mc-chip-editor { gap: 9px; }
-.mc-expand-body-slot .mc-kw-input-inline, .mc-expand-body-slot .mc-cat-select, .mc-expand-body-slot .mc-ratio-select { font-size: 14px; padding: 9px 12px; }
+.mc-expand-body-slot .mc-kw-input-inline, .mc-expand-body-slot .mc-cat-select, .mc-expand-body-slot .mc-ratio-select { font-size: clamp(14px, 9.5px + 0.31vw, 21.5px); padding: 0.64em 0.86em; }
 @media (max-width: 860px) {
   .mc-expand-layout { flex-direction: column; }
   .mc-expand-cover-slot { flex: 0 0 180px; min-width: 0; }
 }
+
+/* 分类图例：贴在封面图下方（靠 flex order，跟 DOM 插入顺序无关），点一个分类
+   其它图例变灰、右侧对应分类关键词高亮放大——纯靠 data-cat 属性 + class 联动，
+   不改 mountKeywordEditor 内部逻辑，通过 MutationObserver 监听关键词区重绘自动重算。 */
+.mc-expand-legend { order: 1; flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 14px; }
+.mc-legend-item {
+  order: 0; display: inline-flex; align-items: center; gap: 6px;
+  border: none; border-radius: 999px; padding: 4px 10px 4px 8px; cursor: pointer;
+  font-size: 12px; font-family: inherit; line-height: 1.3;
+  transition: opacity var(--fast), filter var(--fast), transform var(--fast);
+}
+.mc-legend-swatch { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.mc-legend-count { opacity: 0.75; font-variant-numeric: tabular-nums; }
+.mc-legend-item:hover { transform: translateY(-1px); }
+.mc-legend-item.mc-legend-dim { opacity: 0.4; filter: grayscale(70%); }
+.mc-legend-item.mc-legend-active { box-shadow: 0 0 0 2px currentColor inset; }
+@media (max-width: 860px) { .mc-expand-legend { padding: 8px 0 0; } }
+
+/* 关键词区被图例筛选时：命中分类的 chip 原地放大突出，其余 chip 变灰变淡但不挪位/不消失 */
+.mc-chip.mc-chip-legend-dim { opacity: 0.35; filter: grayscale(75%); }
+.mc-chip.mc-chip-legend-focus { transform: scale(1.08); position: relative; z-index: 1; }
 
 /* 拖拽手柄：单独的小按钮而不是整张卡片可拖，避免跟卡片里的输入框/下拉框抢手势 */
 .mc-pcard-handle {
