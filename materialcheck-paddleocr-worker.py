@@ -26,7 +26,7 @@ from paddleocr import PaddleOCR  # noqa: E402
 
 def main():
     ocr = PaddleOCR(
-        lang='ch', ocr_version='PP-OCRv4', enable_mkldnn=False,
+        lang='ch', ocr_version='PP-OCRv6', enable_mkldnn=False,
         use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=False
     )
     print(json.dumps({'ready': True}), flush=True)

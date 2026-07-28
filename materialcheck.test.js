@@ -297,6 +297,17 @@ async function run() {
     assert.strictEqual(M.normalize('CCM颗粒物 1,000,000 mg'), 'CCM颗粒物1,000,000mg');
   });
 
+  t('normalize 把全角￥折成半角¥——PP-OCRv4/v6两个模型档位对这个符号的识别宽度不一样', () => {
+    // 实测：v4-mobile 稳定吐全角￥399，v6-medium 稳定吐半角¥399，词库里登记的是全角
+    assert.strictEqual(M.normalize('￥399'), M.normalize('¥399'));
+    assert.strictEqual(M.normalize('￥399'), '¥399');
+  });
+
+  t('findKeywordHits 全角￥词库对上半角¥ OCR文字依旧能命中（反之亦然）', () => {
+    assert.deepStrictEqual(M.findKeywordHits('¥399', ['￥399']), ['￥399']);
+    assert.deepStrictEqual(M.findKeywordHits('￥399', ['¥399']), ['¥399']);
+  });
+
   t('findKeywordHits OCR把上标³识成普通数字3、把">"漏识别时依旧能命中关键词', () => {
     // Atem Car 真实场景：词库写的是"快速净化3m³整车空间*"，OCR 识成"快速净化3m3整车空间*"
     assert.deepStrictEqual(M.findKeywordHits('快速净化3m3整车空间*', ['快速净化3m³整车空间*']), ['快速净化3m³整车空间*']);
