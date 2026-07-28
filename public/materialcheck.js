@@ -428,10 +428,19 @@ const MaterialCheck = (() => {
         const input = document.createElement('input');
         input.className = 'mc-chip-text-input';
         input.value = original;
-        const sizeInput = () => { input.style.width = Math.max(3, input.value.length + 1) + 'ch'; };
+        // 按字符数算宽度（ch 单位）在中文场景下会严重偏窄——ch 是按西文"0"的宽度定义的，
+        // 中文字符实际渲染宽度接近两个 ch，用字符数直接乘会让中文关键词的输入框挤成一团。
+        // 改成拿一个不可见的镜像 span（继承同样的字体）量出真实渲染宽度，中英文混排也准。
+        const measureEl = document.createElement('span');
+        measureEl.className = 'mc-chip-text-measure';
+        span.appendChild(measureEl);
+        const sizeInput = () => {
+          measureEl.textContent = input.value || ' ';
+          input.style.width = (measureEl.offsetWidth + 16) + 'px';
+        };
+        span.appendChild(input);
         sizeInput();
         input.oninput = sizeInput;
-        span.appendChild(input);
         input.focus();
         input.select();
         let settled = false;

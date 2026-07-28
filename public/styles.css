@@ -1994,6 +1994,8 @@ body.rpt-presenting .rpt-wm-note {
 .mc-chip-text { cursor: text; border-radius: 4px; padding: 0 2px; margin: 0 -2px; transition: background var(--fast); }
 .mc-chip-text:hover { background: var(--overlay-weak); }
 .mc-chip-text-input { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--mint); border-radius: 4px; padding: 0 4px; min-width: 3em; }
+/* 量宽度用的镜像元素：脱离文档流、不可见，只用来读 offsetWidth，不会被看到或点到 */
+.mc-chip-text-measure { position: absolute; visibility: hidden; white-space: pre; pointer-events: none; font: inherit; }
 
 /* 产品按机器/滤芯/附件分区，每个分区一个专属色（--mc-sec）：标题左侧色条、
    标题文字、折叠箭头、分区内每张卡片的顶部色条/悬浮光晕都跟着这一个变量走 */
