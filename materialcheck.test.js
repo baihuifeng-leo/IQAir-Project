@@ -270,6 +270,16 @@ async function run() {
     assert.strictEqual(r.status, 'pass');
   });
 
+  t('matchAgainstProduct 自己已有的词跟串出来的词只是全角/半角或空格不同，也算已覆盖，不算多出的词', () => {
+    // 复刻真实场景：HP250 XE 写的是半角">"，HP100 XE 曾经写成全角"＞"，两个产品
+    // 数量都没到通用词阈值，原始字符串比较会误判——归一化后比较才对
+    const hp250 = { id: 'p1', name: 'HP250 XE', keywords: ['CCM颗粒物>1,000,000 mg'] };
+    const hp100 = { id: 'p2', name: 'HP100 XE', keywords: ['CCM颗粒物＞1,000,000 mg'] };
+    const r = M.matchAgainstProduct('CCM颗粒物>1,000,000 mg', hp250, [hp250, hp100]);
+    assert.deepStrictEqual(r.extraKeywords, []);
+    assert.strictEqual(r.status, 'pass');
+  });
+
   t('matchAgainstProduct 通用词豁免不影响真正的低频串词检测（还没到阈值的照样要报）', () => {
     const target = { id: 'pt', name: '目标产品', keywords: ['目标专属词'] };
     const other1 = { id: 'po1', name: '别的产品1', keywords: ['别人的词'] };
@@ -292,6 +302,22 @@ async function run() {
     assert.deepStrictEqual(M.findKeywordHits('快速净化3m3整车空间*', ['快速净化3m³整车空间*']), ['快速净化3m³整车空间*']);
     // HP250 XE 真实场景：词库写的是"CCM颗粒物>1,000,000 mg"，OCR 漏识别了 ">"
     assert.deepStrictEqual(M.findKeywordHits('CCM颗粒物1,000,000 mg', ['CCM颗粒物>1,000,000 mg']), ['CCM颗粒物>1,000,000 mg']);
+  });
+
+  t('normalize 数字和计量单位之间夹着孤立乱入字母时忽略掉这个字母，不误伤正常紧贴写法', () => {
+    // HP250 XE / HP100 XE 1:1 裁图真实场景：">" 在小尺寸下被稳定误识成字母 r，
+    // 前后被空格/换行隔开——这种"孤立"形状才处理
+    assert.strictEqual(M.normalize('1,000,000 r\nmg'), '1,000,000mg');
+    // 安全底线：正常紧贴写法（没有孤立字母）不能被误伤，尤其"mg"自己的"m"不能被当成杂散字母吃掉
+    assert.strictEqual(M.normalize('1,000,000 mg'), '1,000,000mg');
+    assert.strictEqual(M.normalize('1,000,000mg'), '1,000,000mg');
+    assert.strictEqual(M.normalize('CCM颗粒物>1,000,000 mg'), 'CCM颗粒物1,000,000mg');
+  });
+
+  t('findKeywordHits 数字和单位之间被乱入字母打断的 OCR 文字依旧能命中关键词', () => {
+    // 复刻 HP250 XE 1440.png 真实 OCR：CCM颗粒物\n1,000,000 r\nmg
+    const ocrText = 'CCM颗粒物\n1,000,000 r\nmg';
+    assert.deepStrictEqual(M.findKeywordHits(ocrText, ['CCM颗粒物>1,000,000 mg']), ['CCM颗粒物>1,000,000 mg']);
   });
 
   t('keywordText/keywordCategory 兼容纯字符串和 {text,category} 对象两种关键词写法', () => {

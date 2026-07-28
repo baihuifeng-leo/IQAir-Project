@@ -10,14 +10,18 @@ const RATIOS = ['1:1', '3:4'];
 const SUPERSCRIPT_DIGITS = { '¹': '1', '²': '2', '³': '3' };
 
 /** 关键词/OCR 文字统一走这个再比对：除了原来的去空格，再把 OCR 天生识别不稳定的
- *  两类"装饰性"符号也归一化掉——上标数字（³/²/¹，比如"3m³"图里就是真实的上标，
+ *  几类"装饰性"符号也归一化掉——上标数字（³/²/¹，比如"3m³"图里就是真实的上标，
  *  OCR 只能识成平常数字）折成普通数字；">""<" 这类比较符号直接去掉（词库里同一类
  *  产品对"CCM颗粒物>1,000,000mg"这种写法，OCR 经常漏识别这个小符号，但符号本身
- *  是装饰性的，不影响后面数字/单位这些真正要核对的内容）。 */
+ *  是装饰性的，不影响后面数字/单位这些真正要核对的内容）；数字和计量单位之间被
+ *  OCR 乱入一个孤立单字母的情况（同一版式实测 2/2 复现，比如"1,000,000 r\nmg"，
+ *  ">" 在小尺寸图里被稳定误识成字母），也当噪声去掉——严格要求这个字母前后都被
+ *  空白/换行夹住才处理，不会误伤"1,000,000mg"这种紧贴写法本身。 */
 function normalize(s) {
   return String(s || '')
     .replace(/[¹²³]/g, (ch) => SUPERSCRIPT_DIGITS[ch])
     .replace(/[<>＜＞]/g, '') // 全角/半角比较符号都要去掉——词库里两种写法都出现过
+    .replace(/([\d,]{2,})\s+[A-Za-z]\s+(mg|kg|g|ml|L)\b/gi, '$1$2')
     .replace(/\s+/g, '');
 }
 
@@ -232,7 +236,11 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
     .filter((kw) => findKeywordHits(text, [kw]).length === 0)
     .map((kw) => keywordText(kw));
 
-  const myKeywordTexts = new Set((product.keywords || []).map((kw) => keywordText(kw)));
+  // 用归一化后的文字判断"这个词本产品是不是已经有了"，不能只比较原始字符串——
+  // 同一句话在不同产品词库里可能就差一个全角/半角符号、一个空格（实测 HP250 XE
+  // 写的是半角">"，HP100 XE 曾经写成全角"＞"，字面不相等但语义就是同一句话），
+  // 原始字符串比较会让这类"其实是我自己的词"被误判成串出去的词。
+  const myKeywordTexts = new Set((product.keywords || []).map((kw) => normalize(keywordText(kw))));
   const commonTexts = commonKeywordTexts(allProducts, CROSS_CHECK_COMMON_THRESHOLD);
   const extraKeywords = [];
   const seen = new Set();
@@ -240,8 +248,9 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
     if (other.id === product.id) return;
     findKeywordHits(text, other.keywords || []).forEach((kw) => {
       const t = keywordText(kw);
-      if (myKeywordTexts.has(t) || seen.has(t) || commonTexts.has(normalize(t))) return;
-      seen.add(t);
+      const n = normalize(t);
+      if (myKeywordTexts.has(n) || seen.has(n) || commonTexts.has(n)) return;
+      seen.add(n);
       extraKeywords.push(t);
     });
   });
