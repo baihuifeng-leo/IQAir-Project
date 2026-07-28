@@ -9,24 +9,78 @@ const RATIOS = ['1:1', '3:4'];
 
 const SUPERSCRIPT_DIGITS = { '¹': '1', '²': '2', '³': '3' };
 
-/** 关键词/OCR 文字统一走这个再比对：除了原来的去空格，再把 OCR 天生识别不稳定的
- *  几类"装饰性"符号也归一化掉——上标数字（³/²/¹，比如"3m³"图里就是真实的上标，
- *  OCR 只能识成平常数字）折成普通数字；">""<" 这类比较符号直接去掉（词库里同一类
- *  产品对"CCM颗粒物>1,000,000mg"这种写法，OCR 经常漏识别这个小符号，但符号本身
- *  是装饰性的，不影响后面数字/单位这些真正要核对的内容）；数字和计量单位之间被
- *  OCR 乱入一个孤立单字母的情况（同一版式实测 2/2 复现，比如"1,000,000 r\nmg"，
- *  ">" 在小尺寸图里被稳定误识成字母），也当噪声去掉——严格要求这个字母前后都被
- *  空白/换行夹住才处理，不会误伤"1,000,000mg"这种紧贴写法本身；￥/¥ 全角半角
- *  折成同一个字符——不同 PaddleOCR 模型档位对这个符号的识别宽度习惯不一样（实测
- *  v4-mobile 稳定吐全角￥、v6-medium 稳定吐半角¥），词库本身也是人工维护，两种
- *  写法都可能出现，不能指望某一边固定，两边都得折到一起才比得上。 */
+/** normalize() 用的规则表，每条规则带一个人话标签——这份表既用来拼出真正的
+ *  normalize() 本身，也用来给「检测台」关键词明细面板反推"这个词是靠哪条规则
+ *  才命中的"（见 explainFuzzyMatch），两边共用同一份定义，不会出现明细面板讲的
+ *  理由跟真实匹配逻辑对不上的情况。 */
+const NORMALIZE_STEPS = [
+  {
+    label: '上标数字折算', // "3m³"图里就是真实的上标，OCR 只能识成平常数字
+    apply: (s) => s.replace(/[¹²³]/g, (ch) => SUPERSCRIPT_DIGITS[ch])
+  },
+  {
+    label: '比较符号（<>＜＞）忽略', // 词库里"CCM颗粒物>1,000,000mg"这种写法，OCR 经常漏识别这个小符号
+    apply: (s) => s.replace(/[<>＜＞]/g, '')
+  },
+  {
+    label: '数字与单位间的乱入字母忽略', // ">" 在小尺寸图里被稳定误识成孤立字母，比如"1,000,000 r\nmg"
+    apply: (s) => s.replace(/([\d,]{2,})\s+[A-Za-z]\s+(mg|kg|g|ml|L)\b/gi, '$1$2')
+  },
+  {
+    label: '￥/¥ 全角半角统一', // 不同 PaddleOCR 模型档位对这个符号的识别宽度习惯不一样，词库也是人工维护
+    apply: (s) => s.replace(/￥/g, '¥')
+  },
+  {
+    label: '空白/换行忽略', // OCR 按视觉位置逐行识别，同一个词可能被拆到两行
+    apply: (s) => s.replace(/\s+/g, '')
+  }
+];
+
 function normalize(s) {
-  return String(s || '')
-    .replace(/[¹²³]/g, (ch) => SUPERSCRIPT_DIGITS[ch])
-    .replace(/[<>＜＞]/g, '') // 全角/半角比较符号都要去掉——词库里两种写法都出现过
-    .replace(/([\d,]{2,})\s+[A-Za-z]\s+(mg|kg|g|ml|L)\b/gi, '$1$2')
-    .replace(/￥/g, '¥') // 全角￥折成半角¥
-    .replace(/\s+/g, '');
+  return NORMALIZE_STEPS.reduce((acc, step) => step.apply(acc), String(s || ''));
+}
+
+/** 判断某个关键词在这段文字里是"逐字原样命中"还是"要靠 normalize() 的某几条
+ *  规则才能命中"，用于检测台的关键词明细面板：逐字命中=绿色放心通过；
+ *  靠规则命中=黄色，附上具体是哪几条规则起了作用（不是瞎猜的标签，是从
+ *  NORMALIZE_STEPS 反推出来的，跟真实匹配逻辑必然一致）；两种都没命中=红色缺词。
+ *  做法：依次去掉每一条规则重新跑一遍归一化，如果去掉后就不命中了，说明这条
+ *  规则是必需的，记进 reasons。 */
+function classifyKeywordMatch(text, keywordRaw) {
+  const rawText = String(text || '');
+  const rawKeyword = String(keywordRaw || '');
+  if (rawText.includes(rawKeyword)) return { found: true, exact: true, reasons: [] };
+
+  const fullyNormalized = normalize(rawText).includes(normalize(rawKeyword));
+  if (!fullyNormalized) return { found: false, exact: false, reasons: [] };
+
+  const reasons = NORMALIZE_STEPS
+    .filter((step) => {
+      const withoutThisStep = (s) => NORMALIZE_STEPS.reduce((acc, st) => (st === step ? acc : st.apply(acc)), String(s || ''));
+      return !withoutThisStep(rawText).includes(withoutThisStep(rawKeyword));
+    })
+    .map((step) => step.label);
+  return { found: true, exact: false, reasons };
+}
+
+/** 检测台关键词明细面板：把产品自己词库里适用于这个素材比例的每个词都判一遍
+ *  三态（命中/规则命中/缺失），红色缺词排最前面，方便优先看问题。 */
+function matchedKeywordDetail(text, product, materialRatio) {
+  return (product.keywords || [])
+    .filter((kw) => keywordApplies(kw, materialRatio))
+    .map((kw) => {
+      const { found, exact, reasons } = classifyKeywordMatch(text, keywordText(kw));
+      return {
+        text: keywordText(kw),
+        category: keywordCategory(kw),
+        status: !found ? 'missing' : exact ? 'exact' : 'fuzzy',
+        reasons
+      };
+    })
+    .sort((a, b) => {
+      const order = { missing: 0, fuzzy: 1, exact: 2 };
+      return order[a.status] - order[b.status];
+    });
 }
 
 /** 关键词条目可以是纯字符串，也可以是 { text, category } 对象——这里统一取出文字部分。 */
@@ -262,12 +316,14 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
   const priceIssue = checkPrice(text, product);
 
   const status = (extraKeywords.length > 0 || priceIssue) ? 'error' : missingKeywords.length > 0 ? 'warn' : 'pass';
-  return { missingKeywords, extraKeywords, priceIssue, status };
+  const matchedKeywords = matchedKeywordDetail(text, product, materialRatio);
+  return { missingKeywords, extraKeywords, priceIssue, status, matchedKeywords };
 }
 
 module.exports = {
   CATEGORIES, PRODUCT_TYPES, RATIOS, CROSS_CHECK_COMMON_THRESHOLD,
   normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
-  extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates
+  extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates,
+  classifyKeywordMatch, matchedKeywordDetail
 };

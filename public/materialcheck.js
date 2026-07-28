@@ -199,6 +199,32 @@ const MaterialCheck = (() => {
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rows.length) }, worker));
   }
 
+  const KWD_STATUS_TITLE = {
+    missing: '素材里没有找到这个词',
+    fuzzy: '不是逐字一致，靠归一化规则判定命中',
+    exact: '素材原文逐字命中'
+  };
+
+  /** 检测台结果卡片里"查看明细"面板：把 matchAgainstProduct 返回的 matchedKeywords
+   *  （产品自己词库里每个适用词的命中三态）画成手动展开的明细列表，缺失排最前面，
+   *  规则命中的附上具体理由（从 normalize() 的规则表反推出来的，不是写死的猜测）。 */
+  function keywordDetailHtml(matchedKeywords) {
+    if (!matchedKeywords || !matchedKeywords.length) return '';
+    const missCount = matchedKeywords.filter((k) => k.status === 'missing').length;
+    const fuzzyCount = matchedKeywords.filter((k) => k.status === 'fuzzy').length;
+    const items = matchedKeywords.map((kw) => {
+      const reasonText = (kw.reasons || []).join('、');
+      const title = kw.status === 'fuzzy' ? `${KWD_STATUS_TITLE.fuzzy}：${reasonText}` : KWD_STATUS_TITLE[kw.status];
+      return `<span class="mc-chip mc-kwd-${kw.status}" title="${escapeHtml(title)}">
+        <span class="mc-kwd-cat-dot ${CAT_CLASS[kw.category] || ''}"></span>${escapeHtml(kw.text)}${reasonText ? `<span class="mc-kwd-reason">（${escapeHtml(reasonText)}）</span>` : ''}
+      </span>`;
+    }).join('');
+    return `<details class="mc-kw-detail">
+      <summary>查看明细（共 ${matchedKeywords.length} 词 · ${missCount} 缺失 · ${fuzzyCount} 规则命中）</summary>
+      <div class="mc-kw-detail-list">${items}</div>
+    </details>`;
+  }
+
   function renderResult(row, result, ctx = {}) {
     if (result.needsManualPick) {
       row.className = 'mc-row mc-row-pick';
@@ -243,6 +269,7 @@ const MaterialCheck = (() => {
       detail += `<div class="mc-chip-row">价格不对：<span class="mc-chip mc-chip-bad">${priceIssueLabel(result.priceIssue)}</span></div>`;
     }
     if (result.warning) detail += `<div class="mc-warning">⚠ ${escapeHtml(result.warning)}</div>`;
+    detail += keywordDetailHtml(result.matchedKeywords);
 
     row.innerHTML = `
       <span class="mc-row-name">${escapeHtml(result.filename)}</span>

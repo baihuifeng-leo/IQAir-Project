@@ -481,11 +481,11 @@ class MaterialCheckStore {
   }
 
   async _finish({ platform, libraryId, product, allProducts, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning, ratio }) {
-    const { missingKeywords, extraKeywords, priceIssue, status } = match.matchAgainstProduct(ocrText, product, allProducts, ratio);
+    const { missingKeywords, extraKeywords, priceIssue, status, matchedKeywords } = match.matchAgainstProduct(ocrText, product, allProducts, ratio);
     const record = {
       id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId,
       filename, imagePath, productId: product.id, productName: product.name, matchMethod: method, ratio,
-      ocrText, ocrConfidence, missingKeywords, extraKeywords, priceIssue, status, warning
+      ocrText, ocrConfidence, missingKeywords, extraKeywords, priceIssue, status, warning, matchedKeywords
     };
     await this.append(record);
     return record;

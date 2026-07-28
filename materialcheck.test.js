@@ -218,6 +218,61 @@ async function run() {
     assert.strictEqual(r.status, 'warn');
   });
 
+  t('classifyKeywordMatch 逐字命中标记为 exact，理由列表为空', () => {
+    const r = M.classifyKeywordMatch('CCM颗粒物>1,000,000 mg', 'CCM颗粒物>1,000,000 mg');
+    assert.deepStrictEqual(r, { found: true, exact: true, reasons: [] });
+  });
+
+  t('classifyKeywordMatch 靠归一化规则命中标记为非 exact，理由能反推出具体是哪几条规则起了作用', () => {
+    // 全角＞ + 空格，命中靠"比较符号忽略"和"空白/换行忽略"两条规则
+    const r = M.classifyKeywordMatch('CCM颗粒物＞1,000,000 mg', 'CCM颗粒物>1,000,000mg');
+    assert.strictEqual(r.found, true);
+    assert.strictEqual(r.exact, false);
+    assert.ok(r.reasons.includes('比较符号（<>＜＞）忽略'));
+    assert.ok(r.reasons.includes('空白/换行忽略'));
+  });
+
+  t('classifyKeywordMatch 全角￥词库对半角¥ OCR 文字，理由里能看到是￥/¥归一化起的作用', () => {
+    const r = M.classifyKeywordMatch('¥399', '￥399');
+    assert.strictEqual(r.found, true);
+    assert.strictEqual(r.exact, false);
+    assert.deepStrictEqual(r.reasons, ['￥/¥ 全角半角统一']);
+  });
+
+  t('classifyKeywordMatch 两种归一化都命中不了时判定为缺失，理由列表为空', () => {
+    const r = M.classifyKeywordMatch('完全不相关的文字', '缺失的词');
+    assert.deepStrictEqual(r, { found: false, exact: false, reasons: [] });
+  });
+
+  t('matchedKeywordDetail 按产品自己适用于该比例的词库逐一判三态，缺失排最前面', () => {
+    const p = { id: 'mkd1', name: 'MKD', keywords: [
+      { text: '缺失的词', category: '产品型号' },
+      { text: 'CCM颗粒物>1,000,000mg', category: '产品利益点' }, // 靠归一化命中
+      { text: '逐字命中的词', category: '其它' }
+    ] };
+    const detail = M.matchedKeywordDetail('逐字命中的词 CCM颗粒物＞1,000,000mg', p, null);
+    assert.deepStrictEqual(detail.map((d) => d.status), ['missing', 'fuzzy', 'exact']);
+    assert.strictEqual(detail[0].text, '缺失的词');
+    assert.ok(detail[1].reasons.length > 0);
+    assert.deepStrictEqual(detail[2].reasons, []);
+  });
+
+  t('matchedKeywordDetail 按素材比例过滤，不适用于当前比例的词不出现在明细里', () => {
+    const p = { id: 'mkd2', name: 'MKD2', keywords: [
+      { text: '仅3:4的词', category: '其它', ratio: '3:4' },
+      { text: '通用词', category: '其它' }
+    ] };
+    const detail = M.matchedKeywordDetail('通用词', p, '1:1');
+    assert.deepStrictEqual(detail.map((d) => d.text), ['通用词']);
+  });
+
+  t('matchAgainstProduct 返回结果里带上 matchedKeywords 明细，跟 missingKeywords 判定一致', () => {
+    const r = M.matchAgainstProduct('GC-Multi', productA, products);
+    const statuses = new Map(r.matchedKeywords.map((d) => [d.text, d.status]));
+    assert.strictEqual(statuses.get('GC-Multi'), 'exact');
+    assert.strictEqual(statuses.get('抗菌滤网认证号XXX'), 'missing');
+  });
+
   t('matchAgainstProduct 出现别的产品的词时判定为多出的词、报错状态', () => {
     const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX GCX XE', productA, products);
     assert.deepStrictEqual(r.missingKeywords, []);
