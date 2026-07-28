@@ -7,8 +7,18 @@ const PRODUCT_TYPES = ['machine', 'filter', 'accessory'];
 // （包括没配置过）一律按 keywordRatio() 归到 'both'，也就是两种比例的素材都要求它。
 const RATIOS = ['1:1', '3:4'];
 
+const SUPERSCRIPT_DIGITS = { '¹': '1', '²': '2', '³': '3' };
+
+/** 关键词/OCR 文字统一走这个再比对：除了原来的去空格，再把 OCR 天生识别不稳定的
+ *  两类"装饰性"符号也归一化掉——上标数字（³/²/¹，比如"3m³"图里就是真实的上标，
+ *  OCR 只能识成平常数字）折成普通数字；">""<" 这类比较符号直接去掉（词库里同一类
+ *  产品对"CCM颗粒物>1,000,000mg"这种写法，OCR 经常漏识别这个小符号，但符号本身
+ *  是装饰性的，不影响后面数字/单位这些真正要核对的内容）。 */
 function normalize(s) {
-  return String(s || '').replace(/\s+/g, '');
+  return String(s || '')
+    .replace(/[¹²³]/g, (ch) => SUPERSCRIPT_DIGITS[ch])
+    .replace(/[<>＜＞]/g, '') // 全角/半角比较符号都要去掉——词库里两种写法都出现过
+    .replace(/\s+/g, '');
 }
 
 /** 关键词条目可以是纯字符串，也可以是 { text, category } 对象——这里统一取出文字部分。 */
@@ -48,6 +58,12 @@ function findKeywordHits(text, keywords) {
  * 跟数字的前后顺序、是否隔着换行都不固定（同一张图有时候是"775\n¥"，有时候是
  * "￥\n399"），所以不要求符号紧贴数字，只要求隔着不超过几个字符/一次换行。
  * "元"作为后缀就不用符号也能判定（比如"选购价5880元"）。
+ *
+ * 实测天猫这批素材的"到手价"版式，￥ 符号经常被排版/OCR 识别顺序甩到离价格数字
+ * 好几行开外（比如"预估补贴到手价\n支付补贴省15%\n行业63+年深耕\n16328\n★★★★★\n￥"），
+ * 早就超出上面几条"隔几个字符"的容忍范围，导致真实价格反而提取不到。这种版式下
+ * 更可靠的锚点是"到手价"这个标签本身：它后面（不超过几行内）紧跟着的第一个纯数字
+ * 独立行基本就是价格，不用等 ￥ 符号靠近。
  */
 function extractPriceCandidates(text) {
   const s = String(text || '');
@@ -64,6 +80,21 @@ function extractPriceCandidates(text) {
       if (Number.isFinite(n) && n > 0) nums.add(n);
     }
   });
+
+  const lines = s.split('\n');
+  lines.forEach((line, i) => {
+    if (!/到手价/.test(line)) return;
+    for (let j = i + 1; j <= i + 5 && j < lines.length; j++) {
+      const t = lines[j].trim();
+      if (!t) continue;
+      if (/^[\d,]{2,7}$/.test(t)) {
+        const n = Number(t.replace(/,/g, ''));
+        if (Number.isFinite(n) && n > 0) nums.add(n);
+        break;
+      }
+    }
+  });
+
   return nums;
 }
 
@@ -155,13 +186,40 @@ function crossCheckWarning(resolvedProduct, ocrText, products) {
   return null;
 }
 
+// "多出的词"（跨产品串词）判定要求这个词得有"认得出是哪个产品"的辨识力——像品牌
+// logo、"瑞士制造"这种到处都有的通用文案，本身就不该被当成串词信号。阈值按实测
+// 词库分布定：真正跨产品共享的通用文案（IQAir/Swiss Made/满赠文案等）多是 7~23 个
+// 产品共有，个别产品自己专属的词最多也就在 1~2 个产品间意外重复，3 是能把两者分开
+// 的最小阈值。
+const CROSS_CHECK_COMMON_THRESHOLD = 3;
+
+/** 在 allProducts 范围内，统计每个关键词（归一化后）分别在多少个不同产品自己的
+ *  词库里出现过；达到阈值就说明这个词没有辨识力，不该拿来做"多出的词"跨产品判定
+ *  ——不影响它本身"缺不缺词"的校验，只影响是否被当成串词信号。 */
+function commonKeywordTexts(allProducts, threshold) {
+  const counts = new Map();
+  (allProducts || []).forEach((p) => {
+    const seenInThisProduct = new Set();
+    (p.keywords || []).forEach((kw) => {
+      const n = normalize(keywordText(kw));
+      if (!n || seenInThisProduct.has(n)) return;
+      seenInThisProduct.add(n);
+      counts.set(n, (counts.get(n) || 0) + 1);
+    });
+  });
+  const common = new Set();
+  counts.forEach((c, n) => { if (c >= threshold) common.add(n); });
+  return common;
+}
+
 /**
  * 产品与关键词强绑定：每个产品自己维护一份完整清单，同一个词可以在多个产品里各自
  * 重复出现，互不冲突（不再要求全局唯一）。
  *
  * 缺词 = 本产品自己清单里的词，没能在素材文字里找到。
- * 多出的词 = 素材文字里出现了某个别的产品的词，但这个词不在本产品自己清单里——
- * 如果这个词本产品也有（说明是有意重复录入的共享词），就不算多出的，是正常的自己的词。
+ * 多出的词 = 素材文字里出现了某个别的产品的词，但这个词不在本产品自己清单里，
+ * 且这个词没有被判定为通用词（见 commonKeywordTexts）——如果这个词本产品也有
+ * （说明是有意重复录入的共享词），就不算多出的，是正常的自己的词。
  *
  * 价格 = product.price 配置了预期价格时的强校验，跟"多出的词"同级——图里的价格跟
  * 预期对不上（不管是写错了还是压根没出现），都直接算报错，不走缺词那套"提醒"档位。
@@ -175,13 +233,14 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
     .map((kw) => keywordText(kw));
 
   const myKeywordTexts = new Set((product.keywords || []).map((kw) => keywordText(kw)));
+  const commonTexts = commonKeywordTexts(allProducts, CROSS_CHECK_COMMON_THRESHOLD);
   const extraKeywords = [];
   const seen = new Set();
   allProducts.forEach((other) => {
     if (other.id === product.id) return;
     findKeywordHits(text, other.keywords || []).forEach((kw) => {
       const t = keywordText(kw);
-      if (myKeywordTexts.has(t) || seen.has(t)) return;
+      if (myKeywordTexts.has(t) || seen.has(t) || commonTexts.has(normalize(t))) return;
       seen.add(t);
       extraKeywords.push(t);
     });
@@ -194,8 +253,8 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
 }
 
 module.exports = {
-  CATEGORIES, PRODUCT_TYPES, RATIOS,
+  CATEGORIES, PRODUCT_TYPES, RATIOS, CROSS_CHECK_COMMON_THRESHOLD,
   normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
-  resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct,
+  resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
   extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates
 };

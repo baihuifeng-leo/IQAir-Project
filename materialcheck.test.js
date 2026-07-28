@@ -249,6 +249,51 @@ async function run() {
     assert.deepStrictEqual(r.extraKeywords, ['共同串出的词']);
   });
 
+  t('commonKeywordTexts 词在达到阈值个数的产品里各自登记过才算通用词', () => {
+    const mk = (id, kws) => ({ id, name: id, keywords: kws });
+    const products5 = [mk('a', ['logo']), mk('b', ['logo']), mk('c', ['logo']), mk('d', ['独有词']), mk('e', [])];
+    const common = M.commonKeywordTexts(products5, 3);
+    assert.strictEqual(common.has('logo'), true); // 3 个产品都有，达阈值
+    assert.strictEqual(common.has('独有词'), false); // 只有 1 个产品有，没到阈值
+  });
+
+  t('matchAgainstProduct 品牌logo这类几乎每个产品都注册过的词，不该被当成"串错产品"的信号', () => {
+    // 复刻真实场景：IQAir 在很多滤芯/配件产品词库里都注册了（logo文字，哪张图都有），
+    // 但目标产品（一台整机）自己词库里没有 IQAir——这个词本身没有辨识力，即便在
+    // 目标产品的素材图里识别到了，也不该被判定为"混进了别的产品的内容"。
+    const target = { id: 'pt', name: 'Atem Car', keywords: ['Atem Car'] };
+    const f1 = { id: 'f1', name: '滤芯A', keywords: ['IQAir'] };
+    const f2 = { id: 'f2', name: '滤芯B', keywords: ['IQAir'] };
+    const f3 = { id: 'f3', name: '滤芯C', keywords: ['IQAir'] };
+    const r = M.matchAgainstProduct('IQAir Atem Car', target, [target, f1, f2, f3]);
+    assert.deepStrictEqual(r.extraKeywords, []);
+    assert.strictEqual(r.status, 'pass');
+  });
+
+  t('matchAgainstProduct 通用词豁免不影响真正的低频串词检测（还没到阈值的照样要报）', () => {
+    const target = { id: 'pt', name: '目标产品', keywords: ['目标专属词'] };
+    const other1 = { id: 'po1', name: '别的产品1', keywords: ['别人的词'] };
+    const other2 = { id: 'po2', name: '别的产品2', keywords: ['别人的词'] };
+    // 只有 2 个产品登记了"别人的词"，没到 3 个的阈值，依旧要判定为多出的词
+    const r = M.matchAgainstProduct('目标专属词 别人的词', target, [target, other1, other2]);
+    assert.deepStrictEqual(r.extraKeywords, ['别人的词']);
+    assert.strictEqual(r.status, 'error');
+  });
+
+  t('normalize 把上标数字折成普通数字、去掉比较符号（含全角＜＞），OCR对这两类小符号本来就不可靠', () => {
+    assert.strictEqual(M.normalize('快速净化3m³整车空间*'), '快速净化3m3整车空间*');
+    assert.strictEqual(M.normalize('CCM颗粒物>1,000,000 mg'), 'CCM颗粒物1,000,000mg');
+    assert.strictEqual(M.normalize('CCM颗粒物＞1,000,000 mg'), 'CCM颗粒物1,000,000mg'); // 全角变体，词库里实际出现过
+    assert.strictEqual(M.normalize('CCM颗粒物 1,000,000 mg'), 'CCM颗粒物1,000,000mg');
+  });
+
+  t('findKeywordHits OCR把上标³识成普通数字3、把">"漏识别时依旧能命中关键词', () => {
+    // Atem Car 真实场景：词库写的是"快速净化3m³整车空间*"，OCR 识成"快速净化3m3整车空间*"
+    assert.deepStrictEqual(M.findKeywordHits('快速净化3m3整车空间*', ['快速净化3m³整车空间*']), ['快速净化3m³整车空间*']);
+    // HP250 XE 真实场景：词库写的是"CCM颗粒物>1,000,000 mg"，OCR 漏识别了 ">"
+    assert.deepStrictEqual(M.findKeywordHits('CCM颗粒物1,000,000 mg', ['CCM颗粒物>1,000,000 mg']), ['CCM颗粒物>1,000,000 mg']);
+  });
+
   t('keywordText/keywordCategory 兼容纯字符串和 {text,category} 对象两种关键词写法', () => {
     assert.strictEqual(M.keywordText('纯字符串词'), '纯字符串词');
     assert.strictEqual(M.keywordText({ text: '对象词', category: '价格' }), '对象词');
@@ -269,6 +314,27 @@ async function run() {
     assert.deepStrictEqual(M.extractPriceCandidates('晒单即享\n￥399'), new Set([399]));
     assert.deepStrictEqual(M.extractPriceCandidates('选购价5880元'), new Set([5880]));
     assert.deepStrictEqual(M.extractPriceCandidates('没有任何价格的文字'), new Set());
+  });
+
+  t('extractPriceCandidates "到手价"标签后价格跟￥符号隔了好几行时，靠标签锚点也能抓到', () => {
+    // 复刻真实素材版式：￥被排到价格数字后面好几行开外，早就超出符号邻近匹配的范围
+    const text = '预估补贴到手价\n支付补贴省15%\n行业63+年深耕\n16328\n★★★★★\n￥\n至高补贴2000元先到先得\n现金红包60元';
+    const candidates = M.extractPriceCandidates(text);
+    assert.strictEqual(candidates.has(16328), true);
+    // 附近无关的"元"结尾数字依旧会被提取（不是bug，checkPrice只要求命中预期价即可）
+    assert.strictEqual(candidates.has(2000), true);
+    assert.strictEqual(candidates.has(60), true);
+  });
+
+  t('extractPriceCandidates "到手价"标签紧跟数字（不隔行）同样能抓到', () => {
+    const candidates = M.extractPriceCandidates('晒单即享\n￥248\n香氛盒+电源线\n预估活动到手价\n3300\n咨询客服惊喜好礼');
+    assert.strictEqual(candidates.has(3300), true);
+  });
+
+  t('checkPrice 到手价被排版拆得很远时，靠标签锚点规则依旧能校验通过', () => {
+    const p = { id: 'p1', name: 'GC XE', price: 16328 };
+    const text = '预估补贴到手价\n支付补贴省15%\n行业63+年深耕\n16328\n★★★★★\n￥\n现金红包60元';
+    assert.strictEqual(M.checkPrice(text, p), null);
   });
 
   t('checkPrice 没配置 price 的产品不校验；价格对上/图里没价格/价格对不上分别处理', () => {
