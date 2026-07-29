@@ -335,6 +335,16 @@ async function run() {
     assert.strictEqual(r.status, 'pass');
   });
 
+  t('matchAgainstProduct 本产品完整型号覆盖别的产品短词时，不把型号前缀误报为串词', () => {
+    // 复刻 HP 250 XE 实测：OCR 已精确识别“HealthPro 250 XE”，但滤芯词库中的
+    // “HealthPro”短词不该被当成混入了别的产品文案。
+    const hp250 = { id: 'hp250', name: 'HP250 XE', keywords: ['HealthPro 250 XE'] };
+    const filter = { id: 'filter', name: 'HP250 滤芯套装', keywords: ['HealthPro'] };
+    const r = M.matchAgainstProduct('HealthPro 250 XE', hp250, [hp250, filter]);
+    assert.deepStrictEqual(r.extraKeywords, []);
+    assert.strictEqual(r.status, 'pass');
+  });
+
   t('matchAgainstProduct 通用词豁免不影响真正的低频串词检测（还没到阈值的照样要报）', () => {
     const target = { id: 'pt', name: '目标产品', keywords: ['目标专属词'] };
     const other1 = { id: 'po1', name: '别的产品1', keywords: ['别人的词'] };

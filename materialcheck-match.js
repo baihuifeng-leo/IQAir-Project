@@ -299,6 +299,13 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
   // 写的是半角">"，HP100 XE 曾经写成全角"＞"，字面不相等但语义就是同一句话），
   // 原始字符串比较会让这类"其实是我自己的词"被误判成串出去的词。
   const myKeywordTexts = new Set((product.keywords || []).map((kw) => normalize(keywordText(kw))));
+  // OCR 已经命中本产品的完整型号时，其中的品牌/系列短词也会自然出现在文字里。
+  // 如果别的产品恰好把该短词单独维护为关键词，不能把同一段完整型号反过来判为串词。
+  // 只用“本产品实际命中的词”做覆盖判断，避免未出现在素材里的长词掩盖真正的串词。
+  const matchedMyKeywordTexts = (product.keywords || [])
+    .filter((kw) => keywordApplies(kw, materialRatio))
+    .filter((kw) => findKeywordHits(text, [kw]).length > 0)
+    .map((kw) => normalize(keywordText(kw)));
   const commonTexts = commonKeywordTexts(allProducts, CROSS_CHECK_COMMON_THRESHOLD);
   const extraKeywords = [];
   const seen = new Set();
@@ -307,7 +314,8 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
     findKeywordHits(text, other.keywords || []).forEach((kw) => {
       const t = keywordText(kw);
       const n = normalize(t);
-      if (myKeywordTexts.has(n) || seen.has(n) || commonTexts.has(n)) return;
+      const coveredByMatchedOwnKeyword = matchedMyKeywordTexts.some((own) => own.length > n.length && own.includes(n));
+      if (myKeywordTexts.has(n) || coveredByMatchedOwnKeyword || seen.has(n) || commonTexts.has(n)) return;
       seen.add(n);
       extraKeywords.push(t);
     });
