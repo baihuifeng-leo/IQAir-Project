@@ -225,6 +225,25 @@ const MaterialCheck = (() => {
     </details>`;
   }
 
+  /** 检测结果和历史详情共用的素材预览入口：桌面端悬停快速对照，点击可看原图；
+   * 触屏没有 hover，仍可直接点击进入已有的原图查看器。 */
+  function sourcePreviewHtml(imagePath, filename) {
+    if (!imagePath) return '';
+    return `<button type="button" class="mc-source-preview" data-mc-preview-src="${escapeHtml(imagePath)}" data-mc-preview-caption="${escapeHtml(filename)}" title="悬停预览素材，点击查看原图">◫ <span>预览素材</span></button>`;
+  }
+
+  function wireSourcePreviews(root) {
+    root.querySelectorAll('[data-mc-preview-src]').forEach((button) => {
+      const src = button.dataset.mcPreviewSrc;
+      const caption = button.dataset.mcPreviewCaption;
+      button.addEventListener('mouseenter', () => A.peek.show(button, src));
+      button.addEventListener('mouseleave', () => A.peek.hide());
+      button.addEventListener('focus', () => A.peek.show(button, src));
+      button.addEventListener('blur', () => A.peek.hide());
+      button.addEventListener('click', () => A.lightbox(src, caption));
+    });
+  }
+
   function renderResult(row, result, ctx = {}) {
     if (result.needsManualPick) {
       row.className = 'mc-row mc-row-pick';
@@ -274,7 +293,10 @@ const MaterialCheck = (() => {
     row.innerHTML = `
       <span class="mc-row-name">${escapeHtml(result.filename)}</span>
       <span class="mc-row-status">${meta.badge} · ${escapeHtml(result.productName || '')}${result.ratio ? ' · ' + result.ratio + ' 素材' : ''}${methodLabel ? ' · 匹配方式：' + methodLabel : ''}${failed ? ' <button class="mc-btn mc-row-retry">重试</button>' : ''}</span>
+      ${sourcePreviewHtml(result.imagePath, result.filename)}
       ${detail}`;
+
+    wireSourcePreviews(row);
 
     if (failed) {
       row.querySelector('.mc-row-retry').onclick = () => { if (ctx.onRetry) ctx.onRetry(); };
@@ -392,11 +414,12 @@ const MaterialCheck = (() => {
       ? `<div class="mc-chip-row"><b>价格：</b><span class="mc-chip mc-chip-bad">${priceIssueLabel(r.priceIssue)}</span></div>`
       : '';
     detailBody.innerHTML = `
-      <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')}</p>
+      <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')} ${sourcePreviewHtml(r.imagePath, r.filename)}</p>
       <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
       <div class="mc-chip-row"><b>多出的词：</b>${extra}</div>
       ${priceRow}
       <pre class="mc-ocr-text">${html}</pre>`;
+    wireSourcePreviews(detailBody);
     detailMask.hidden = false;
   }
 
