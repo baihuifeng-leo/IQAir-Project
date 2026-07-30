@@ -1919,6 +1919,12 @@ body.rpt-presenting .rpt-wm-note {
 .mc-upload-zone:hover, .mc-upload-zone.drop-hot { border-color: var(--mint); }
 
 .mc-batch-summary { margin: 14px 0; font-size: 13px; color: var(--dim); font-family: var(--f-mono); }
+.mc-detect-batch { margin: 12px 0; }
+.mc-detect-batch summary { display: flex; align-items: center; gap: 10px; padding: 8px 2px; color: var(--text); cursor: pointer; list-style: none; user-select: none; }
+.mc-detect-batch summary::-webkit-details-marker { display: none; }
+.mc-detect-batch summary::before { content: '›'; color: var(--dim); font-size: 18px; line-height: 1; transition: transform var(--fast); }
+.mc-detect-batch[open] summary::before { transform: rotate(90deg); }
+.mc-detect-batch-rows { padding-left: 2px; }
 
 .mc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line-soft); margin-bottom: 8px; background: var(--surface); animation: rise 0.3s var(--ease) both; }
 .mc-row-name { font-weight: 600; }

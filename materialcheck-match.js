@@ -255,18 +255,31 @@ function resolveProduct(text, products) {
     .filter((s) => s.hits.length > 0)
     .sort((a, b) => b.hits.length - a.hits.length);
 
-  if (scored.length === 0) return { resolved: null, ambiguous: false };
-  if (scored.length === 1) return { resolved: scored[0].product, ambiguous: false };
-  if (scored[0].hits.length > scored[1].hits.length) return { resolved: scored[0].product, ambiguous: false };
+  if (scored.length === 0) return { resolved: null, ambiguous: false, hits: [] };
+  if (scored.length === 1) return { resolved: scored[0].product, ambiguous: false, hits: scored[0].hits };
+  if (scored[0].hits.length > scored[1].hits.length) return { resolved: scored[0].product, ambiguous: false, hits: scored[0].hits };
   return { resolved: null, ambiguous: true, candidates: scored.map((s) => s.product) };
 }
 
-/** 三级产品归属识别的编排：文件名 → OCR 反查 → 都不确定则交给人工。 */
+/** OCR 是否具备足以覆盖文件名候选的归属证据：完整产品名直接出现，或至少命中两条
+ * 该产品词库词。文件名经常沿用机器名，而滤芯素材的 OCR 通常能给出更直接的证据。 */
+function hasStrongOcrProductEvidence(ocrText, resolution) {
+  if (!resolution.resolved) return false;
+  const productName = normalize(resolution.resolved.name);
+  return normalize(ocrText).includes(productName) || (resolution.hits || []).length >= 2;
+}
+
+/** 产品归属编排：文件名只是候选；OCR 明确指向另一产品时优先 OCR，否则文件名兜底。 */
 function resolveProductForUpload(filename, ocrText, products) {
   const byFilename = resolveByFilename(filename, products);
-  if (byFilename) return { method: 'filename', product: byFilename, ambiguous: false, candidates: [] };
-
   const byOcr = resolveProduct(ocrText, products);
+  if (byFilename && byOcr.resolved && byOcr.resolved.id !== byFilename.id && hasStrongOcrProductEvidence(ocrText, byOcr)) {
+    return {
+      method: 'ocr_override_filename', product: byOcr.resolved, ambiguous: false, candidates: [],
+      warning: `文件名候选为「${byFilename.name}」，但 OCR 明确匹配「${byOcr.resolved.name}」，已按 OCR 判定`
+    };
+  }
+  if (byFilename) return { method: 'filename', product: byFilename, ambiguous: false, candidates: [] };
   if (byOcr.resolved) return { method: 'ocr', product: byOcr.resolved, ambiguous: false, candidates: [] };
 
   return { method: null, product: null, ambiguous: true, candidates: byOcr.candidates || [] };
@@ -365,7 +378,7 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
 module.exports = {
   CATEGORIES, PRODUCT_TYPES, RATIOS, CROSS_CHECK_COMMON_THRESHOLD,
   normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
-  resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
+  resolveProduct, resolveProductForUpload, hasStrongOcrProductEvidence, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
   extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates, unregisteredOcrLines,
   classifyKeywordMatch, matchedKeywordDetail
 };

@@ -413,6 +413,7 @@ class MaterialCheckStore {
     }
 
     const warning = combineWarnings(
+      resolution.warning,
       resolution.method === 'filename' ? match.crossCheckWarning(resolution.product, ocrText, lib.products) : null,
       ratioMismatch
     );

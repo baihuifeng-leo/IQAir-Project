@@ -144,12 +144,18 @@ const MaterialCheck = (() => {
     const summary = A.$('#mc-batch-summary');
     const progress = A.$('#mc-progress');
     const progressBar = A.$('#mc-progress-bar');
+    const batch = document.createElement('details');
+    batch.className = 'mc-detect-batch';
+    batch.open = true;
+    batch.innerHTML = `<summary><span class="mc-history-batch-title">本次上传 · ${ratio} 素材</span><span class="mc-history-batch-count">${fileList.length} 张素材</span></summary><div class="mc-detect-batch-rows"></div>`;
+    const batchRows = batch.querySelector('.mc-detect-batch-rows');
+    list.prepend(batch);
 
     const rows = fileList.map((file) => {
       const row = document.createElement('div');
       row.className = 'mc-row mc-row-pending';
       row.innerHTML = `<span class="mc-row-name">${escapeHtml(file.name)}</span><span class="mc-row-status"><i class="mc-spin"></i> 识别中…</span>`;
-      list.prepend(row);
+      batchRows.append(row);
       return { file, row, state: 'processing' }; // state: processing | needsPick | done
     });
 
@@ -233,15 +239,18 @@ const MaterialCheck = (() => {
   }
 
   /** 检测结果和历史详情共用的素材预览入口：点击打开可拖动的小窗，不打断关键词对照。 */
-  function sourcePreviewHtml(imagePath, filename) {
+  function sourcePreviewHtml(imagePath, filename, options = {}) {
     if (!imagePath) return '';
-    return `<button type="button" class="mc-source-preview" data-mc-preview-src="${escapeHtml(imagePath)}" data-mc-preview-caption="${escapeHtml(filename)}" title="打开可拖动的素材预览">◫ <span>预览素材</span></button>`;
+    return `<button type="button" class="mc-source-preview" data-mc-preview-src="${escapeHtml(imagePath)}" data-mc-preview-caption="${escapeHtml(filename)}"${options.hover ? ' data-mc-preview-hover="true"' : ''} title="悬停预览；点击固定或关闭">◫ <span>预览素材</span></button>`;
   }
 
   let sourcePreviewPanel = null;
 
   function closeSourcePreview() {
-    if (sourcePreviewPanel) sourcePreviewPanel.hidden = true;
+    if (sourcePreviewPanel) {
+      sourcePreviewPanel.hidden = true;
+      delete sourcePreviewPanel.dataset.previewMode;
+    }
   }
 
   function moveSourcePreview(left, top) {
@@ -261,7 +270,18 @@ const MaterialCheck = (() => {
     const maxImageHeight = Math.max(220, innerHeight - 100);
     const scale = Math.min(1, maxWidth / image.naturalWidth, maxImageHeight / image.naturalHeight);
     panel.style.width = Math.round(image.naturalWidth * scale) + 'px';
-    moveSourcePreview(parseFloat(panel.style.left) || innerWidth - panel.offsetWidth - 24, parseFloat(panel.style.top) || 82);
+    placeSourcePreview(panel, panel._mcPreviewAnchor);
+  }
+
+  function placeSourcePreview(panel, anchor) {
+    if (!anchor || !anchor.isConnected) {
+      moveSourcePreview(innerWidth - panel.offsetWidth - 24, 82);
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    const rightSide = rect.right + 12;
+    const left = rightSide + panel.offsetWidth <= innerWidth - 12 ? rightSide : rect.left - panel.offsetWidth - 12;
+    moveSourcePreview(left, rect.top);
   }
 
   function ensureSourcePreviewPanel() {
@@ -328,8 +348,11 @@ const MaterialCheck = (() => {
     return panel;
   }
 
-  function openSourcePreview(src, caption) {
+  function openSourcePreview(src, caption, options = {}) {
     const panel = ensureSourcePreviewPanel();
+    panel._mcPreviewAnchor = options.anchor || null;
+    panel.dataset.previewMode = options.mode || 'pinned';
+    panel.dataset.previewSrc = src;
     panel.querySelector('.mc-source-panel-title').textContent = caption || '素材预览';
     const image = panel.querySelector('.mc-source-panel-image');
     image.alt = caption || '被检测的素材';
@@ -337,7 +360,7 @@ const MaterialCheck = (() => {
     image.src = src;
     panel.hidden = false;
     requestAnimationFrame(() => {
-      moveSourcePreview(innerWidth - panel.offsetWidth - 24, 82);
+      placeSourcePreview(panel, panel._mcPreviewAnchor);
       if (image.complete) fitSourcePreviewToImage(panel, image);
     });
   }
@@ -346,7 +369,18 @@ const MaterialCheck = (() => {
     root.querySelectorAll('[data-mc-preview-src]').forEach((button) => {
       const src = button.dataset.mcPreviewSrc;
       const caption = button.dataset.mcPreviewCaption;
-      button.addEventListener('click', () => openSourcePreview(src, caption));
+      if (button.dataset.mcPreviewHover) {
+        button.addEventListener('mouseenter', () => openSourcePreview(src, caption, { anchor: button, mode: 'hover' }));
+        button.addEventListener('mouseleave', () => {
+          if (sourcePreviewPanel?.dataset.previewMode === 'hover') closeSourcePreview();
+        });
+      }
+      button.addEventListener('click', () => {
+        const panel = ensureSourcePreviewPanel();
+        const isSamePinnedPreview = !panel.hidden && panel.dataset.previewSrc === src && panel.dataset.previewMode === 'pinned';
+        if (isSamePinnedPreview) closeSourcePreview();
+        else openSourcePreview(src, caption, { anchor: button, mode: 'pinned' });
+      });
     });
   }
 
@@ -381,7 +415,7 @@ const MaterialCheck = (() => {
     const meta = STATUS_META[result.status] || STATUS_META.error;
     const failed = result.status === 'ocr_failed';
     row.className = 'mc-row ' + meta.cls;
-    const methodLabel = { filename: '文件名', ocr: 'OCR文字', manual: '人工选择' }[result.matchMethod] || '';
+    const methodLabel = { filename: '文件名候选', ocr: 'OCR文字', ocr_override_filename: 'OCR文字（覆盖文件名候选）', manual: '人工选择' }[result.matchMethod] || '';
 
     let detail = '';
     if (result.missingKeywords?.length) {
@@ -402,7 +436,7 @@ const MaterialCheck = (() => {
     row.innerHTML = `
       <span class="mc-row-name">${escapeHtml(result.filename)}</span>
       <span class="mc-row-status">${meta.badge} · ${escapeHtml(result.productName || '')}${result.ratio ? ' · ' + result.ratio + ' 素材' : ''}${methodLabel ? ' · 匹配方式：' + methodLabel : ''}${failed ? ' <button class="mc-btn mc-row-retry">重试</button>' : ''}</span>
-      ${sourcePreviewHtml(result.imagePath, result.filename)}
+      ${sourcePreviewHtml(result.imagePath, result.filename, { hover: true })}
       ${detail}`;
 
     wireSourcePreviews(row);

@@ -176,10 +176,25 @@ async function run() {
     assert.strictEqual(r.candidates.length, 2);
   });
 
-  t('resolveProductForUpload 文件名优先于 OCR', () => {
+  t('resolveProductForUpload 文件名只是候选，OCR 明确指向另一产品时覆盖文件名', () => {
     const r = M.resolveProductForUpload('GC-Multi_主图.jpg', 'GCX XE 静音悬浮马达', products);
+    assert.strictEqual(r.method, 'ocr_override_filename');
+    assert.strictEqual(r.product.id, 'pb');
+    assert.match(r.warning, /已按 OCR 判定/);
+  });
+
+  t('resolveProductForUpload OCR 不明确时仍以文件名候选兜底', () => {
+    const r = M.resolveProductForUpload('GC-Multi_主图.jpg', '无关文字', products);
     assert.strictEqual(r.method, 'filename');
     assert.strictEqual(r.product.id, 'pa');
+  });
+
+  t('resolveProductForUpload Atem Car 机器名文件名不能覆盖滤芯 OCR 的明确归属', () => {
+    const machine = { id: 'machine', name: 'Atem Car', keywords: ['Atem Car', '车载机器'] };
+    const filter = { id: 'filter', name: 'Atem Car 滤芯', keywords: ['Atem Car 滤芯', '除甲醛、苯、颗粒物等', '适用机型：Atem Car'] };
+    const r = M.resolveProductForUpload('Atem Car 800.jpg', 'Atem Car 滤芯\n除甲醛、苯、颗粒物等\n适用机型：Atem Car', [machine, filter]);
+    assert.strictEqual(r.method, 'ocr_override_filename');
+    assert.strictEqual(r.product.id, 'filter');
   });
 
   t('resolveProductForUpload 文件名不确定时退到 OCR 反查', () => {
