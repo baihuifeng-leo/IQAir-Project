@@ -1,1 +1,4 @@
 .superpowers/
+venv
+data/
+*.log

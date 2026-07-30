@@ -14,7 +14,8 @@ const Settings = (() => {
     { key: 'compare', label: '竞品对位' },
     { key: 'reviews', label: '评论风向标' },
     { key: 'preview3d', label: '竞品3D预览' },
-    { key: 'reports', label: '报告管理' }
+    { key: 'reports', label: '报告管理' },
+    { key: 'materialcheck', label: '素材质检' }
   ];
 
   async function call(url, opts = {}) {

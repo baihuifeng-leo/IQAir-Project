@@ -66,6 +66,27 @@ const Users = (() => {
       acts.append(p, ok);
     }
 
+    // 词库查看/编辑权限：只有管理员能改别人的；管理员自己永远隐式 edit，不需要也不出这个下拉框
+    if (A.me.admin && !u.admin) {
+      const sel = document.createElement('select');
+      sel.className = 'ghost';
+      sel.title = '词库查看/编辑权限';
+      [['view', '词库：可查看'], ['edit', '词库：可编辑'], ['none', '词库：不可见']].forEach(([v, label]) => {
+        const o = document.createElement('option');
+        o.value = v; o.textContent = label;
+        if (u.materialLibraryRole === v) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.onchange = async () => {
+        try {
+          await call('/api/users/' + u.id, { method: 'PATCH', body: JSON.stringify({ materialLibraryRole: sel.value }) });
+          A.toast(`已设置 ${u.name} 的词库权限`);
+          refresh();
+        } catch (e) { A.toast(e.message, 'bad'); refresh(); }
+      };
+      acts.appendChild(sel);
+    }
+
     if (A.me.admin && u.id !== A.me.id) {
       acts.appendChild(A.mkKill('删除这个用户', async () => {
         if (!confirm(`删除用户「${u.name}」？他的登录会立刻失效。`)) return;

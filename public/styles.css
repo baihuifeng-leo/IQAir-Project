@@ -1906,6 +1906,400 @@ body.rpt-presenting .rpt-wm-note {
   margin-top: clamp(18px, 2.8vh, 32px); border-left-width: 5px;
 }
 
+/* ═══ 素材质检 (materialcheck) ═══ */
+.mc-subview-switch { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--field-bg); }
+.mc-subtab { min-height: 32px; padding: 6px 13px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background var(--fast), color var(--fast), border-color var(--fast); }
+.mc-subtab:hover { color: var(--text); background: var(--surface-2); }
+.mc-subtab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mc-subtab.is-active { background: var(--mint-dim); color: var(--mint); border-color: var(--mint); }
+
+/* 检测页统一上传入口：服务端按真实尺寸自动归类为 1:1 或 3:4，再匹配对应必需词。 */
+.mc-upload-zone { border: 2px dashed var(--line-soft); border-radius: 14px; padding: 40px; text-align: center; color: var(--dim); cursor: pointer; transition: border-color var(--fast); }
+.mc-upload-zone strong { display: block; margin-bottom: 6px; color: var(--text); font-size: 14px; }
+.mc-upload-zone:hover, .mc-upload-zone.drop-hot { border-color: var(--mint); }
+
+.mc-batch-summary { margin: 14px 0; font-size: 13px; color: var(--dim); font-family: var(--f-mono); }
+.mc-detect-batch { margin: 12px 0; }
+.mc-detect-batch summary { display: flex; align-items: center; gap: 10px; padding: 8px 2px; color: var(--text); cursor: pointer; list-style: none; user-select: none; }
+.mc-detect-batch summary::-webkit-details-marker { display: none; }
+.mc-detect-batch summary::before { content: '›'; color: var(--dim); font-size: 18px; line-height: 1; transition: transform var(--fast); }
+.mc-detect-batch[open] summary::before { transform: rotate(90deg); }
+.mc-detect-batch-rows { padding-left: 2px; }
+
+.mc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line-soft); margin-bottom: 8px; background: var(--surface); animation: rise 0.3s var(--ease) both; }
+.mc-row-name { font-weight: 600; }
+.mc-row-status { color: var(--dim); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.mc-source-preview {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 30px;
+  padding: 5px 9px; border: 1px solid var(--line-soft); border-radius: 7px;
+  background: var(--field-bg); color: var(--dim); font: inherit; font-size: 11.5px;
+  cursor: pointer; white-space: nowrap;
+  transition: border-color var(--fast), background var(--fast), color var(--fast), transform var(--fast);
+}
+.mc-source-preview:hover { border-color: var(--mint); background: var(--mint-dim); color: var(--text); transform: translateY(-1px); }
+.mc-source-preview:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mc-source-panel {
+  position: fixed; z-index: 160; width: min(680px, calc(100vw - 24px)); min-width: 260px; max-width: calc(100vw - 24px);
+  overflow: hidden; border-radius: 12px; background: var(--surface);
+  box-shadow: 0 22px 54px -26px rgb(0 0 0 / 0.72);
+}
+.mc-source-panel[hidden] { display: none; }
+.mc-source-panel-head {
+  display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 10px 0 13px;
+  background: var(--surface-2); border-bottom: 1px solid var(--line-soft); cursor: grab; touch-action: none;
+}
+.mc-source-panel.is-dragging .mc-source-panel-head { cursor: grabbing; }
+.mc-source-panel-title { min-width: 0; flex: 1; overflow: hidden; color: var(--text); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.mc-source-panel-close { width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--dim); font: inherit; font-size: 20px; line-height: 1; cursor: pointer; }
+.mc-source-panel-close:hover { background: var(--field-bg); color: var(--text); }
+.mc-source-panel-close:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.mc-source-panel-image { display: block; width: 100%; height: auto; max-height: calc(100vh - 100px); object-fit: contain; background: var(--field-bg); }
+.mc-source-panel-resize {
+  position: absolute; right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 48%, var(--dim) 49% 53%, transparent 54%);
+  opacity: 0.72; touch-action: none;
+}
+.mc-source-panel-resize:hover, .mc-source-panel.is-resizing .mc-source-panel-resize { opacity: 1; background-color: var(--mint-dim); }
+.mc-row-ok { border-color: var(--ok); }
+.mc-row-ok .mc-row-status { color: var(--ok-text); }
+.mc-row-bad { border-color: var(--bad); }
+.mc-row-bad .mc-row-status { color: var(--bad-text); }
+.mc-row-warn { border-color: var(--warn); }
+.mc-row-warn .mc-row-status { color: var(--warn-text); }
+.mc-row-error { border-color: var(--warn); }
+.mc-row-pick { border-color: var(--blue); }
+
+.mc-platform-switch { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; margin-right: 10px; }
+.mc-library-switch { min-width: 140px; }
+
+.mc-progress { height: 6px; border-radius: 999px; background: var(--field-bg); overflow: hidden; margin: 4px 0 14px; }
+.mc-progress-bar { height: 100%; width: 0; background: var(--mint); transition: width 0.25s var(--ease); }
+
+.mc-spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--line-soft); border-top-color: var(--mint); border-radius: 50%; animation: mc-spin 0.7s linear infinite; }
+@keyframes mc-spin { to { transform: rotate(360deg); } }
+
+.mc-chip-row { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.mc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: var(--field-bg); font-size: 11.5px; }
+.mc-chip-bad { background: var(--bad); color: #fff; }
+.mc-chip-warn { background: var(--warn); color: #04140f; }
+.mc-chip-note { background: var(--surface-2); color: var(--text); border: 1px dashed var(--line-soft); }
+.mc-unregistered-row { align-items: center; }
+.mc-unregistered-note { color: var(--dim); font-size: 11px; }
+.mc-chip i { cursor: pointer; opacity: 0.7; font-style: normal; }
+.mc-chip i:hover { opacity: 1; }
+.mc-chip-del { border: none; background: none; padding: 0; margin: 0; color: inherit; font: inherit; cursor: pointer; opacity: 0.7; line-height: 1; }
+.mc-chip-del:hover { opacity: 1; }
+.mc-kw-cat { color: var(--dimmer); font-size: 10px; }
+
+.mc-warning { width: 100%; color: var(--warn-text); font-size: 12px; margin-top: 4px; }
+
+.mc-row-ocr { width: 100%; margin-top: 6px; font-size: 12px; color: var(--dim); }
+.mc-row-ocr pre { white-space: pre-wrap; background: var(--field-bg); padding: 10px; border-radius: 8px; margin-top: 6px; font-family: var(--f-mono); }
+
+/* 检测结果卡片里"查看明细"——按产品词库逐词列出命中/规则命中/缺失三态，见 keywordDetailHtml() */
+.mc-kw-detail { width: 100%; margin-top: 6px; font-size: 12px; color: var(--dim); }
+.mc-kw-detail summary { cursor: pointer; user-select: none; }
+.mc-kw-detail summary:hover { color: var(--text); }
+.mc-kw-detail-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mc-kwd-cat-dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; background: currentColor; }
+.mc-kwd-missing { background: var(--bad); color: #fff; }
+.mc-kwd-fuzzy { background: var(--warn); color: #04140f; }
+.mc-kwd-exact { background: var(--ok); color: #04140f; }
+.mc-kwd-action { margin-left: 2px; opacity: 0.85; font-size: 10.5px; }
+.mc-kw-detail-empty { width: 100%; margin: 8px 0 0; color: var(--dimmer); font-size: 12px; }
+
+.mc-btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line-soft); background: transparent; color: var(--text); cursor: pointer; font-size: 12.5px; transition: background var(--fast); }
+.mc-btn:hover { background: var(--surface-2); }
+.mc-btn:disabled { opacity: 0.55; cursor: default; }
+.mc-btn-primary { background: var(--mint); color: #04140f; border-color: var(--mint); font-weight: 600; }
+.mc-btn-danger { color: var(--bad-text); border-color: var(--bad); }
+
+.mc-filter-bar { display: flex; gap: 10px; margin-bottom: 16px; }
+.mc-filter-bar select { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+
+.mc-history-row { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-soft); margin-bottom: 6px; cursor: pointer; transition: background var(--fast); }
+.mc-history-row:hover { background: var(--surface-2); }
+.mc-history-batch { margin-bottom: 12px; }
+.mc-history-batch summary { display: flex; align-items: center; gap: 10px; padding: 8px 2px; color: var(--text); cursor: pointer; list-style: none; user-select: none; }
+.mc-history-batch summary::-webkit-details-marker { display: none; }
+.mc-history-batch summary::before { content: '›'; color: var(--dim); font-size: 18px; line-height: 1; transition: transform var(--fast); }
+.mc-history-batch[open] summary::before { transform: rotate(90deg); }
+.mc-history-batch-title { font-size: 13px; font-weight: 600; }
+.mc-history-batch-count { margin-left: auto; color: var(--dim); font-size: 12px; }
+.mc-history-batch-rows { padding-left: 2px; }
+
+.mc-ocr-text { white-space: pre-wrap; background: var(--field-bg); padding: 14px; border-radius: 10px; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.6; max-height: 320px; overflow-y: auto; margin-top: 12px; }
+.mc-mark-bad { background: var(--bad); color: #fff; padding: 0 2px; border-radius: 3px; }
+
+.mc-lib-actionbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 10px; }
+.mc-lib-ops { display: flex; flex-wrap: wrap; gap: 8px; }
+.mc-lib-name-row { display: flex; gap: 8px; align-items: center; }
+.mc-lib-name-row[hidden] { display: none; } /* author 规则的 display:flex 优先级跟 UA 的 [hidden] 打平，后者会被覆盖——显式钉住 */
+.mc-lib-name-row input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); min-width: 200px; }
+.mc-lib-spacer { flex: 1 1 auto; }
+
+.mc-cat-select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+.mc-chip-editor { display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; gap: 6px; min-height: 30px; }
+.mc-chip-empty { color: var(--dimmer); font-size: 12px; }
+
+/* 关键词内容是这个页面要看的重点，chip 文字明显放大加粗；
+   只限定在可编辑的词库 chip 区（分类徽标/其它 chip 场景，比如检测结果里的缺词/多出的词，不受影响，保持原来的紧凑密度） */
+.mc-chip-editor .mc-chip { font-size: 15px; font-weight: 600; padding: 5px 11px; }
+/* chip 增删的进场/离场动画：进场从缩小+透明弹到正常大小，离场反过来缩回去再从 DOM 摘掉 */
+.mc-chip { transition: opacity 0.15s var(--ease), transform 0.15s var(--ease), filter 0.15s var(--ease); }
+.mc-chip-enter, .mc-chip-leaving { opacity: 0; transform: scale(0.7); }
+
+/* chip 文字直接点开编辑：平时看着就是普通文字，hover 一下提示能点，
+   点开后原地变成一个跟字号对齐的小输入框，不撑破 chip 的胶囊形状 */
+.mc-chip-text { cursor: text; border-radius: 4px; padding: 0 2px; margin: 0 -2px; transition: background var(--fast); }
+.mc-chip-text:hover { background: var(--overlay-weak); }
+.mc-chip-text-input { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--mint); border-radius: 4px; padding: 0 4px; min-width: 3em; }
+/* 量宽度用的镜像元素：脱离文档流、不可见，只用来读 offsetWidth，不会被看到或点到 */
+.mc-chip-text-measure { position: absolute; visibility: hidden; white-space: pre; pointer-events: none; font: inherit; }
+
+/* 产品按机器/滤芯/附件分区，每个分区一个专属色（--mc-sec）：标题左侧色条、
+   标题文字、折叠箭头、分区内每张卡片的顶部色条/悬浮光晕都跟着这一个变量走 */
+.mc-tsection { margin-bottom: 30px; }
+.mc-tsection-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 2px 0 10px 12px; margin-bottom: 14px; border-left: 3px solid var(--mc-sec, var(--line-soft));
+}
+.mc-tsection-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: var(--mc-sec, var(--text)); letter-spacing: 0.02em; }
+/* 标题本身就是折叠开关：点它折叠/展开下面的产品卡片，右侧的+新增产品按钮不受影响 */
+.mc-tsection-toggle {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  background: none; border: none; padding: 2px 4px; margin: -2px -4px;
+  cursor: pointer; border-radius: 6px;
+}
+.mc-tsection-toggle:hover { background: var(--surface-2); }
+.mc-tsection-chevron { display: inline-block; font-size: 12px; color: var(--mc-sec, var(--dimmer)); transition: transform 0.15s ease; }
+.mc-tsection-collapsed .mc-tsection-chevron { transform: rotate(-90deg); }
+.mc-tsection-actions { display: flex; gap: 8px; }
+/* 折叠/展开的高度过渡：用 CSS Grid 的 0fr/1fr 技巧，不用写死具体高度数值——
+   内层再包一层 overflow:hidden，网格行还没撑开之前内容不会先冒出来 */
+.mc-tsection-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.32s var(--ease); }
+.mc-tsection-body-inner { overflow: hidden; min-height: 0; }
+.mc-tsection-collapsed .mc-tsection-body { grid-template-rows: 0fr; }
+.mc-tsec-machine   { --mc-sec: #5b8cff; }
+.mc-tsec-filter    { --mc-sec: #3ec9d6; }
+.mc-tsec-accessory { --mc-sec: #f2a355; }
+.mc-tsec-none .mc-tsection-head { border-left-color: var(--line-soft); }
+.mc-tsec-none .mc-tsection-head h3 { color: var(--dimmer); }
+
+/* 产品卡片：响应式多列网格，同一分区内拖拽排序限定在网格内部；
+   卡片固定高度、关键词区超出内部滚动，收起状态只是个概览——
+   真要逐条编辑关键词，点右上角的放大按钮进全屏浮窗（见下面 .mc-expand-* ）。
+   分区本身不单独限高/内部滚动——铺开显示全部卡片，整页跟着 #mc-scroll 一起滑动 */
+.mc-pcards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; padding: 4px 4px 10px; }
+.mc-pcard {
+  position: relative; display: flex; flex-direction: column; height: 440px;
+  background: var(--surface); border: 1px solid var(--line-soft); border-top: 3px solid var(--mc-sec, var(--line-soft));
+  border-radius: 14px; overflow: hidden;
+  transition: box-shadow var(--fast), border-color var(--fast), transform var(--fast), opacity 0.16s var(--ease);
+}
+.mc-pcard:hover { transform: translateY(-3px); border-color: var(--mc-sec, var(--line-soft)); box-shadow: 0 16px 30px -16px color-mix(in srgb, var(--mc-sec, #000000) 45%, transparent); }
+/* 新增卡片的进场动画（跟 FLIP 位移动画走同一套 drawAll，没有旧位置可比的卡片才会带这个类） */
+.mc-pcard-enter { opacity: 0; transform: scale(0.94) translateY(8px); }
+/* 删除卡片：先让它自己缩小淡出，等这段过渡播完才真的从数据里摘掉、触发重画 */
+.mc-pcard-leaving { opacity: 0; transform: scale(0.92); pointer-events: none; }
+
+/* 封面图：固定高度的展示区，但图片本身用 contain 完整显示、不裁切——
+   素材原图是什么比例就按什么比例收进这个区域，长宽不够的地方露出背后的底色；
+   占位态是分区色的渐变底 + 完整产品名（最多三行，超出省略号）；
+   "更换封面/删除封面"悬浮在右下角，默认隐藏，hover/聚焦卡片时才显出来 */
+.mc-pcard-cover { position: relative; flex: 0 0 auto; height: 132px; background: var(--field-bg); overflow: hidden; }
+.mc-pcard-cover img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.mc-pcard-cover-empty {
+  width: 100%; height: 100%; padding: 10px 14px; text-align: center;
+  font-size: 15px; font-weight: 700; line-height: 1.35;
+  color: var(--mc-sec, var(--dimmer));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--mc-sec, var(--line-soft)) 18%, var(--field-bg)), var(--field-bg));
+  /* -webkit-box（旧版 flexbox）而不是标准 flex：这样 -webkit-line-clamp 才能生效，
+     顺便用 -webkit-box-pack/-webkit-box-align 兼职做水平垂直居中，不用再叠一层 flex */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  -webkit-box-pack: center; -webkit-box-align: center;
+  overflow: hidden;
+}
+.mc-pcard-cover-actions { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity var(--fast); }
+.mc-pcard:hover .mc-pcard-cover-actions, .mc-pcard-cover-actions:focus-within { opacity: 1; }
+.mc-pcard-cover-btn {
+  transition: background var(--fast);
+  padding: 5px 10px; border-radius: 999px; border: none; cursor: pointer;
+  background: var(--scrim); color: #fff; font-size: 11.5px;
+}
+.mc-pcard-cover-btn:hover { background: #04070dcc; }
+
+/* 放大按钮：常驻显示（不像更换/删除封面那样要 hover 才出现）——
+   这是收起卡片唯一的展开入口，得让人一眼看到 */
+.mc-pcard-expand-btn {
+  position: absolute; right: 8px; top: 8px; z-index: 1;
+  width: 26px; height: 26px; display: grid; place-items: center;
+  border: none; border-radius: 999px; cursor: pointer;
+  background: var(--scrim); color: #fff; font-size: 13px;
+  transition: background var(--fast), transform var(--fast);
+}
+.mc-pcard-expand-btn:hover { background: #04070dcc; transform: scale(1.08); }
+/* 卡片展开时，封面/内容两个节点被挪进浮窗，原位置留个淡化的空壳占住网格位置，
+   避免其它卡片这时候跟着重新排布 */
+.mc-pcard-expanding { opacity: 0.35; pointer-events: none; }
+
+.mc-pcard-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px 14px; gap: 8px; }
+/* 名称/价格/词数/移动分区/复制/删除全部挤在同一行，
+   名称占剩余空间，其它都是固定宽度的控件 */
+.mc-pcard-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mc-pcard-name { flex: 1 1 100px; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
+.mc-pcard-price { flex: 0 0 76px; width: 76px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; }
+.mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
+.mc-pcard-move { flex: 0 0 auto; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
+/* 加关键词的输入行，单独一行，跟卡片头部的产品属性控件分开 */
+.mc-pcard-kwrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mc-kw-input-inline { flex: 1 1 auto; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+.mc-ratio-select { flex: 0 0 auto; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; }
+/* 关键词区：卡片高度固定，词多的话这里超出内部滚动（收起态是概览，不强求看全） */
+.mc-chip-editor-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; }
+
+/* 展开浮窗：点卡片右上角放大按钮触发。不是重新渲染一份，是把卡片自己的
+   .mc-pcard-cover / .mc-pcard-body 两个节点原样挪进浮窗里两个槽位——编辑状态、
+   自动保存都还是原来那套，不用另外同步。关闭时再挪回卡片。
+   布局跟收起态的卡片不一样：封面在左，右边是名称/价格等信息 + 关键词区，
+   关键词区尽量占满剩余高度（复用 .mc-pcard-body/.mc-chip-editor-wrap 已有的
+   flex:1 撑满逻辑，只是这次外层容器给的可用高度大得多）。 */
+.mc-expand-mask { z-index: 200; }
+.mc-expand-sheet {
+  width: 90vw; height: 90vh; max-height: 90vh;
+  display: flex; flex-direction: column;
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  border: 1px solid var(--line); border-radius: 18px;
+  box-shadow: 0 44px 90px -30px #000; animation: rise 0.34s var(--ease) both;
+  position: relative; overflow: hidden;
+}
+.mc-expand-close {
+  position: absolute; right: 14px; top: 14px; z-index: 2;
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: none; border-radius: 999px; cursor: pointer;
+  background: var(--overlay-weak); color: var(--dim); font-size: 18px;
+  transition: background var(--fast), color var(--fast);
+}
+.mc-expand-close:hover { background: var(--dis); color: #fff; }
+/* 上一个/下一个：贴在浮窗左右边缘中间，悬浮在内容上方，不占内容区域的宽度 */
+.mc-expand-nav {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+  width: 40px; height: 40px; display: grid; place-items: center;
+  border: none; border-radius: 999px; cursor: pointer;
+  background: var(--overlay-weak); color: var(--dim); font-size: 22px; line-height: 1;
+  transition: background var(--fast), color var(--fast), opacity var(--fast);
+}
+.mc-expand-nav:hover:not(:disabled) { background: var(--dis); color: #fff; }
+.mc-expand-nav:disabled { opacity: 0.3; cursor: default; }
+.mc-expand-prev { left: 14px; }
+.mc-expand-next { right: 14px; }
+.mc-expand-layout { flex: 1 1 auto; min-height: 0; display: flex; transition: opacity 0.16s var(--ease), transform 0.16s var(--ease); }
+/* 左右切换产品时轻微滑动+淡入淡出：先把旧内容往切换方向滑出去，
+   节点换好之后再从对侧滑进来——跟"往哪边看下一个"方向直觉一致 */
+.mc-expand-slide-out-left { opacity: 0; transform: translateX(-18px); }
+.mc-expand-slide-out-right { opacity: 0; transform: translateX(18px); }
+.mc-expand-slide-in-left { opacity: 0; transform: translateX(-18px); transition: none; }
+.mc-expand-slide-in-right { opacity: 0; transform: translateX(18px); transition: none; }
+.mc-expand-cover-slot {
+  flex: 0 0 38%; min-width: 220px; background: var(--field-bg);
+  display: flex; flex-direction: column;
+}
+.mc-expand-cover-slot .mc-pcard-cover { order: 0; flex: 1 1 auto; min-height: 0; }
+.mc-expand-body-slot { flex: 1 1 auto; min-width: 0; display: flex; }
+.mc-expand-body-slot .mc-pcard-body { flex: 1 1 auto; padding: 24px 28px 28px; gap: 16px; }
+/* 关键词、名称、价格、分类/比例徽标的字号跟视口宽度走：clamp() 的三段值是按
+   14寸笔记本(~1440px视口)保持现状、27寸4K(~2560px)明显放大、超宽屏(~3840px+)
+   封顶推出来的线性插值，内边距改用 em 让它们跟着字号自动放大，不用每个都单独算。 */
+.mc-expand-body-slot .mc-pcard-name { font-size: clamp(17px, 11.5px + 0.38vw, 26px); padding: 0.6em 0.7em; }
+.mc-expand-body-slot .mc-pcard-price { font-size: clamp(14px, 9.5px + 0.31vw, 21.5px); padding: 0.7em; }
+/* 关键词区尽可能最大：字号、内边距都比收起态卡片里大一圈，且随视口连续放大 */
+.mc-expand-body-slot .mc-chip-editor .mc-chip { font-size: clamp(17px, 11.5px + 0.38vw, 26px); padding: 0.47em 0.88em; gap: 0.35em; }
+.mc-expand-body-slot .mc-cat-badge-select, .mc-expand-body-slot .mc-ratio-badge-select { font-size: clamp(11.5px, 7.8px + 0.25vw, 17.6px); padding: 0.17em 0.7em; }
+.mc-expand-body-slot .mc-chip-editor { gap: 9px; }
+.mc-expand-body-slot .mc-kw-input-inline, .mc-expand-body-slot .mc-cat-select, .mc-expand-body-slot .mc-ratio-select { font-size: clamp(14px, 9.5px + 0.31vw, 21.5px); padding: 0.64em 0.86em; }
+@media (max-width: 860px) {
+  .mc-expand-layout { flex-direction: column; }
+  .mc-expand-cover-slot { flex: 0 0 180px; min-width: 0; }
+}
+
+/* 分类图例：贴在封面图下方（靠 flex order，跟 DOM 插入顺序无关），点一个分类
+   其它图例变灰、右侧对应分类关键词高亮放大——纯靠 data-cat 属性 + class 联动，
+   不改 mountKeywordEditor 内部逻辑，通过 MutationObserver 监听关键词区重绘自动重算。 */
+.mc-expand-legend { order: 1; flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 14px; }
+.mc-legend-item {
+  order: 0; display: inline-flex; align-items: center; gap: 6px;
+  border: none; border-radius: 999px; padding: 4px 10px 4px 8px; cursor: pointer;
+  font-size: 12px; font-family: inherit; line-height: 1.3;
+  transition: opacity var(--fast), filter var(--fast), transform var(--fast);
+}
+.mc-legend-swatch { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.mc-legend-count { opacity: 0.75; font-variant-numeric: tabular-nums; }
+.mc-legend-item:hover { transform: translateY(-1px); }
+.mc-legend-item.mc-legend-dim { opacity: 0.4; filter: grayscale(70%); }
+.mc-legend-item.mc-legend-active { box-shadow: 0 0 0 2px currentColor inset; }
+@media (max-width: 860px) { .mc-expand-legend { padding: 8px 0 0; } }
+
+/* 关键词区被图例筛选时：命中分类的 chip 原地放大突出，其余 chip 变灰变淡但不挪位/不消失 */
+.mc-chip.mc-chip-legend-dim { opacity: 0.35; filter: grayscale(75%); }
+.mc-chip.mc-chip-legend-focus { transform: scale(1.08); position: relative; z-index: 1; }
+
+/* 拖拽手柄：单独的小按钮而不是整张卡片可拖，避免跟卡片里的输入框/下拉框抢手势 */
+.mc-pcard-handle {
+  flex: 0 0 auto; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--dimmer);
+  border-radius: 6px; width: 26px; height: 26px; font-size: 13px; cursor: grab; padding: 0;
+  display: grid; place-items: center; user-select: none; touch-action: none;
+}
+.mc-pcard-handle:hover { color: var(--text); background: var(--surface-2); }
+.mc-pcard-dragging { opacity: 0.5; }
+
+/* "复制到…"：跟词库改名那条内联行一样的隐藏/展开模式，同样要钉住 [hidden]，
+   否则 .mc-copy-row 的 display:flex 跟 UA 的 [hidden]{display:none} 优先级打平会被覆盖 */
+.mc-copy-row { display: flex; gap: 8px; align-items: center; }
+.mc-copy-row[hidden] { display: none; }
+.mc-copy-row select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+
+.mc-cat-badge, .mc-cat-badge-select { border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
+/* 分类徽章现在是个可选的下拉框（点了能直接改分类），不是纯展示的 <small> 了——
+   去掉原生 select 外观，让它看起来还是原来那个小胶囊徽章 */
+.mc-cat-badge-select {
+  appearance: none; -webkit-appearance: none; border: none; cursor: pointer; font-family: inherit;
+}
+.mc-cat-badge-select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.mc-cat-model   { background: #1a2440; color: var(--blue); }
+.mc-cat-benefit { background: #10312c; color: var(--mint); }
+.mc-cat-daily   { background: #2c330f; color: #d4e35a; }
+.mc-cat-promo   { background: #33290f; color: #f4c37b; }
+.mc-cat-extra   { background: #2c2340; color: #b9a3f0; }
+.mc-cat-subsidy { background: #3a1a2c; color: #f2a0c4; }
+.mc-cat-price   { background: #0f2f38; color: #6fd3e8; }
+.mc-cat-other   { background: var(--overlay-strong); color: var(--dim); }
+.mc-cat-badge-select.mc-cat-model   { color: var(--blue); }
+.mc-cat-badge-select.mc-cat-other   { color: var(--dim); }
+
+/* 适用比例徽标：通用词不特别显眼（半透明、跟分类徽标区分开），1:1/3:4 专属词
+   各自一个小色块——扫一眼平铺的关键词列表就能看出哪些词是比例专属的 */
+.mc-ratio-badge-select {
+  appearance: none; -webkit-appearance: none; border: none; cursor: pointer; font-family: inherit;
+  border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 700; margin-left: 2px;
+}
+.mc-ratio-badge-select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.mc-ratio-both { background: transparent; color: var(--dimmer); opacity: 0.6; }
+.mc-ratio-11   { background: #143a2e; color: #7be0b0; }
+.mc-ratio-34   { background: #3a1a3a; color: #e0a3f0; }
+
+/* 批量自动识别的审核页 */
+.mc-ab-unresolved { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-soft); margin-bottom: 8px; background: var(--surface); }
+.mc-ab-group { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
+.mc-ab-group-head { display: flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 8px; }
+.mc-ab-cands { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.mc-ab-cand { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.mc-ab-cand-ratio { font-size: 10px; padding: 1px 6px; border-radius: 5px; }
+.mc-ab-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; position: sticky; bottom: 0; background: var(--surface); padding-top: 10px; }
+
+.mc-lib-error { color: var(--bad-text); font-size: 12.5px; margin: 0 0 16px; }
+
+.mc-lib-disabled input, .mc-lib-disabled select, .mc-lib-disabled button { opacity: 0.6; pointer-events: none; }
+
 /* ═══════════════════════════════════════════════════════════
    移动端
    对位表是 5 列 × 11 行的二维表，手机上不可能不横滚。
@@ -2001,6 +2395,22 @@ body.rpt-presenting .rpt-wm-note {
 [data-theme="light"] .log-act.act-user { background: #eae2fb; color: #6a44c9; }
 [data-theme="light"] .log-act.act-backup { background: #f6ead2; color: #8a5c0d; }
 [data-theme="light"] .log-act.act-danger { background: #fbdfdc; color: #b0392c; }
+
+/* 素材质检·关键词分类徽标：深色底/亮字 → 浅色底/深字 */
+[data-theme="light"] .mc-cat-model { background: #e0e8fb; color: #2d4fbe; }
+[data-theme="light"] .mc-cat-benefit { background: #d8f1ea; color: #0f7a63; }
+[data-theme="light"] .mc-cat-daily { background: #eef3d0; color: #5f7a0d; }
+[data-theme="light"] .mc-cat-promo { background: #f6ead2; color: #8a5c0d; }
+[data-theme="light"] .mc-cat-extra { background: #eae2fb; color: #6a44c9; }
+[data-theme="light"] .mc-cat-subsidy { background: #fbdcea; color: #a52e6b; }
+[data-theme="light"] .mc-cat-price { background: #d8f2f7; color: #14707f; }
+[data-theme="light"] .mc-ratio-11 { background: #d8f1ea; color: #0f7a63; }
+[data-theme="light"] .mc-ratio-34 { background: #f2e2fb; color: #7a2ea3; }
+
+/* 素材质检·分区色条：深色下的亮色在浅底上偏刺眼/对比不够，换成同色系压深的版本 */
+[data-theme="light"] .mc-tsec-machine   { --mc-sec: #3358c9; }
+[data-theme="light"] .mc-tsec-filter    { --mc-sec: #0e7a86; }
+[data-theme="light"] .mc-tsec-accessory { --mc-sec: #a15f14; }
 
 /* 报告管理徽标 / 放映退出按钮 */
 [data-theme="light"] .rpt-scope-badge.alt { background: #3358c91c; color: #2d4fbe; }

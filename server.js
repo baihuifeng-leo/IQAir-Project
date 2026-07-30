@@ -12,11 +12,15 @@ const { diffSummary } = require('./audit.js');
 const { ReviewStore } = require('./reviews-store.js');
 const { Preview3DStore } = require('./preview3d-store.js');
 const { ReportStore } = require('./report-store.js');
+const { MaterialCheckStore, PLATFORMS: MATERIALCHECK_PLATFORMS } = require('./materialcheck-store.js');
+const materialcheckOcr = require('./materialcheck-ocr.js');
 const { pipeline } = require('stream/promises');
 
 const PORT = Number(process.env.PORT || 8080);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+const MATERIALCHECK_DIR = path.join(DATA_DIR, 'materialcheck');
+const MATERIALCHECK_UPLOAD_DIR = path.join(UPLOAD_DIR, 'materialcheck');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -100,8 +104,10 @@ async function loadUsers() {
   }
 }
 const saveUsers = () => writeAtomic(USERS_FILE, JSON.stringify(users, null, 1));
-const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [], theme: u.theme === 'light' ? 'light' : 'dark', p3dAxis: u.p3dAxis || null });
-const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports'];
+const MATERIAL_LIBRARY_ROLES = ['edit', 'view', 'none'];
+// admin 永远隐式拥有词库编辑权限，不看这个字段；非 admin 用户没设置过就当 view（现有默认体验的延伸）
+const pubUser = (u) => ({ id: u.id, name: u.name, admin: !!u.admin, color: u.color, defaultPin: !!u.defaultPin, hiddenModules: u.hiddenModules || [], theme: u.theme === 'light' ? 'light' : 'dark', p3dAxis: u.p3dAxis || null, materialLibraryRole: u.admin ? 'edit' : (MATERIAL_LIBRARY_ROLES.includes(u.materialLibraryRole) ? u.materialLibraryRole : 'view') });
+const MODULES = ['matrix', 'compare', 'reviews', 'preview3d', 'reports', 'materialcheck'];
 const P3D_DIMS = ['pmCadr', 'hchoCadr', 'price'];
 /** 坐标轴设置合法性：x/y/z 三个轴必须凑齐 P3D_DIMS 这三个维度、不重不漏；
  *  文字可以留白（留白代表用回默认文案，前端 preview3d.js 里处理），
@@ -386,7 +392,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'PATCH') {
         const isSelf = u.id === me.id;
         if (!isSelf && !me.admin) return json(res, 403, { error: '只能改自己的 PIN' });
-        const { pin, name, admin, hiddenModules, theme, p3dAxis } = await body(req, 4096);
+        const { pin, name, admin, hiddenModules, theme, p3dAxis, materialLibraryRole } = await body(req, 4096);
         if (pin !== undefined) {
           if (!validPin(pin)) return json(res, 400, { error: 'PIN 必须是 6 位数字' });
           u.pin = hashPin(pin);
@@ -401,6 +407,11 @@ const server = http.createServer(async (req, res) => {
         if (admin !== undefined && me.admin) {
           if (u.id === me.id && !admin) return json(res, 400, { error: '不能取消自己的管理员身份' });
           u.admin = !!admin;
+        }
+        // 词库查看/编辑权限，只有管理员能改别人的；admin 用户永远隐式 edit，设这个字段对他们没有实际效果
+        if (materialLibraryRole !== undefined && me.admin) {
+          if (!MATERIAL_LIBRARY_ROLES.includes(materialLibraryRole)) return json(res, 400, { error: '词库权限只能是 edit/view/none' });
+          u.materialLibraryRole = materialLibraryRole;
         }
         // 界面显示偏好，只能改自己的——就算是管理员也不能帮别人关模块，这跟账号安全无关
         if (hiddenModules !== undefined) {
@@ -429,6 +440,7 @@ const server = http.createServer(async (req, res) => {
         if (pin !== undefined) what.push(u.id === me.id ? '改了自己的 PIN' : `重置了「${u.name}」的 PIN`);
         if (name !== undefined) what.push(`改名为「${u.name}」`);
         if (admin !== undefined) what.push(`${u.name} ${u.admin ? '设为' : '取消'}管理员`);
+        if (materialLibraryRole !== undefined) what.push(`${u.name} 词库权限改为 ${materialLibraryRole}`);
         if (what.length) audit(me, 'user.update', { detail: what }); // hiddenModules 是个人偏好，不进变更日志
         return json(res, 200, pubUser(u));
       }
@@ -657,6 +669,163 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, result);
     }
 
+    if (p === '/api/materialcheck/libraries' && req.method === 'GET') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      return json(res, 200, { libraries: materialcheck.listLibraries(platform) });
+    }
+
+    if (p === '/api/materialcheck/libraries' && req.method === 'POST') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const { name } = await body(req, 4096);
+      let lib;
+      try { lib = await materialcheck.createLibrary(platform, name); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      const platformLabel = platform === 'tmall' ? '天猫' : '京东';
+      audit(me, 'materialcheck.library.create', { detail: [`${platformLabel}新建词库「${lib.name}」`] });
+      return json(res, 200, lib);
+    }
+
+    if (p === '/api/materialcheck/libraries/copy' && req.method === 'POST') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const { sourceId, name } = await body(req, 4096);
+      if (!sourceId) return json(res, 400, { error: '缺少要复制的词库' });
+      let lib;
+      try { lib = await materialcheck.copyLibrary(platform, sourceId, name); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      const platformLabel = platform === 'tmall' ? '天猫' : '京东';
+      audit(me, 'materialcheck.library.copy', { detail: [`${platformLabel}复制出新词库「${lib.name}」`] });
+      return json(res, 200, lib);
+    }
+
+    if (p === '/api/materialcheck/libraries/rename' && req.method === 'PUT') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const { id, name } = await body(req, 4096);
+      if (!id) return json(res, 400, { error: '缺少要改名的词库' });
+      let lib;
+      try { lib = await materialcheck.renameLibrary(platform, id, name); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'materialcheck.library.rename', { detail: [`词库改名为「${lib.name}」`] });
+      return json(res, 200, lib);
+    }
+
+    if (p === '/api/materialcheck/libraries' && req.method === 'DELETE') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const id = url.searchParams.get('id');
+      if (!id) return json(res, 400, { error: '缺少要删除的词库' });
+      const deletedName = (materialcheck.getLibrary(platform, id) || {}).name || id;
+      try { await materialcheck.deleteLibrary(platform, id); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'materialcheck.library.delete', { detail: [`删除词库「${deletedName}」`] });
+      return json(res, 200, { ok: true });
+    }
+
+    if (p === '/api/materialcheck/products' && req.method === 'GET') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      const libraryId = url.searchParams.get('libraryId') || undefined;
+      const lib = materialcheck.getLibrary(platform, libraryId);
+      if (!lib) return json(res, 400, { error: '这套词库不存在，可能已经被删除' });
+      return json(res, 200, materialcheck.withAutoImages(lib, platform, lib.id));
+    }
+
+    if (p === '/api/materialcheck/products' && req.method === 'PUT') {
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      const libraryId = url.searchParams.get('libraryId');
+      if (!libraryId) return json(res, 400, { error: '缺少词库参数' });
+      if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
+      const { products } = await body(req, 1024 * 1024);
+      if (!Array.isArray(products)) return json(res, 400, { error: '数据格式不对' });
+      let saved;
+      try {
+        saved = await materialcheck.saveProducts(platform, libraryId, products);
+      }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      const platformLabel = platform === 'tmall' ? '天猫' : '京东';
+      audit(me, 'materialcheck.products.update', { detail: [`${platformLabel}「${saved.name}」已更新：${saved.products.length} 个产品`] });
+      return json(res, 200, saved);
+    }
+
+    if (p === '/api/materialcheck/upload' && req.method === 'POST') {
+      const ct = (req.headers['content-type'] || '').split(';')[0].trim();
+      const ext = IMAGE_EXT[ct];
+      if (!ext) return json(res, 415, { error: '只支持 PNG、JPG、WebP 三种格式' });
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      const libraryId = url.searchParams.get('libraryId') || undefined;
+      const filename = decodeURIComponent(url.searchParams.get('filename') || ('upload' + ext));
+      const batchId = url.searchParams.get('batchId') || ('b_' + crypto.randomBytes(6).toString('hex'));
+      // 检测台的统一上传入口不再由前端声明比例，服务端按图片真实尺寸自动识别。
+      const ratio = url.searchParams.get('ratio') || undefined;
+      const buf = await readBinary(req, MAX_IMAGE);
+      if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
+      let result;
+      try { result = await materialcheck.detectFile({ buf, ext, filename, batchId, uploadedBy: me.name, platform, libraryId, ratio, requireDetectedRatio: !ratio }); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      if (!result.needsManualPick) {
+        const label = { pass: '通过', warn: '提醒', error: '报错', ocr_failed: '识别失败' }[result.status] || result.status;
+        audit(me, 'materialcheck.detect', { detail: [`${filename} · ${result.productName || ''} · ${label}`] });
+      }
+      return json(res, 200, result);
+    }
+
+    if (p === '/api/materialcheck/autobuild/scan' && req.method === 'POST') {
+      const ct = (req.headers['content-type'] || '').split(';')[0].trim();
+      const ext = IMAGE_EXT[ct];
+      if (!ext) return json(res, 415, { error: '只支持 PNG、JPG、WebP 三种格式' });
+      const platform = url.searchParams.get('platform') || 'tmall';
+      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      const libraryId = url.searchParams.get('libraryId') || undefined;
+      const filename = decodeURIComponent(url.searchParams.get('filename') || ('upload' + ext));
+      const ratio = url.searchParams.get('ratio') || undefined;
+      if (!['1:1', '3:4'].includes(ratio)) return json(res, 400, { error: '缺少素材比例参数，只能是 1:1 或 3:4' });
+      const buf = await readBinary(req, MAX_IMAGE);
+      if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
+      let result;
+      try { result = await materialcheck.autobuildScan({ buf, ext, filename, platform, libraryId, ratio }); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      return json(res, 200, result);
+    }
+
+    if (p === '/api/materialcheck/autobuild/candidates' && req.method === 'POST') {
+      const { platform, libraryId, productId, ocrText } = await body(req, 512 * 1024);
+      if (!platform || !productId) return json(res, 400, { error: '缺少必要参数' });
+      let candidates;
+      try { candidates = materialcheck.autobuildCandidatesFor({ platform, libraryId, productId, ocrText }); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      return json(res, 200, { candidates });
+    }
+
+    if (p === '/api/materialcheck/resolve' && req.method === 'POST') {
+      const { pendingId, productId } = await body(req, 4096);
+      if (!pendingId || !productId) return json(res, 400, { error: '缺少必要参数' });
+      let result;
+      try { result = await materialcheck.resolvePending(pendingId, productId, me.name); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      const label = { pass: '通过', warn: '提醒', error: '报错' }[result.status] || result.status;
+      audit(me, 'materialcheck.detect', { detail: [`${result.filename} · ${result.productName} · 人工选择 · ${label}`] });
+      return json(res, 200, result);
+    }
+
+    if (p === '/api/materialcheck/records' && req.method === 'GET') {
+      const platform = url.searchParams.get('platform') || undefined;
+      const libraryId = url.searchParams.get('libraryId') || undefined;
+      const productId = url.searchParams.get('productId') || undefined;
+      const status = url.searchParams.get('status') || undefined;
+      const uploadedBy = url.searchParams.get('uploadedBy') || undefined;
+      const limit = Math.min(2000, Number(url.searchParams.get('limit')) || 500);
+      return json(res, 200, { records: materialcheck.listRecords({ platform, libraryId, productId, status, uploadedBy, limit }) });
+    }
+
     if (p.startsWith('/uploads/')) return serveStatic(res, UPLOAD_DIR, p.slice('/uploads/'.length), true);
 
     if (req.method === 'GET' || req.method === 'HEAD')
@@ -672,6 +841,7 @@ const server = http.createServer(async (req, res) => {
 const reviews = new ReviewStore(REVIEWS_DIR);
 const preview3d = new Preview3DStore(PRODUCTS3D_DIR);
 const reports = new ReportStore(REPORTS_DIR);
+const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UPLOAD_DIR);
 
 (async () => {
   for (const d of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, REVIEWS_DIR, PRODUCTS3D_DIR, REPORTS_DIR]) await fsp.mkdir(d, { recursive: true });
@@ -681,6 +851,8 @@ const reports = new ReportStore(REPORTS_DIR);
   await loadDb();
   await reviews.load();
   await preview3d.load();
+  await materialcheck.load();
+  await materialcheckOcr.checkAvailable();
   scheduleNightly();
   server.listen(PORT, '0.0.0.0', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
 })();
