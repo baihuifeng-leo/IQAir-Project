@@ -1927,11 +1927,27 @@ body.rpt-presenting .rpt-wm-note {
   display: inline-flex; align-items: center; gap: 5px; min-height: 30px;
   padding: 5px 9px; border: 1px solid var(--line-soft); border-radius: 7px;
   background: var(--field-bg); color: var(--dim); font: inherit; font-size: 11.5px;
-  cursor: zoom-in; white-space: nowrap;
+  cursor: pointer; white-space: nowrap;
   transition: border-color var(--fast), background var(--fast), color var(--fast), transform var(--fast);
 }
 .mc-source-preview:hover { border-color: var(--mint); background: var(--mint-dim); color: var(--text); transform: translateY(-1px); }
 .mc-source-preview:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mc-source-panel {
+  position: fixed; z-index: 160; width: min(360px, calc(100vw - 24px));
+  overflow: hidden; border-radius: 12px; background: var(--surface);
+  box-shadow: 0 22px 54px -26px rgb(0 0 0 / 0.72);
+}
+.mc-source-panel[hidden] { display: none; }
+.mc-source-panel-head {
+  display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 10px 0 13px;
+  background: var(--surface-2); border-bottom: 1px solid var(--line-soft); cursor: grab; touch-action: none;
+}
+.mc-source-panel.is-dragging .mc-source-panel-head { cursor: grabbing; }
+.mc-source-panel-title { min-width: 0; flex: 1; overflow: hidden; color: var(--text); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.mc-source-panel-close { width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--dim); font: inherit; font-size: 20px; line-height: 1; cursor: pointer; }
+.mc-source-panel-close:hover { background: var(--field-bg); color: var(--text); }
+.mc-source-panel-close:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.mc-source-panel-image { display: block; width: 100%; max-height: calc(100vh - 84px); object-fit: contain; background: var(--field-bg); }
 .mc-row-ok { border-color: var(--ok); }
 .mc-row-ok .mc-row-status { color: var(--ok-text); }
 .mc-row-bad { border-color: var(--bad); }
@@ -1974,7 +1990,8 @@ body.rpt-presenting .rpt-wm-note {
 .mc-kwd-missing { background: var(--bad); color: #fff; }
 .mc-kwd-fuzzy { background: var(--warn); color: #04140f; }
 .mc-kwd-exact { background: var(--ok); color: #04140f; }
-.mc-kwd-reason { opacity: 0.85; font-size: 10.5px; }
+.mc-kwd-action { margin-left: 2px; opacity: 0.85; font-size: 10.5px; }
+.mc-kw-detail-empty { width: 100%; margin: 8px 0 0; color: var(--dimmer); font-size: 12px; }
 
 .mc-btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line-soft); background: transparent; color: var(--text); cursor: pointer; font-size: 12.5px; transition: background var(--fast); }
 .mc-btn:hover { background: var(--surface-2); }
@@ -1987,6 +2004,14 @@ body.rpt-presenting .rpt-wm-note {
 
 .mc-history-row { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-soft); margin-bottom: 6px; cursor: pointer; transition: background var(--fast); }
 .mc-history-row:hover { background: var(--surface-2); }
+.mc-history-batch { margin-bottom: 12px; }
+.mc-history-batch summary { display: flex; align-items: center; gap: 10px; padding: 8px 2px; color: var(--text); cursor: pointer; list-style: none; user-select: none; }
+.mc-history-batch summary::-webkit-details-marker { display: none; }
+.mc-history-batch summary::before { content: '›'; color: var(--dim); font-size: 18px; line-height: 1; transition: transform var(--fast); }
+.mc-history-batch[open] summary::before { transform: rotate(90deg); }
+.mc-history-batch-title { font-size: 13px; font-weight: 600; }
+.mc-history-batch-count { margin-left: auto; color: var(--dim); font-size: 12px; }
+.mc-history-batch-rows { padding-left: 2px; }
 
 .mc-ocr-text { white-space: pre-wrap; background: var(--field-bg); padding: 14px; border-radius: 10px; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.6; max-height: 320px; overflow-y: auto; margin-top: 12px; }
 .mc-mark-bad { background: var(--bad); color: #fff; padding: 0 2px; border-radius: 3px; }

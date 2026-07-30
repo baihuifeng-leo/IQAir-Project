@@ -208,39 +208,104 @@ const MaterialCheck = (() => {
   /** 检测台结果卡片里"查看明细"面板：把 matchAgainstProduct 返回的 matchedKeywords
    *  （产品自己词库里每个适用词的命中三态）画成手动展开的明细列表，缺失排最前面，
    *  规则命中的附上具体理由（从 normalize() 的规则表反推出来的，不是写死的猜测）。 */
-  function keywordDetailHtml(matchedKeywords) {
-    if (!matchedKeywords || !matchedKeywords.length) return '';
+  function keywordDetailHtml(matchedKeywords, options = {}) {
+    if (!matchedKeywords || !matchedKeywords.length) {
+      return options.emptyMessage ? `<p class="mc-kw-detail-empty">${escapeHtml(options.emptyMessage)}</p>` : '';
+    }
     const missCount = matchedKeywords.filter((k) => k.status === 'missing').length;
     const fuzzyCount = matchedKeywords.filter((k) => k.status === 'fuzzy').length;
     const items = matchedKeywords.map((kw) => {
       const reasonText = (kw.reasons || []).join('、');
       const title = kw.status === 'fuzzy' ? `${KWD_STATUS_TITLE.fuzzy}：${reasonText}` : KWD_STATUS_TITLE[kw.status];
+      const actionText = kw.status === 'missing'
+        ? '未命中'
+        : kw.status === 'fuzzy'
+          ? `系统处理：${reasonText || '归一化判定'}`
+          : '逐字命中';
       return `<span class="mc-chip mc-kwd-${kw.status}" title="${escapeHtml(title)}">
-        <span class="mc-kwd-cat-dot ${CAT_CLASS[kw.category] || ''}"></span>${escapeHtml(kw.text)}${reasonText ? `<span class="mc-kwd-reason">（${escapeHtml(reasonText)}）</span>` : ''}
+        <span class="mc-kwd-cat-dot ${CAT_CLASS[kw.category] || ''}"></span>${escapeHtml(kw.text)}<span class="mc-kwd-action">${escapeHtml(actionText)}</span>
       </span>`;
     }).join('');
-    return `<details class="mc-kw-detail">
-      <summary>查看明细（共 ${matchedKeywords.length} 词 · ${missCount} 缺失 · ${fuzzyCount} 规则命中）</summary>
+    return `<details class="mc-kw-detail"${options.open ? ' open' : ''}>
+      <summary>关键词处理明细（共 ${matchedKeywords.length} 词 · ${missCount} 缺失 · ${fuzzyCount} 规则命中）</summary>
       <div class="mc-kw-detail-list">${items}</div>
     </details>`;
   }
 
-  /** 检测结果和历史详情共用的素材预览入口：桌面端悬停快速对照，点击可看原图；
-   * 触屏没有 hover，仍可直接点击进入已有的原图查看器。 */
+  /** 检测结果和历史详情共用的素材预览入口：点击打开可拖动的小窗，不打断关键词对照。 */
   function sourcePreviewHtml(imagePath, filename) {
     if (!imagePath) return '';
-    return `<button type="button" class="mc-source-preview" data-mc-preview-src="${escapeHtml(imagePath)}" data-mc-preview-caption="${escapeHtml(filename)}" title="悬停预览素材，点击查看原图">◫ <span>预览素材</span></button>`;
+    return `<button type="button" class="mc-source-preview" data-mc-preview-src="${escapeHtml(imagePath)}" data-mc-preview-caption="${escapeHtml(filename)}" title="打开可拖动的素材预览">◫ <span>预览素材</span></button>`;
+  }
+
+  let sourcePreviewPanel = null;
+
+  function closeSourcePreview() {
+    if (sourcePreviewPanel) sourcePreviewPanel.hidden = true;
+  }
+
+  function moveSourcePreview(left, top) {
+    const panel = sourcePreviewPanel;
+    const pad = 12;
+    const maxLeft = Math.max(pad, innerWidth - panel.offsetWidth - pad);
+    const maxTop = Math.max(pad, innerHeight - panel.offsetHeight - pad);
+    panel.style.left = Math.min(Math.max(pad, left), maxLeft) + 'px';
+    panel.style.top = Math.min(Math.max(pad, top), maxTop) + 'px';
+    panel.style.right = 'auto';
+  }
+
+  function ensureSourcePreviewPanel() {
+    if (sourcePreviewPanel) return sourcePreviewPanel;
+    const panel = document.createElement('section');
+    panel.className = 'mc-source-panel';
+    panel.hidden = true;
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', '素材预览');
+    panel.innerHTML = `
+      <div class="mc-source-panel-head" data-role="drag"><span class="mc-source-panel-title"></span><button type="button" class="mc-source-panel-close" aria-label="关闭素材预览">×</button></div>
+      <img class="mc-source-panel-image" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">`;
+    document.body.appendChild(panel);
+
+    panel.querySelector('.mc-source-panel-close').onclick = closeSourcePreview;
+    const handle = panel.querySelector('[data-role="drag"]');
+    let drag = null;
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      const rect = panel.getBoundingClientRect();
+      drag = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+      handle.setPointerCapture(e.pointerId);
+      panel.classList.add('is-dragging');
+      e.preventDefault();
+    });
+    handle.addEventListener('pointermove', (e) => { if (drag) moveSourcePreview(e.clientX - drag.dx, e.clientY - drag.dy); });
+    const stopDrag = () => { drag = null; panel.classList.remove('is-dragging'); };
+    handle.addEventListener('pointerup', stopDrag);
+    handle.addEventListener('pointercancel', stopDrag);
+
+    document.addEventListener('pointerdown', (e) => {
+      if (!panel.hidden && !panel.contains(e.target) && !e.target.closest('[data-mc-preview-src]')) closeSourcePreview();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) closeSourcePreview(); });
+    window.addEventListener('resize', () => { if (!panel.hidden) moveSourcePreview(parseFloat(panel.style.left) || 12, parseFloat(panel.style.top) || 12); });
+    sourcePreviewPanel = panel;
+    return panel;
+  }
+
+  function openSourcePreview(src, caption) {
+    const panel = ensureSourcePreviewPanel();
+    panel.querySelector('.mc-source-panel-title').textContent = caption || '素材预览';
+    const image = panel.querySelector('.mc-source-panel-image');
+    image.alt = caption || '被检测的素材';
+    image.src = src;
+    panel.hidden = false;
+    requestAnimationFrame(() => moveSourcePreview(innerWidth - panel.offsetWidth - 24, 82));
   }
 
   function wireSourcePreviews(root) {
     root.querySelectorAll('[data-mc-preview-src]').forEach((button) => {
       const src = button.dataset.mcPreviewSrc;
       const caption = button.dataset.mcPreviewCaption;
-      button.addEventListener('mouseenter', () => A.peek.show(button, src));
-      button.addEventListener('mouseleave', () => A.peek.hide());
-      button.addEventListener('focus', () => A.peek.show(button, src));
-      button.addEventListener('blur', () => A.peek.hide());
-      button.addEventListener('click', () => A.lightbox(src, caption));
+      button.addEventListener('click', () => openSourcePreview(src, caption));
     });
   }
 
@@ -364,7 +429,13 @@ const MaterialCheck = (() => {
       );
       const list = A.$('#mc-history-list');
       if (!shown.length) { list.innerHTML = '<p class="rv-empty">没有匹配的记录</p>'; return; }
-      list.innerHTML = shown.map((r, i) => historyRowHtml(r, i)).join('');
+      const batches = new Map();
+      shown.forEach((r, i) => {
+        const key = r.batchId || '__legacy__';
+        if (!batches.has(key)) batches.set(key, []);
+        batches.get(key).push({ r, i });
+      });
+      list.innerHTML = Array.from(batches.entries()).map(([batchId, rows], batchIndex) => historyBatchHtml(batchId, rows, batchIndex)).join('');
       shown.forEach((r, i) => { list.querySelector(`[data-hi="${i}"]`).onclick = () => openHistoryDetail(r); });
     };
     A.$('#mc-f-platform').onchange = draw;
@@ -384,6 +455,17 @@ const MaterialCheck = (() => {
       <span class="mc-row-name">${escapeHtml(r.filename)}</span>
       <span class="mc-row-status">${meta.badge} · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')} · ${escapeHtml(r.uploadedBy)}</span>
     </div>`;
+  }
+
+  function historyBatchHtml(batchId, rows, batchIndex) {
+    const latest = rows[0].r;
+    const when = new Date(latest.timestamp).toLocaleString('zh-CN');
+    const batchName = batchId === '__legacy__' ? '未标记上传批次' : `上传批次 · ${when}`;
+    const batchHint = batchId === '__legacy__' ? '历史数据' : `${rows.length} 张素材`;
+    return `<details class="mc-history-batch"${batchIndex === 0 ? ' open' : ''}>
+      <summary><span class="mc-history-batch-title">${escapeHtml(batchName)}</span><span class="mc-history-batch-count">${escapeHtml(batchHint)}</span></summary>
+      <div class="mc-history-batch-rows">${rows.map(({ r, i }) => historyRowHtml(r, i)).join('')}</div>
+    </details>`;
   }
 
   function buildDetailSheet() {
@@ -418,6 +500,7 @@ const MaterialCheck = (() => {
       <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
       <div class="mc-chip-row"><b>多出的词：</b>${extra}</div>
       ${priceRow}
+      ${keywordDetailHtml(r.matchedKeywords, { open: true, emptyMessage: '这条历史记录没有保存逐词处理明细。' })}
       <pre class="mc-ocr-text">${html}</pre>`;
     wireSourcePreviews(detailBody);
     detailMask.hidden = false;
