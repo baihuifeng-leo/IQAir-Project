@@ -12,7 +12,6 @@ const MaterialCheck = (() => {
   const RATIO_LABEL = { both: '通用', '1:1': '仅1:1', '3:4': '仅3:4' };
   const RATIO_CLASS = { both: 'mc-ratio-both', '1:1': 'mc-ratio-11', '3:4': 'mc-ratio-34' };
   const DETECT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-  const DETECT_CACHE_KEY = 'mc-detect-batches-v1';
   // pass/warn/error 是新三态；fail 是 v2 上线前的旧记录留下的值，不迁移，历史筛选里仍要能选到
   const STATUS_META = {
     pass: { cls: 'mc-row-ok', badge: '✓ 通过' },
@@ -102,55 +101,39 @@ const MaterialCheck = (() => {
   }
 
   // ── 检测台 ──────────────────────────────────────────
-  function loadCachedDetectBatches() {
-    try {
-      const now = Date.now();
-      const all = JSON.parse(localStorage.getItem(DETECT_CACHE_KEY) || '[]');
-      const active = Array.isArray(all) ? all.filter((b) => b.createdAt && now - b.createdAt < DETECT_CACHE_TTL_MS) : [];
-      localStorage.setItem(DETECT_CACHE_KEY, JSON.stringify(active));
-      return active;
-    } catch (_) { return []; }
-  }
-
-  function saveCachedDetectBatches(batches) {
-    try { localStorage.setItem(DETECT_CACHE_KEY, JSON.stringify(batches)); } catch (_) { /* 本地空间不足时不影响检测 */ }
-  }
-
-  function cacheDetectResult(batch, result) {
-    if (result.needsManualPick) return; // 待人工选择的临时凭据只有 30 分钟有效，不跨刷新保存
-    const batches = loadCachedDetectBatches();
-    const found = batches.find((b) => b.id === batch.id);
-    if (!found) batches.unshift(batch);
-    const target = found || batch;
-    const index = target.results.findIndex((r) => r.filename === result.filename && r.imagePath === result.imagePath);
-    if (index >= 0) target.results[index] = result;
-    else target.results.push(result);
-    saveCachedDetectBatches(batches);
-  }
-
   function addDetectBatch(list, batchData, { restored = false } = {}) {
     const batch = document.createElement('details');
     batch.className = 'mc-detect-batch';
     batch.open = !restored;
-    const label = restored ? `保留记录 · ${new Date(batchData.createdAt).toLocaleString('zh-CN', { hour12: false })}` : '本次上传';
+    const label = restored ? `最近 24 小时 · ${new Date(batchData.createdAt).toLocaleString('zh-CN', { hour12: false })}` : '本次上传';
     batch.innerHTML = `<summary><span class="mc-history-batch-title">${label}</span><span class="mc-history-batch-count">${batchData.results.length} 张素材</span></summary><div class="mc-detect-batch-rows"></div>`;
     list.prepend(batch);
     return batch.querySelector('.mc-detect-batch-rows');
   }
 
-  function restoreCachedDetectBatches() {
+  async function restoreRecentDetectBatches() {
     const list = A.$('#mc-result-list');
-    loadCachedDetectBatches()
-      .filter((b) => b.platform === platform && b.libraryId === libraryId && Array.isArray(b.results) && b.results.length)
-      .reverse()
-      .forEach((b) => {
-        const rows = addDetectBatch(list, b, { restored: true });
-        b.results.forEach((result) => {
+    try {
+      const { records } = await call('/api/materialcheck/records?limit=1000');
+      const cutoff = Date.now() - DETECT_CACHE_TTL_MS;
+      const batches = new Map();
+      records.filter((r) => r.platform === platform && r.libraryId === libraryId && new Date(r.timestamp).getTime() >= cutoff)
+        .forEach((r) => {
+          const key = r.batchId || r.id;
+          if (!batches.has(key)) batches.set(key, { id: key, createdAt: new Date(r.timestamp).getTime(), results: [] });
+          const batch = batches.get(key);
+          batch.createdAt = Math.max(batch.createdAt, new Date(r.timestamp).getTime());
+          batch.results.push(r);
+        });
+      [...batches.values()].sort((a, b) => a.createdAt - b.createdAt).forEach((batch) => {
+        const rows = addDetectBatch(list, batch, { restored: true });
+        batch.results.reverse().forEach((result) => {
           const row = document.createElement('div');
           rows.append(row);
           renderResult(row, result);
         });
       });
+    } catch (e) { A.toast(`读取最近检测记录失败：${e.message}`, 'bad'); }
   }
 
   // 统一入口由服务端根据图片真实尺寸归为 1:1 或 3:4，再使用对应的关键词子集。
@@ -178,7 +161,7 @@ const MaterialCheck = (() => {
       const files = [...e.dataTransfer.files].filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type));
       if (files.length) uploadFiles(files);
     });
-    restoreCachedDetectBatches();
+    restoreRecentDetectBatches();
   }
 
   async function uploadFiles(fileList) {
@@ -190,8 +173,7 @@ const MaterialCheck = (() => {
     const summary = A.$('#mc-batch-summary');
     const progress = A.$('#mc-progress');
     const progressBar = A.$('#mc-progress-bar');
-    const cachedBatch = { id: `local_${batchId}`, createdAt: Date.now(), platform: uploadPlatform, libraryId: uploadLibraryId, results: [] };
-    const batchRows = addDetectBatch(list, { ...cachedBatch, results: fileList }, {});
+    const batchRows = addDetectBatch(list, { id: batchId, createdAt: Date.now(), results: fileList }, {});
 
     const rows = fileList.map((file) => {
       const row = document.createElement('div');
@@ -226,9 +208,8 @@ const MaterialCheck = (() => {
         entry.state = result.needsManualPick ? 'needsPick' : 'done';
         renderResult(entry.row, result, {
           onRetry: () => runOne(entry),
-          onResolved: (resolved) => { entry.state = 'done'; cacheDetectResult(cachedBatch, resolved); updateSummary(); }
+          onResolved: () => { entry.state = 'done'; updateSummary(); }
         });
-        cacheDetectResult(cachedBatch, result);
       } catch (e) {
         entry.state = 'done';
         entry.row.className = 'mc-row mc-row-error';
@@ -250,9 +231,20 @@ const MaterialCheck = (() => {
 
   const KWD_STATUS_TITLE = {
     missing: '素材里没有找到这个词',
+    wrong: '素材中出现近似词，但有一个字符不一致',
     fuzzy: '不是逐字一致，靠归一化规则判定命中',
     exact: '素材原文逐字命中'
   };
+
+  function highlightWrongActual(wrong) {
+    const actual = String(wrong?.actual || '');
+    const indexes = new Set((wrong?.differences || []).map((d) => d.actualIndex).filter((i) => Number.isInteger(i) && i < actual.length));
+    return [...actual].map((ch, i) => indexes.has(i) ? `<mark class="mc-mark-wrong">${escapeHtml(ch)}</mark>` : escapeHtml(ch)).join('') || '（漏字）';
+  }
+
+  function wrongKeywordHtml(wrong) {
+    return `<span class="mc-chip mc-chip-warn"><span class="mc-wrong-expected">${escapeHtml(wrong.expected)}</span><span class="mc-wrong-arrow">→</span><span class="mc-wrong-actual">${highlightWrongActual(wrong)}</span></span>`;
+  }
 
   /** 检测台结果卡片里"查看明细"面板：把 matchAgainstProduct 返回的 matchedKeywords
    *  （产品自己词库里每个适用词的命中三态）画成手动展开的明细列表，缺失排最前面，
@@ -262,12 +254,15 @@ const MaterialCheck = (() => {
       return options.emptyMessage ? `<p class="mc-kw-detail-empty">${escapeHtml(options.emptyMessage)}</p>` : '';
     }
     const missCount = matchedKeywords.filter((k) => k.status === 'missing').length;
+    const wrongCount = matchedKeywords.filter((k) => k.status === 'wrong').length;
     const fuzzyCount = matchedKeywords.filter((k) => k.status === 'fuzzy').length;
     const items = matchedKeywords.map((kw) => {
       const reasonText = (kw.reasons || []).join('、');
       const title = kw.status === 'fuzzy' ? `${KWD_STATUS_TITLE.fuzzy}：${reasonText}` : KWD_STATUS_TITLE[kw.status];
       const actionText = kw.status === 'missing'
         ? '未命中'
+        : kw.status === 'wrong'
+          ? `错为：${kw.actual || '（漏字）'}`
         : kw.status === 'fuzzy'
           ? `系统处理：${reasonText || '归一化判定'}`
           : '逐字命中';
@@ -276,7 +271,7 @@ const MaterialCheck = (() => {
       </span>`;
     }).join('');
     return `<details class="mc-kw-detail"${options.open ? ' open' : ''}>
-      <summary>关键词处理明细（共 ${matchedKeywords.length} 词 · ${missCount} 缺失 · ${fuzzyCount} 规则命中）</summary>
+      <summary>关键词处理明细（共 ${matchedKeywords.length} 词 · ${wrongCount} 错词 · ${missCount} 缺失 · ${fuzzyCount} 规则命中）</summary>
       <div class="mc-kw-detail-list">${items}</div>
     </details>`;
   }
@@ -464,6 +459,9 @@ const MaterialCheck = (() => {
     if (result.missingKeywords?.length) {
       detail += `<div class="mc-chip-row">缺词：${result.missingKeywords.map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('')}</div>`;
     }
+    if (result.wrongKeywords?.length) {
+      detail += `<div class="mc-chip-row">错词：${result.wrongKeywords.map(wrongKeywordHtml).join('')}</div>`;
+    }
     if (result.extraKeywords?.length) {
       detail += `<div class="mc-chip-row">串词：${result.extraKeywords.map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('')}</div>`;
     }
@@ -612,6 +610,7 @@ const MaterialCheck = (() => {
       html = html.split(escapeHtml(k)).join(`<mark class="mc-mark-bad">${escapeHtml(k)}</mark>`);
     });
     const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('') || '（无缺词）';
+    const wrong = (r.wrongKeywords || []).map(wrongKeywordHtml).join('') || '（无错词）';
     const extra = (r.extraKeywords || []).map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('') || '（无串词）';
     const unregistered = (r.unregisteredKeywords || []).map((k) => `<span class="mc-chip mc-chip-note">${escapeHtml(k)}</span>`).join('') || '（无未入库词）';
     const priceRow = r.priceIssue
@@ -620,6 +619,7 @@ const MaterialCheck = (() => {
     detailBody.innerHTML = `
       <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')} ${sourcePreviewHtml(r.imagePath, r.filename)}</p>
       <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
+      <div class="mc-chip-row"><b>错词：</b>${wrong}</div>
       <div class="mc-chip-row"><b>串词：</b>${extra}</div>
       <div class="mc-chip-row mc-unregistered-row"><b>未入库词：</b><span class="mc-unregistered-note">仅供核对，不影响通过</span>${unregistered}</div>
       ${priceRow}

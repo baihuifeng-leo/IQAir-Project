@@ -1982,6 +1982,10 @@ body.rpt-presenting .rpt-wm-note {
 .mc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: var(--field-bg); font-size: 11.5px; }
 .mc-chip-bad { background: var(--bad); color: #fff; }
 .mc-chip-warn { background: var(--warn); color: #04140f; }
+.mc-wrong-expected { text-decoration: line-through; text-decoration-thickness: 1px; opacity: 0.76; }
+.mc-wrong-arrow { opacity: 0.72; font-weight: 700; }
+.mc-wrong-actual { font-weight: 700; }
+.mc-mark-wrong { background: color-mix(in srgb, var(--bad) 76%, transparent); color: #fff; padding: 0 2px; border-radius: 3px; text-decoration: none; }
 .mc-chip-note { background: var(--surface-2); color: var(--text); border: 1px dashed var(--line-soft); }
 .mc-unregistered-row { align-items: center; }
 .mc-unregistered-note { color: var(--dim); font-size: 11px; }

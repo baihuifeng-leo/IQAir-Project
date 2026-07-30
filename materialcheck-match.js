@@ -40,6 +40,49 @@ function normalize(s) {
   return NORMALIZE_STEPS.reduce((acc, step) => step.apply(acc), String(s || ''));
 }
 
+/**
+ * 在 OCR 原文里找与关键词仅差一个字符的连续片段。
+ *
+ * 这不是宽松的“相似度匹配”：只接受长度至少 4、且编辑距离严格为 1 的片段，
+ * 用来区分“词没有出现”与“素材/识别把一个字写错”。短词继续按缺词处理，
+ * 免得把无关的两三个字误判为错词。
+ */
+function findOneCharMistake(text, keywordRaw) {
+  const source = normalize(text);
+  const expected = normalize(keywordRaw);
+  if (expected.length < 4 || !source) return null;
+
+  for (let start = 0; start < source.length; start++) {
+    // 同一位置可能既能凑出“少一个字”的片段，也有真正的替换片段；优先保留长度
+    // 相同的替换，才能把“桶”准确呈现为把“筒”写错，而不是误说成漏了一个字。
+    for (const length of [expected.length, expected.length - 1, expected.length + 1]) {
+      if (length < 1 || start + length > source.length) continue;
+      const actual = source.slice(start, start + length);
+      const differences = oneEditDifferences(expected, actual);
+      if (differences) return { expected: String(keywordRaw), actual, differences };
+    }
+  }
+  return null;
+}
+
+/** 返回严格一个替换/插入/删除的差异；其它情况返回 null。 */
+function oneEditDifferences(expected, actual) {
+  if (Math.abs(expected.length - actual.length) > 1 || expected === actual) return null;
+  let i = 0;
+  while (i < expected.length && i < actual.length && expected[i] === actual[i]) i++;
+
+  if (expected.length === actual.length) {
+    if (i === expected.length || expected.slice(i + 1) !== actual.slice(i + 1)) return null;
+    return [{ expectedIndex: i, actualIndex: i, expected: expected[i], actual: actual[i], type: 'replace' }];
+  }
+  if (expected.length > actual.length) {
+    if (expected.slice(i + 1) !== actual.slice(i)) return null;
+    return [{ expectedIndex: i, actualIndex: i, expected: expected[i], actual: '', type: 'delete' }];
+  }
+  if (expected.slice(i) !== actual.slice(i + 1)) return null;
+  return [{ expectedIndex: i, actualIndex: i, expected: '', actual: actual[i], type: 'insert' }];
+}
+
 /** 判断某个关键词在这段文字里是"逐字原样命中"还是"要靠 normalize() 的某几条
  *  规则才能命中"，用于检测台的关键词明细面板：逐字命中=绿色放心通过；
  *  靠规则命中=黄色，附上具体是哪几条规则起了作用（不是瞎猜的标签，是从
@@ -52,7 +95,12 @@ function classifyKeywordMatch(text, keywordRaw) {
   if (rawText.includes(rawKeyword)) return { found: true, exact: true, reasons: [] };
 
   const fullyNormalized = normalize(rawText).includes(normalize(rawKeyword));
-  if (!fullyNormalized) return { found: false, exact: false, reasons: [] };
+  if (!fullyNormalized) {
+    const mistake = findOneCharMistake(rawText, rawKeyword);
+    return mistake
+      ? { found: false, exact: false, wrong: true, reasons: [], ...mistake }
+      : { found: false, exact: false, reasons: [] };
+  }
 
   const reasons = NORMALIZE_STEPS
     .filter((step) => {
@@ -60,7 +108,7 @@ function classifyKeywordMatch(text, keywordRaw) {
       return !withoutThisStep(rawText).includes(withoutThisStep(rawKeyword));
     })
     .map((step) => step.label);
-  return { found: true, exact: false, reasons };
+  return { found: true, exact: false, wrong: false, reasons };
 }
 
 /** 检测台关键词明细面板：把产品自己词库里适用于这个素材比例的每个词都判一遍
@@ -69,16 +117,16 @@ function matchedKeywordDetail(text, product, materialRatio) {
   return (product.keywords || [])
     .filter((kw) => keywordApplies(kw, materialRatio))
     .map((kw) => {
-      const { found, exact, reasons } = classifyKeywordMatch(text, keywordText(kw));
+      const { found, exact, wrong, reasons, actual, differences } = classifyKeywordMatch(text, keywordText(kw));
       return {
         text: keywordText(kw),
         category: keywordCategory(kw),
-        status: !found ? 'missing' : exact ? 'exact' : 'fuzzy',
-        reasons
+        status: wrong ? 'wrong' : !found ? 'missing' : exact ? 'exact' : 'fuzzy',
+        reasons, actual, differences
       };
     })
     .sort((a, b) => {
-      const order = { missing: 0, fuzzy: 1, exact: 2 };
+      const order = { wrong: 0, missing: 1, fuzzy: 2, exact: 3 };
       return order[a.status] - order[b.status];
     });
 }
@@ -335,10 +383,11 @@ function commonKeywordTexts(allProducts, threshold) {
  * 三态严重程度是固定规则，不做成可配置项：串词/价格不对 > 缺词 > 通过。
  */
 function matchAgainstProduct(text, product, allProducts, materialRatio) {
-  const missingKeywords = (product.keywords || [])
-    .filter((kw) => keywordApplies(kw, materialRatio))
-    .filter((kw) => findKeywordHits(text, [kw]).length === 0)
-    .map((kw) => keywordText(kw));
+  const matchedKeywords = matchedKeywordDetail(text, product, materialRatio);
+  const missingKeywords = matchedKeywords.filter((kw) => kw.status === 'missing').map((kw) => kw.text);
+  const wrongKeywords = matchedKeywords
+    .filter((kw) => kw.status === 'wrong')
+    .map((kw) => ({ expected: kw.text, actual: kw.actual, differences: kw.differences }));
 
   // 用归一化后的文字判断"这个词本产品是不是已经有了"，不能只比较原始字符串——
   // 同一句话在不同产品词库里可能就差一个全角/半角符号、一个空格（实测 HP250 XE
@@ -370,9 +419,8 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
   const priceIssue = checkPrice(text, product);
   const unregisteredKeywords = unregisteredOcrLines(text, allProducts);
 
-  const status = (extraKeywords.length > 0 || priceIssue) ? 'error' : missingKeywords.length > 0 ? 'warn' : 'pass';
-  const matchedKeywords = matchedKeywordDetail(text, product, materialRatio);
-  return { missingKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords };
+  const status = (extraKeywords.length > 0 || priceIssue) ? 'error' : (missingKeywords.length > 0 || wrongKeywords.length > 0) ? 'warn' : 'pass';
+  return { missingKeywords, wrongKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords };
 }
 
 module.exports = {
@@ -380,5 +428,5 @@ module.exports = {
   normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, hasStrongOcrProductEvidence, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
   extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates, unregisteredOcrLines,
-  classifyKeywordMatch, matchedKeywordDetail
+  classifyKeywordMatch, findOneCharMistake, matchedKeywordDetail
 };
