@@ -32,7 +32,7 @@
 const Report = (() => {
   let A, sub = 'personal', data = null, chart = null, ro = null;
   let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
-  let page = 1, presenting = false, wmSelectedWeek = null;
+  let page = 1, presenting = false, wmSelectedWeek = null, deleteSlideId = null;
 
   const METRIC_FIELDS = [
     ['pageviews', '浏览量', 'sum', 'count'],
@@ -579,13 +579,41 @@ const Report = (() => {
     }
   }
 
-  /* ── 页面切换：报告分两页，分别对应原周报 PPT 的第 1、2 页 ── */
+  function slidePages() { return data?.slides || []; }
+  function totalPages() { return 2 + slidePages().length; }
+  function syncSlidePages() {
+    const tabs = A.$('#rpt-custom-tabs'); tabs.replaceChildren();
+    slidePages().forEach((slide, index) => {
+      const wrap = document.createElement('span'); wrap.className = 'rpt-custom-tab' + (page === index + 3 ? ' on' : '');
+      const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.page = String(index + 3); tab.textContent = `第 ${index + 3} 页 · 自定义页`; tab.classList.toggle('on', page === index + 3);
+      tab.onclick = () => switchPage(index + 3); wrap.appendChild(tab);
+      const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'kill'; kill.textContent = '✕'; kill.title = '删除此页';
+      kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(slide.id); }; wrap.appendChild(kill); tabs.appendChild(wrap);
+    });
+    A.$('#rpt-add-page').hidden = presenting;
+  }
+
+  function openDeleteSlide(id) { deleteSlideId = id; A.$('#rpt-delete-page-mask').hidden = false; }
+  function closeDeleteSlide() { deleteSlideId = null; A.$('#rpt-delete-page-mask').hidden = true; }
+  function deleteSlide() {
+    if (!deleteSlideId) return;
+    const index = slidePages().findIndex((slide) => slide.id === deleteSlideId);
+    ReportSlides.deletePage(deleteSlideId); closeDeleteSlide();
+    if (index >= 0 && page >= index + 3) page = Math.max(1, page - 1);
+    syncSlidePages(); switchPage(Math.min(page, totalPages())); A.toast('已删除自定义页');
+  }
+
+  /* ── 页面切换：前两页固定，自定义页接在后面 ── */
   function switchPage(n) {
-    page = n;
+    page = Math.max(1, Math.min(n, totalPages()));
     A.$$('#rpt-page-switch button').forEach((b) => b.classList.toggle('on', Number(b.dataset.page) === n));
-    A.$('#rpt-page-1').hidden = n !== 1;
-    A.$('#rpt-page-2').hidden = n !== 2;
-    if (n === 1 && chart) requestAnimationFrame(() => chart.resize());
+    A.$('#rpt-page-1').hidden = page !== 1;
+    A.$('#rpt-page-2').hidden = page !== 2;
+    const custom = page >= 3;
+    A.$('#rpt-page-custom').hidden = !custom;
+    if (custom) ReportSlides.mountPage(slidePages()[page - 3].id); else ReportSlides.unmountPage();
+    if (page === 1 && chart) requestAnimationFrame(() => chart.resize());
+    syncSlidePages();
   }
 
   /* ── 放映模式：全屏、隐藏顶栏/侧栏，内容放大，方便会议投屏 ── */
@@ -596,6 +624,7 @@ const Report = (() => {
     document.body.classList.add('rpt-presenting');
     A.$('#rpt-present-btn').textContent = '■ 退出放映';
     A.$('#rpt-exit-present').hidden = false;
+    ReportSlides.setPresenting(true); syncSlidePages();
     const fs = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen;
     if (fs) {
       fs.call(document.documentElement)?.catch(() => {
@@ -612,6 +641,7 @@ const Report = (() => {
     document.body.classList.remove('rpt-presenting');
     A.$('#rpt-present-btn').textContent = '▶ 放映模式';
     A.$('#rpt-exit-present').hidden = true;
+    ReportSlides.setPresenting(false); syncSlidePages();
     if (document.fullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document).catch?.(() => {});
     if (chart) requestAnimationFrame(() => chart.resize());
   }
@@ -663,6 +693,9 @@ const Report = (() => {
   async function refresh() {
     try { data = await call('/api/reports/personal/summary'); }
     catch { data = null; }
+    ReportSlides.setPages(data?.slides || []);
+    if (page > totalPages()) page = totalPages();
+    syncSlidePages();
     render();
   }
 
@@ -674,6 +707,7 @@ const Report = (() => {
 
   function init(api) {
     A = api;
+    ReportSlides.init(api);
 
     A.$$('#rpt-switch button').forEach((b) => (b.onclick = () => switchSub(b.dataset.sub)));
 
@@ -694,14 +728,19 @@ const Report = (() => {
     // 主题切换时趋势图重读令牌重绘（图表画在 canvas 里，CSS 变量管不到它）
     document.addEventListener('wb-themechange', () => { if (chart && data) renderTrend(); });
 
-    A.$$('#rpt-page-switch button').forEach((b) => (b.onclick = () => switchPage(Number(b.dataset.page))));
+    A.$$('#rpt-page-switch button[data-page]').forEach((b) => (b.onclick = () => switchPage(Number(b.dataset.page))));
+    A.$('#rpt-add-page').onclick = () => { const slide = ReportSlides.addPage(); syncSlidePages(); switchPage(slidePages().findIndex((p) => p.id === slide.id) + 3); };
+    A.$('#rpt-delete-page-close').onclick = closeDeleteSlide;
+    A.$('#rpt-delete-page-cancel').onclick = closeDeleteSlide;
+    A.$('#rpt-delete-page-confirm').onclick = deleteSlide;
+    A.$('#rpt-delete-page-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-delete-page-mask') closeDeleteSlide(); });
     A.$('#rpt-present-btn').onclick = togglePresent;
     A.$('#rpt-exit-present').onclick = exitPresent;
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) exitPresent(); });
     document.addEventListener('keydown', (e) => {
       if (!presenting) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') switchPage(2);
-      if (e.key === 'ArrowLeft' || e.key === 'PageUp') switchPage(1);
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); switchPage(page + 1); }
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); switchPage(page - 1); }
     });
 
     A.$$('#rpt-range-tabs button').forEach((b) => (b.onclick = () => {

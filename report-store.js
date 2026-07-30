@@ -87,6 +87,40 @@ function recordsFrom(buf, requiredCols) {
   return [];
 }
 
+const SLIDE_ELEMENT_TYPES = new Set(['text', 'image']);
+const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
+const MAX_SLIDE_TEXT_LEN = 4000;
+
+function sanitizeElement(el) {
+  if (!el || typeof el !== 'object' || !SLIDE_ELEMENT_TYPES.has(el.type)) return null;
+  const id = String(el.id || '').trim();
+  if (!id) return null;
+  const x = num(el.x), y = num(el.y), w = num(el.w), h = num(el.h), z = num(el.z);
+  if (w <= 0 || h <= 0) return null;
+  const base = { id, type: el.type, x, y, w, h, z };
+  if (el.type === 'text') return {
+    ...base, text: String(el.text ?? '').slice(0, MAX_SLIDE_TEXT_LEN),
+    fontSize: Math.max(10, Math.min(160, num(el.fontSize) || 28)),
+    color: el.color ? String(el.color).slice(0, 32) : null,
+    bold: !!el.bold, italic: !!el.italic,
+    align: TEXT_ALIGNS.has(el.align) ? el.align : 'left'
+  };
+  const url = String(el.url || '');
+  if (!url.startsWith('/uploads/')) return null;
+  return { ...base, url, naturalW: num(el.naturalW) || w, naturalH: num(el.naturalH) || h };
+}
+
+function sanitizeSlides(input) {
+  if (!Array.isArray(input)) throw new Error('slides 必须是数组');
+  return input.map((page) => {
+    const id = String((page && page.id) || '').trim();
+    if (!id) throw new Error('页面缺少 id');
+    const elements = Array.isArray(page && page.elements)
+      ? page.elements.map(sanitizeElement).filter(Boolean) : [];
+    return { id, elements };
+  });
+}
+
 class ReportStore {
   constructor(dir) { this.dir = dir; }
 
@@ -97,9 +131,10 @@ class ReportStore {
       const s = JSON.parse(await fsp.readFile(this.file(userId), 'utf8'));
       return {
         daily: Array.isArray(s.daily) ? s.daily : [],
-        weimeng: Array.isArray(s.weimeng) ? s.weimeng : []
+        weimeng: Array.isArray(s.weimeng) ? s.weimeng : [],
+        slides: Array.isArray(s.slides) ? s.slides : []
       };
-    } catch { return { daily: [], weimeng: [] }; }
+    } catch { return { daily: [], weimeng: [], slides: [] }; }
   }
 
   async _save(userId, data) {
@@ -150,6 +185,14 @@ class ReportStore {
     data.weimeng = [...map.values()].sort((a, b) => (a.weekStart < b.weekStart ? -1 : a.weekStart > b.weekStart ? 1 : 0));
     await this._save(userId, data);
     return { entry, isNew, total: data.weimeng.length };
+  }
+
+  async slidesSave(userId, input) {
+    const slides = sanitizeSlides(input);
+    const data = await this._load(userId);
+    data.slides = slides;
+    await this._save(userId, data);
+    return { total: slides.length };
   }
 }
 

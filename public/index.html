@@ -253,6 +253,8 @@
         <div class="rpt-page-switch" id="rpt-page-switch">
           <button data-page="1" class="on">第 1 页 · 生意参谋</button>
           <button data-page="2">第 2 页 · 微盟数据</button>
+          <span id="rpt-custom-tabs"></span>
+          <button class="rpt-add-page" id="rpt-add-page" type="button">＋ 新建页面</button>
         </div>
 
         <div class="rpt-page" id="rpt-page-1">
@@ -311,6 +313,8 @@
             <p class="rpt-wm-note" id="rpt-wm-commentary" hidden></p>
           </section>
         </div>
+
+        <div class="rpt-page rpt-page-custom" id="rpt-page-custom" hidden></div>
       </div>
 
       <div class="rv-scroll" id="rpt-public-view" hidden>
@@ -415,6 +419,22 @@
   </div>
 </div>
 
+<div class="sheet-mask" id="rpt-delete-page-mask" hidden>
+  <div class="sheet rpt-delete-page-sheet" role="dialog" aria-modal="true" aria-labelledby="rpt-delete-page-title">
+    <div class="sheet-head">
+      <h2 id="rpt-delete-page-title">删除自定义页</h2>
+      <button class="kill" id="rpt-delete-page-close" aria-label="关闭">✕</button>
+    </div>
+    <div class="sheet-body">
+      <p>确定删除这一页及其所有文字、图片吗？此操作无法撤销。</p>
+      <div class="rpt-delete-page-actions">
+        <button class="ghost" id="rpt-delete-page-cancel">取消</button>
+        <button class="ghost danger" id="rpt-delete-page-confirm">删除页面</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <button class="rpt-exit-present" id="rpt-exit-present" hidden>✕ 退出放映</button>
 
 <script src="/echarts.min.js"></script>
@@ -430,6 +450,7 @@
 <script src="/compare.js"></script>
 <script src="/reviews.js"></script>
 <script src="/preview3d.js"></script>
+<script src="/report-slides.js"></script>
 <script src="/report.js"></script>
 <script src="/materialcheck.js"></script>
 <script>App.boot();</script>

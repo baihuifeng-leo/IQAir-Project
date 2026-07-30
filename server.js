@@ -669,6 +669,15 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, result);
     }
 
+    if (p === '/api/reports/personal/slides/save' && req.method === 'POST') {
+      const input = await body(req);
+      let result;
+      try { result = await reports.slidesSave(me.id, input.slides); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'reports.slides.save', { detail: [`个人报告：自定义页已保存（共 ${result.total} 页）`] });
+      return json(res, 200, result);
+    }
+
     if (p === '/api/materialcheck/libraries' && req.method === 'GET') {
       const platform = url.searchParams.get('platform') || 'tmall';
       if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });

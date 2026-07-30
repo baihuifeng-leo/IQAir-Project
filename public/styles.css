@@ -1609,6 +1609,40 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 }
 .rpt-page-switch button.on { background: var(--mint-dim); color: var(--mint); }
 .rpt-page-switch button:not(.on):hover { color: var(--text); }
+.rpt-page-switch #rpt-custom-tabs { display: contents; }
+.rpt-page-switch .rpt-add-page { border: 1px dashed var(--line); color: var(--mint); }
+.rpt-page-switch .rpt-add-page:hover { border-color: var(--mint); background: var(--mint-dim); }
+.rpt-page-switch .rpt-custom-tab { display: inline-flex; align-items: center; gap: 5px; }
+.rpt-page-switch .rpt-custom-tab .kill { opacity: .7; width: 16px; height: 16px; font-size: 11px; }
+.rpt-page-switch .rpt-custom-tab.on .kill { color: var(--mint); }
+.rpt-delete-page-sheet { width: min(390px, 100%); }
+.rpt-delete-page-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
+
+/* ── 个人报告自定义页：固定 16:9 逻辑画布，按容器等比缩放 ── */
+.rpt-page-custom { min-height: min(720px, 64vw); }
+.rs-shell { display: flex; flex-direction: column; gap: 12px; height: 100%; }
+.rs-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 9px; border: 1px solid var(--line); border-radius: 11px; background: var(--overlay-weak); }
+.rs-toolbar-btn { padding: 6px 10px; font-size: 12px; }
+.rs-toolbar-btn.on { background: var(--mint-dim); color: var(--mint); border-color: var(--mint); }
+.rs-toolbar-btn:disabled { opacity: .4; cursor: not-allowed; }
+.rs-toolbar-size { width: 58px; background: var(--field-bg); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 7px; font-size: 12px; }
+.rs-toolbar-color { width: 31px; height: 31px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }
+.rs-viewport { width: 100%; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 14px; border: 1px solid var(--line); background: var(--surface-2); }
+.rs-canvas { position: relative; width: 1280px; height: 720px; flex: 0 0 auto; transform-origin: center; background: var(--surface); box-shadow: 0 18px 50px #0002; overflow: hidden; }
+.rs-el { position: absolute; box-sizing: border-box; cursor: move; user-select: none; touch-action: none; }
+.rs-el.sel { outline: 1.5px solid var(--mint); outline-offset: 2px; }
+.rs-text { width: 100%; min-height: 34px; white-space: pre-wrap; overflow-wrap: break-word; line-height: 1.3; user-select: text; cursor: text; }
+.rs-text[contenteditable="true"] { outline: 1px dashed var(--mint); background: var(--mint-dim); }
+.rs-image { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+.rs-handle { position: absolute; z-index: 2; background: var(--mint); border: 2px solid var(--surface); }
+.rs-handle-l, .rs-handle-r { top: 50%; width: 7px; height: 24px; border-radius: 5px; transform: translateY(-50%); cursor: ew-resize; }
+.rs-handle-l { left: -5px; }.rs-handle-r { right: -5px; }
+.rs-handle-nw, .rs-handle-ne, .rs-handle-sw, .rs-handle-se { width: 12px; height: 12px; border-radius: 50%; }
+.rs-handle-nw { top: -7px; left: -7px; cursor: nwse-resize; }.rs-handle-ne { top: -7px; right: -7px; cursor: nesw-resize; }
+.rs-handle-sw { bottom: -7px; left: -7px; cursor: nesw-resize; }.rs-handle-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+body.rpt-presenting .rpt-page-custom { display: flex; align-items: center; justify-content: center; }
+body.rpt-presenting .rs-shell { width: min(100%, calc(100vh * 16 / 9)); }
+body.rpt-presenting .rs-viewport { border: 0; border-radius: 0; box-shadow: none; }
 /* .rpt-page-switch 的 margin-bottom:20px 是给独立页面里的分段控件（下面还跟着
    内容）留的间距。评论风向标标题行的「竞品对比/本品分析」切换、3D预览标题行的
    「气泡口径」切换都借用了这个类塞进横排的 flex 工具条里——那 20px 底边距会被
@@ -1784,6 +1818,7 @@ body.rpt-presenting .rpt-page-switch {
   margin: 0 auto 10px; flex: 0 0 auto; padding: 4px;
 }
 body.rpt-presenting .rpt-page-switch button { padding: 6px 18px; font-size: 13px; }
+body.rpt-presenting .rpt-add-page, body.rpt-presenting .rpt-custom-tab .kill { display: none; }
 
 body.rpt-presenting .rpt-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 body.rpt-presenting .rpt-sec-first { margin-top: 0; }
