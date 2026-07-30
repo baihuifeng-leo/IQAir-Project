@@ -272,19 +272,29 @@ class MaterialCheckStore {
     return lib;
   }
 
-  async copyLibrary(platform, sourceLibraryId, name) {
-    this._assertPlatform(platform);
+  async copyLibrary(sourcePlatform, sourceLibraryId, targetPlatform, name, categories) {
+    this._assertPlatform(sourcePlatform);
+    this._assertPlatform(targetPlatform);
     const trimmed = String(name || '').trim();
     if (!trimmed) throw new Error('词库名称不能为空');
-    const idx = this._findLibraryIndex(platform, sourceLibraryId);
-    this._assertUniqueName(platform, trimmed, null);
-    const src = this.platforms[platform].libraries[idx];
+    const selectedCategories = Array.isArray(categories)
+      ? [...new Set(categories.filter((c) => match.CATEGORIES.includes(c)))]
+      : [...match.CATEGORIES];
+    if (!selectedCategories.length) throw new Error('至少选择一个要复制的关键词分类');
+    const idx = this._findLibraryIndex(sourcePlatform, sourceLibraryId);
+    this._assertUniqueName(targetPlatform, trimmed, null);
+    const src = this.platforms[sourcePlatform].libraries[idx];
     const lib = {
       id: makeLibraryId(),
       name: trimmed,
-      products: JSON.parse(JSON.stringify(src.products))
+      // 产品本身的名称、类型、封面和价格仍然保留；只按用户勾选的分类筛掉关键词。
+      // 这样跨平台复制后仍有完整的产品结构，后续可按平台补充各自的文案。
+      products: JSON.parse(JSON.stringify(src.products)).map((product) => ({
+        ...product,
+        keywords: (product.keywords || []).filter((kw) => selectedCategories.includes(match.keywordCategory(kw)))
+      }))
     };
-    this.platforms[platform].libraries.push(lib);
+    this.platforms[targetPlatform].libraries.push(lib);
     await this._persistPlatforms();
     return lib;
   }
