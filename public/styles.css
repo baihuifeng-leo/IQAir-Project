@@ -1907,13 +1907,13 @@ body.rpt-presenting .rpt-wm-note {
 }
 
 /* ═══ 素材质检 (materialcheck) ═══ */
-.mc-subview-switch { display: flex; gap: 6px; }
-.mc-subtab { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line-soft); background: transparent; color: var(--dim); font-size: 12.5px; cursor: pointer; transition: background var(--fast), color var(--fast); }
+.mc-subview-switch { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--field-bg); }
+.mc-subtab { min-height: 32px; padding: 6px 13px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background var(--fast), color var(--fast), border-color var(--fast); }
+.mc-subtab:hover { color: var(--text); background: var(--surface-2); }
+.mc-subtab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .mc-subtab.is-active { background: var(--mint-dim); color: var(--mint); border-color: var(--mint); }
 
-/* 检测页上传入口按素材比例拆成两个并排的区域——1:1 和 3:4 素材的必需词不一样，
-   拖进哪个区域就按哪个比例判定，不需要再额外选一次 */
-.mc-upload-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+/* 检测页统一上传入口：服务端按真实尺寸自动归类为 1:1 或 3:4，再匹配对应必需词。 */
 .mc-upload-zone { border: 2px dashed var(--line-soft); border-radius: 14px; padding: 40px; text-align: center; color: var(--dim); cursor: pointer; transition: border-color var(--fast); }
 .mc-upload-zone strong { display: block; margin-bottom: 6px; color: var(--text); font-size: 14px; }
 .mc-upload-zone:hover, .mc-upload-zone.drop-hot { border-color: var(--mint); }

@@ -71,8 +71,7 @@ function classifyRatioFromSize(size) {
   return null;
 }
 
-/** claimedRatio 是用户选的入口（1:1/3:4 两个上传按钮之一），跟素材实际像素比例
- *  对不上就给一条软提示——不拦截、不改判定用的比例，判定始终以入口选择为准。 */
+/** claimedRatio 是旧版双入口传来的比例。新入口不再声明比例，改由图片真实尺寸自动判定。 */
 function ratioMismatchWarning(claimedRatio, buf) {
   if (!claimedRatio) return null;
   const detected = classifyRatioFromSize(sniffImageSize(buf));
@@ -369,13 +368,22 @@ class MaterialCheckStore {
     }
   }
 
-  async detectFile({ buf, ext, filename, batchId, uploadedBy, platform, libraryId, ratio, ocr = runOcr }) {
+  async detectFile({ buf, ext, filename, batchId, uploadedBy, platform, libraryId, ratio, requireDetectedRatio = false, ocr = runOcr }) {
     this._assertPlatform(platform);
     const lib = this.getLibrary(platform, libraryId);
     if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
     if (!lib.products.length) throw new Error('还没有配置任何产品的关键词，先去「关键词库」里加一个产品');
 
     const claimedRatio = match.RATIOS.includes(ratio) ? ratio : null;
+    const detectedRatio = classifyRatioFromSize(sniffImageSize(buf));
+    // 新版统一上传入口没有 ratio；只有能明确归入两种素材规格的图片才进入 OCR。
+    // 底层调用仍可省略比例，兼容旧页面与测试夹具。
+    if (requireDetectedRatio && !claimedRatio && !detectedRatio) {
+      const size = sniffImageSize(buf);
+      const measured = size ? `${size.width}×${size.height}` : '无法读取尺寸';
+      throw new Error(`素材比例不符合要求（检测到 ${measured}），只支持接近 1:1 或 3:4 的图片`);
+    }
+    const effectiveRatio = claimedRatio || detectedRatio;
 
     const name = crypto.randomBytes(9).toString('hex') + ext;
     const imagePath = path.join(this.uploadDir, name);
@@ -391,7 +399,7 @@ class MaterialCheckStore {
     } catch (e) {
       const record = {
         id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId: lib.id,
-        filename, imagePath: url, productId: null, productName: null, matchMethod: null, ratio: claimedRatio,
+        filename, imagePath: url, productId: null, productName: null, matchMethod: null, ratio: effectiveRatio,
         ocrText: '', ocrConfidence: null, missingKeywords: [], extraKeywords: [], unregisteredKeywords: [], status: 'ocr_failed', warning: e.message
       };
       await this.append(record);
@@ -407,7 +415,7 @@ class MaterialCheckStore {
       this._cleanupPending();
       const pendingId = 'mcp_' + crypto.randomBytes(6).toString('hex');
       this.pending.set(pendingId, {
-        imagePath: url, filename, ocrText, ocrConfidence, batchId, uploadedBy, platform, libraryId: lib.id, ratio: claimedRatio, ratioMismatch, expiresAt: Date.now() + PENDING_TTL_MS
+        imagePath: url, filename, ocrText, ocrConfidence, batchId, uploadedBy, platform, libraryId: lib.id, ratio: effectiveRatio, ratioMismatch, expiresAt: Date.now() + PENDING_TTL_MS
       });
       return { needsManualPick: true, pendingId, ocrText, filename, candidates: resolution.candidates, lowConfidence, ratioMismatch };
     }
@@ -420,7 +428,7 @@ class MaterialCheckStore {
 
     return this._finish({
       platform, libraryId: lib.id, product: resolution.product, allProducts: lib.products, method: resolution.method,
-      ocrText, ocrConfidence, imagePath: url, filename, batchId, uploadedBy, warning, ratio: claimedRatio
+      ocrText, ocrConfidence, imagePath: url, filename, batchId, uploadedBy, warning, ratio: effectiveRatio
     });
   }
 

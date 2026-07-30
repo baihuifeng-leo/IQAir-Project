@@ -11,6 +11,8 @@ const MaterialCheck = (() => {
   const RATIO_OPTIONS = ['both', '1:1', '3:4'];
   const RATIO_LABEL = { both: '通用', '1:1': '仅1:1', '3:4': '仅3:4' };
   const RATIO_CLASS = { both: 'mc-ratio-both', '1:1': 'mc-ratio-11', '3:4': 'mc-ratio-34' };
+  const DETECT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+  const DETECT_CACHE_KEY = 'mc-detect-batches-v1';
   // pass/warn/error 是新三态；fail 是 v2 上线前的旧记录留下的值，不迁移，历史筛选里仍要能选到
   const STATUS_META = {
     pass: { cls: 'mc-row-ok', badge: '✓ 通过' },
@@ -100,42 +102,86 @@ const MaterialCheck = (() => {
   }
 
   // ── 检测台 ──────────────────────────────────────────
-  // 1:1 和 3:4 素材的文案不完全一样（词库那边已经按比例细分了必需词），
-  // 检测时必须知道这张图是哪个比例才能套对应的必需词子集，所以入口按比例拆成两个，
-  // 而不是一个入口再让用户额外选一次——拖进哪个区域就按哪个比例处理。
+  function loadCachedDetectBatches() {
+    try {
+      const now = Date.now();
+      const all = JSON.parse(localStorage.getItem(DETECT_CACHE_KEY) || '[]');
+      const active = Array.isArray(all) ? all.filter((b) => b.createdAt && now - b.createdAt < DETECT_CACHE_TTL_MS) : [];
+      localStorage.setItem(DETECT_CACHE_KEY, JSON.stringify(active));
+      return active;
+    } catch (_) { return []; }
+  }
+
+  function saveCachedDetectBatches(batches) {
+    try { localStorage.setItem(DETECT_CACHE_KEY, JSON.stringify(batches)); } catch (_) { /* 本地空间不足时不影响检测 */ }
+  }
+
+  function cacheDetectResult(batch, result) {
+    if (result.needsManualPick) return; // 待人工选择的临时凭据只有 30 分钟有效，不跨刷新保存
+    const batches = loadCachedDetectBatches();
+    const found = batches.find((b) => b.id === batch.id);
+    if (!found) batches.unshift(batch);
+    const target = found || batch;
+    const index = target.results.findIndex((r) => r.filename === result.filename && r.imagePath === result.imagePath);
+    if (index >= 0) target.results[index] = result;
+    else target.results.push(result);
+    saveCachedDetectBatches(batches);
+  }
+
+  function addDetectBatch(list, batchData, { restored = false } = {}) {
+    const batch = document.createElement('details');
+    batch.className = 'mc-detect-batch';
+    batch.open = !restored;
+    const label = restored ? `保留记录 · ${new Date(batchData.createdAt).toLocaleString('zh-CN', { hour12: false })}` : '本次上传';
+    batch.innerHTML = `<summary><span class="mc-history-batch-title">${label}</span><span class="mc-history-batch-count">${batchData.results.length} 张素材</span></summary><div class="mc-detect-batch-rows"></div>`;
+    list.prepend(batch);
+    return batch.querySelector('.mc-detect-batch-rows');
+  }
+
+  function restoreCachedDetectBatches() {
+    const list = A.$('#mc-result-list');
+    loadCachedDetectBatches()
+      .filter((b) => b.platform === platform && b.libraryId === libraryId && Array.isArray(b.results) && b.results.length)
+      .reverse()
+      .forEach((b) => {
+        const rows = addDetectBatch(list, b, { restored: true });
+        b.results.forEach((result) => {
+          const row = document.createElement('div');
+          rows.append(row);
+          renderResult(row, result);
+        });
+      });
+  }
+
+  // 统一入口由服务端根据图片真实尺寸归为 1:1 或 3:4，再使用对应的关键词子集。
   function renderCheckView() {
     const el = A.$('#mc-check-view');
     el.innerHTML = `
-      <div class="mc-upload-row">
-        <div class="mc-upload-zone" id="mc-upload-zone-11"><strong>1:1 素材</strong><br>点击选择图片，或拖进这个区域（支持多选批量上传）</div>
-        <div class="mc-upload-zone" id="mc-upload-zone-34"><strong>3:4 素材</strong><br>点击选择图片，或拖进这个区域（支持多选批量上传）</div>
-      </div>
-      <input type="file" id="mc-file-11" accept="image/png,image/jpeg,image/webp" multiple hidden>
-      <input type="file" id="mc-file-34" accept="image/png,image/jpeg,image/webp" multiple hidden>
+      <div class="mc-upload-zone" id="mc-upload-zone"><strong>上传待检测素材</strong><br>点击选择图片，或拖进这个区域（支持多选；系统自动识别 1:1 或 3:4）</div>
+      <input type="file" id="mc-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
       <div class="mc-batch-summary" id="mc-batch-summary"></div>
       <div class="mc-progress" id="mc-progress" hidden><div class="mc-progress-bar" id="mc-progress-bar"></div></div>
       <div id="mc-result-list"></div>`;
 
-    [['11', '1:1'], ['34', '3:4']].forEach(([suffix, ratio]) => {
-      const zone = A.$(`#mc-upload-zone-${suffix}`);
-      const fileInput = A.$(`#mc-file-${suffix}`);
-      zone.onclick = () => fileInput.click();
-      fileInput.onchange = (e) => {
-        const files = [...e.target.files];
-        e.target.value = '';
-        if (files.length) uploadFiles(files, ratio);
-      };
-      ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('drop-hot'); }));
-      ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, () => zone.classList.remove('drop-hot')));
-      zone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const files = [...e.dataTransfer.files].filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type));
-        if (files.length) uploadFiles(files, ratio);
-      });
+    const zone = A.$('#mc-upload-zone');
+    const fileInput = A.$('#mc-file');
+    zone.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      const files = [...e.target.files];
+      e.target.value = '';
+      if (files.length) uploadFiles(files);
+    };
+    ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('drop-hot'); }));
+    ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, () => zone.classList.remove('drop-hot')));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const files = [...e.dataTransfer.files].filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type));
+      if (files.length) uploadFiles(files);
     });
+    restoreCachedDetectBatches();
   }
 
-  async function uploadFiles(fileList, ratio) {
+  async function uploadFiles(fileList) {
     if (!products.length) return A.toast('先去「关键词库」配置至少一个产品', 'bad');
     const batchId = Date.now().toString(36) + Math.random().toString(36).slice(2);
     const uploadPlatform = platform;
@@ -144,12 +190,8 @@ const MaterialCheck = (() => {
     const summary = A.$('#mc-batch-summary');
     const progress = A.$('#mc-progress');
     const progressBar = A.$('#mc-progress-bar');
-    const batch = document.createElement('details');
-    batch.className = 'mc-detect-batch';
-    batch.open = true;
-    batch.innerHTML = `<summary><span class="mc-history-batch-title">本次上传 · ${ratio} 素材</span><span class="mc-history-batch-count">${fileList.length} 张素材</span></summary><div class="mc-detect-batch-rows"></div>`;
-    const batchRows = batch.querySelector('.mc-detect-batch-rows');
-    list.prepend(batch);
+    const cachedBatch = { id: `local_${batchId}`, createdAt: Date.now(), platform: uploadPlatform, libraryId: uploadLibraryId, results: [] };
+    const batchRows = addDetectBatch(list, { ...cachedBatch, results: fileList }, {});
 
     const rows = fileList.map((file) => {
       const row = document.createElement('div');
@@ -176,7 +218,7 @@ const MaterialCheck = (() => {
       entry.row.innerHTML = `<span class="mc-row-name">${escapeHtml(entry.file.name)}</span><span class="mc-row-status"><i class="mc-spin"></i> 识别中…</span>`;
       updateSummary();
       try {
-        const result = await call(`/api/materialcheck/upload?filename=${encodeURIComponent(entry.file.name)}&batchId=${encodeURIComponent(batchId)}&platform=${encodeURIComponent(uploadPlatform)}&libraryId=${encodeURIComponent(uploadLibraryId)}&ratio=${encodeURIComponent(ratio)}`, {
+        const result = await call(`/api/materialcheck/upload?filename=${encodeURIComponent(entry.file.name)}&batchId=${encodeURIComponent(batchId)}&platform=${encodeURIComponent(uploadPlatform)}&libraryId=${encodeURIComponent(uploadLibraryId)}`, {
           method: 'POST',
           headers: { 'Content-Type': entry.file.type },
           body: entry.file
@@ -184,8 +226,9 @@ const MaterialCheck = (() => {
         entry.state = result.needsManualPick ? 'needsPick' : 'done';
         renderResult(entry.row, result, {
           onRetry: () => runOne(entry),
-          onResolved: () => { entry.state = 'done'; updateSummary(); }
+          onResolved: (resolved) => { entry.state = 'done'; cacheDetectResult(cachedBatch, resolved); updateSummary(); }
         });
+        cacheDetectResult(cachedBatch, result);
       } catch (e) {
         entry.state = 'done';
         entry.row.className = 'mc-row mc-row-error';
@@ -406,7 +449,7 @@ const MaterialCheck = (() => {
             body: JSON.stringify({ pendingId: result.pendingId, productId })
           });
           renderResult(row, resolved, ctx);
-          if (ctx.onResolved) ctx.onResolved();
+          if (ctx.onResolved) ctx.onResolved(resolved);
         } catch (e) { A.toast(e.message, 'bad'); }
       };
       return;
