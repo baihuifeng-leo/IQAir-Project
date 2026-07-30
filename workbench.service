@@ -14,6 +14,9 @@ ExecStart=/usr/bin/node /opt/workbench/server.js
 Environment=NODE_ENV=production
 Environment=PORT=8090
 Environment=DATA_DIR=/var/lib/workbench
+# PaddleOCR/PaddleX 默认把模型与临时文件写进 $HOME；服务用户没有 home，
+# 因此显式复用可写、持久化的数据目录。
+Environment=HOME=/var/lib/workbench
 Environment=TZ=Asia/Shanghai
 # 只在第一次启动、还没有 users.json 时用来创建管理员
 Environment=ADMIN_USER=admin
