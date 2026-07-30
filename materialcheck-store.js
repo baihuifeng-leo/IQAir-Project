@@ -353,7 +353,13 @@ class MaterialCheckStore {
     if (productId) rows = rows.filter((r) => r.productId === productId);
     if (status) rows = rows.filter((r) => r.status === status);
     if (uploadedBy) rows = rows.filter((r) => r.uploadedBy === uploadedBy);
-    return rows.slice(-limit).reverse();
+    return rows.slice(-limit).reverse().map((record) => {
+      if (Array.isArray(record.unregisteredKeywords)) return record;
+      const lib = this.getLibrary(record.platform, record.libraryId);
+      const product = lib && lib.products.find((p) => p.id === record.productId);
+      // 旧记录没有保存这个字段时，用当前词库即时补算，保证历史详情也能看到提示。
+      return product ? { ...record, unregisteredKeywords: match.unregisteredOcrLines(record.ocrText, lib.products) } : record;
+    });
   }
 
   _cleanupPending() {
@@ -386,7 +392,7 @@ class MaterialCheckStore {
       const record = {
         id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId: lib.id,
         filename, imagePath: url, productId: null, productName: null, matchMethod: null, ratio: claimedRatio,
-        ocrText: '', ocrConfidence: null, missingKeywords: [], extraKeywords: [], status: 'ocr_failed', warning: e.message
+        ocrText: '', ocrConfidence: null, missingKeywords: [], extraKeywords: [], unregisteredKeywords: [], status: 'ocr_failed', warning: e.message
       };
       await this.append(record);
       return record;
@@ -481,11 +487,11 @@ class MaterialCheckStore {
   }
 
   async _finish({ platform, libraryId, product, allProducts, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning, ratio }) {
-    const { missingKeywords, extraKeywords, priceIssue, status, matchedKeywords } = match.matchAgainstProduct(ocrText, product, allProducts, ratio);
+    const { missingKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords } = match.matchAgainstProduct(ocrText, product, allProducts, ratio);
     const record = {
       id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId,
       filename, imagePath, productId: product.id, productName: product.name, matchMethod: method, ratio,
-      ocrText, ocrConfidence, missingKeywords, extraKeywords, priceIssue, status, warning, matchedKeywords
+      ocrText, ocrConfidence, missingKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, warning, matchedKeywords
     };
     await this.append(record);
     return record;

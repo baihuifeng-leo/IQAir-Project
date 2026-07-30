@@ -212,6 +212,17 @@ async function run() {
     assert.strictEqual(r.status, 'pass');
   });
 
+  t('matchAgainstProduct 未入库 OCR 词只提示、不影响通过，并且已知串词不重复列入', () => {
+    const r = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX\nSF', productA, products);
+    assert.deepStrictEqual(r.extraKeywords, []);
+    assert.deepStrictEqual(r.unregisteredKeywords, ['SF']);
+    assert.strictEqual(r.status, 'pass');
+
+    const withCrossedProduct = M.matchAgainstProduct('GC-Multi 抗菌滤网认证号XXX\nGCX XE', productA, products);
+    assert.deepStrictEqual(withCrossedProduct.extraKeywords, ['GCX XE']);
+    assert.deepStrictEqual(withCrossedProduct.unregisteredKeywords, []);
+  });
+
   t('matchAgainstProduct 缺词判定为提醒状态', () => {
     const r = M.matchAgainstProduct('GC-Multi', productA, products);
     assert.deepStrictEqual(r.missingKeywords, ['抗菌滤网认证号XXX']);

@@ -347,7 +347,10 @@ const MaterialCheck = (() => {
       detail += `<div class="mc-chip-row">缺词：${result.missingKeywords.map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('')}</div>`;
     }
     if (result.extraKeywords?.length) {
-      detail += `<div class="mc-chip-row">多出的词：${result.extraKeywords.map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('')}</div>`;
+      detail += `<div class="mc-chip-row">串词：${result.extraKeywords.map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('')}</div>`;
+    }
+    if (result.unregisteredKeywords?.length) {
+      detail += `<div class="mc-chip-row mc-unregistered-row"><b>未入库词：</b><span class="mc-unregistered-note">仅供核对，不影响通过</span>${result.unregisteredKeywords.map((k) => `<span class="mc-chip mc-chip-note">${escapeHtml(k)}</span>`).join('')}</div>`;
     }
     if (result.priceIssue) {
       detail += `<div class="mc-chip-row">价格不对：<span class="mc-chip mc-chip-bad">${priceIssueLabel(result.priceIssue)}</span></div>`;
@@ -491,14 +494,16 @@ const MaterialCheck = (() => {
       html = html.split(escapeHtml(k)).join(`<mark class="mc-mark-bad">${escapeHtml(k)}</mark>`);
     });
     const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('') || '（无缺词）';
-    const extra = (r.extraKeywords || []).map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('') || '（无多出的词）';
+    const extra = (r.extraKeywords || []).map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('') || '（无串词）';
+    const unregistered = (r.unregisteredKeywords || []).map((k) => `<span class="mc-chip mc-chip-note">${escapeHtml(k)}</span>`).join('') || '（无未入库词）';
     const priceRow = r.priceIssue
       ? `<div class="mc-chip-row"><b>价格：</b><span class="mc-chip mc-chip-bad">${priceIssueLabel(r.priceIssue)}</span></div>`
       : '';
     detailBody.innerHTML = `
       <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')} ${sourcePreviewHtml(r.imagePath, r.filename)}</p>
       <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
-      <div class="mc-chip-row"><b>多出的词：</b>${extra}</div>
+      <div class="mc-chip-row"><b>串词：</b>${extra}</div>
+      <div class="mc-chip-row mc-unregistered-row"><b>未入库词：</b><span class="mc-unregistered-note">仅供核对，不影响通过</span>${unregistered}</div>
       ${priceRow}
       ${keywordDetailHtml(r.matchedKeywords, { open: true, emptyMessage: '这条历史记录没有保存逐词处理明细。' })}
       <pre class="mc-ocr-text">${html}</pre>`;

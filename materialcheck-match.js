@@ -209,6 +209,34 @@ function buildKeywordCandidates(ocrText, product) {
   return candidates;
 }
 
+/**
+ * 检测台的「未入库词」提示：按 OCR 行找出整套词库都没有登记过的文本。
+ *
+ * 这不是串词，也不会影响通过状态；它的作用是把设计稿中意外混入的文案、标识或
+ * OCR 误识别交给人核对。与自动建词候选不同，这里按整套词库排除已知词，避免把
+ * 已能归属到其它产品的词重复显示为「未入库」——那类内容应只显示在「串词」里。
+ */
+function unregisteredOcrLines(ocrText, allProducts) {
+  const registered = new Set();
+  (allProducts || []).forEach((product) => {
+    (product.keywords || []).forEach((kw) => registered.add(normalize(keywordText(kw))));
+  });
+  const registeredLongestFirst = [...registered].filter(Boolean).sort((a, b) => b.length - a.length);
+  const seen = new Set();
+  const lines = [];
+  String(ocrText || '').split('\n').forEach((raw) => {
+    const line = raw.trim();
+    const norm = normalize(line);
+    // 一行可能把两个已登记词紧挨着识别出来；逐个移除后没有残留，也算已入库，
+    // 不能因为 OCR 的换行合并而误报为未入库词。
+    const remainder = registeredLongestFirst.reduce((rest, keyword) => rest.split(keyword).join(''), norm);
+    if (!norm || seen.has(norm) || !remainder || isPriceLikeLine(line)) return;
+    seen.add(norm);
+    lines.push(line);
+  });
+  return lines;
+}
+
 function resolveByFilename(filename, products) {
   const norm = normalize(filename).toLowerCase();
   const matches = products.filter((p) => norm.includes(normalize(p.name).toLowerCase()));
@@ -248,7 +276,7 @@ function crossCheckWarning(resolvedProduct, ocrText, products) {
   return null;
 }
 
-// "多出的词"（跨产品串词）判定要求这个词得有"认得出是哪个产品"的辨识力——像品牌
+// 「串词」（跨产品关键词）判定要求这个词得有"认得出是哪个产品"的辨识力——像品牌
 // logo、"瑞士制造"这种到处都有的通用文案，本身就不该被当成串词信号。阈值按实测
 // 词库分布定：真正跨产品共享的通用文案（IQAir/Swiss Made/满赠文案等）多是 7~23 个
 // 产品共有，个别产品自己专属的词最多也就在 1~2 个产品间意外重复，3 是能把两者分开
@@ -256,7 +284,7 @@ function crossCheckWarning(resolvedProduct, ocrText, products) {
 const CROSS_CHECK_COMMON_THRESHOLD = 3;
 
 /** 在 allProducts 范围内，统计每个关键词（归一化后）分别在多少个不同产品自己的
- *  词库里出现过；达到阈值就说明这个词没有辨识力，不该拿来做"多出的词"跨产品判定
+ *  词库里出现过；达到阈值就说明这个词没有辨识力，不该拿来做「串词」跨产品判定
  *  ——不影响它本身"缺不缺词"的校验，只影响是否被当成串词信号。 */
 function commonKeywordTexts(allProducts, threshold) {
   const counts = new Map();
@@ -279,14 +307,14 @@ function commonKeywordTexts(allProducts, threshold) {
  * 重复出现，互不冲突（不再要求全局唯一）。
  *
  * 缺词 = 本产品自己清单里的词，没能在素材文字里找到。
- * 多出的词 = 素材文字里出现了某个别的产品的词，但这个词不在本产品自己清单里，
+ * 串词 = 素材文字里出现了某个别的产品的词，但这个词不在本产品自己清单里，
  * 且这个词没有被判定为通用词（见 commonKeywordTexts）——如果这个词本产品也有
  * （说明是有意重复录入的共享词），就不算多出的，是正常的自己的词。
  *
- * 价格 = product.price 配置了预期价格时的强校验，跟"多出的词"同级——图里的价格跟
+ * 价格 = product.price 配置了预期价格时的强校验，跟「串词」同级——图里的价格跟
  * 预期对不上（不管是写错了还是压根没出现），都直接算报错，不走缺词那套"提醒"档位。
  *
- * 三态严重程度是固定规则，不做成可配置项：多出的词/价格不对 > 缺词 > 通过。
+ * 三态严重程度是固定规则，不做成可配置项：串词/价格不对 > 缺词 > 通过。
  */
 function matchAgainstProduct(text, product, allProducts, materialRatio) {
   const missingKeywords = (product.keywords || [])
@@ -322,16 +350,17 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
   });
 
   const priceIssue = checkPrice(text, product);
+  const unregisteredKeywords = unregisteredOcrLines(text, allProducts);
 
   const status = (extraKeywords.length > 0 || priceIssue) ? 'error' : missingKeywords.length > 0 ? 'warn' : 'pass';
   const matchedKeywords = matchedKeywordDetail(text, product, materialRatio);
-  return { missingKeywords, extraKeywords, priceIssue, status, matchedKeywords };
+  return { missingKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords };
 }
 
 module.exports = {
   CATEGORIES, PRODUCT_TYPES, RATIOS, CROSS_CHECK_COMMON_THRESHOLD,
   normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
-  extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates,
+  extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates, unregisteredOcrLines,
   classifyKeywordMatch, matchedKeywordDetail
 };
