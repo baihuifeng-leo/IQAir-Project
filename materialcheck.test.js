@@ -644,10 +644,10 @@ async function run() {
     await assert.rejects(store.createLibrary(PF, '  '), /不能为空/);
   });
 
-  await tAsync('copyLibrary 复制出内容一致但 id 不同的新词库，不带检测历史', async () => {
+  await tAsync('copyLibrary 同平台复制出内容一致但 id 不同的新词库，不带检测历史', async () => {
     const store = await freshStore();
     const srcId = store.getLibrary(PF).id;
-    const copy = await store.copyLibrary(PF, srcId, '复制版');
+    const copy = await store.copyLibrary(PF, srcId, PF, '复制版');
     assert.notStrictEqual(copy.id, srcId);
     assert.strictEqual(copy.products.length, 2);
     // 复制后的产品是深拷贝，改动互不影响
@@ -657,7 +657,27 @@ async function run() {
 
   await tAsync('copyLibrary 源词库不存在时拒绝', async () => {
     const store = await freshStore();
-    await assert.rejects(store.copyLibrary(PF, 'lib_不存在', '新名字'), /不存在/);
+    await assert.rejects(store.copyLibrary(PF, 'lib_不存在', PF, '新名字'), /不存在/);
+  });
+
+  await tAsync('copyLibrary 可跨平台复制，并只带走选中分类的关键词', async () => {
+    const store = await freshStore();
+    const srcId = store.getLibrary('tmall').id;
+    const sourceProducts = [
+      { id: 'p1', name: '产品A', type: 'machine', keywords: [
+        { text: '型号A', category: '产品型号', ratio: 'both' },
+        { text: '利益点A', category: '产品利益点', ratio: '3:4' }
+      ] },
+      { id: 'p2', name: '产品B', type: 'filter', keywords: [
+        { text: '权益B', category: '大促销售权益', ratio: 'both' }
+      ] }
+    ];
+    await store.saveProducts('tmall', srcId, sourceProducts);
+    const copy = await store.copyLibrary('tmall', srcId, 'jd', '京东型号词库', ['产品型号']);
+    assert.strictEqual(copy.name, '京东型号词库');
+    assert.strictEqual(store.listLibraries('jd').some((l) => l.id === copy.id), true);
+    assert.deepStrictEqual(copy.products.map((p) => p.keywords.map((k) => k.text)), [['型号A'], []]);
+    assert.strictEqual(copy.products[0].id, 'p1');
   });
 
   await tAsync('renameLibrary 改名，跟同平台已有名字冲突时拒绝', async () => {

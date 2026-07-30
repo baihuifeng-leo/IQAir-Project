@@ -689,16 +689,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/api/materialcheck/libraries/copy' && req.method === 'POST') {
-      const platform = url.searchParams.get('platform') || 'tmall';
-      if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
       if (!me.admin && me.materialLibraryRole !== 'edit') return json(res, 403, { error: '没有编辑关键词库的权限' });
-      const { sourceId, name } = await body(req, 4096);
+      const { sourcePlatform, sourceId, targetPlatform, name, categories } = await body(req, 4096);
       if (!sourceId) return json(res, 400, { error: '缺少要复制的词库' });
+      if (!MATERIALCHECK_PLATFORMS.includes(sourcePlatform) || !MATERIALCHECK_PLATFORMS.includes(targetPlatform)) {
+        return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
+      }
       let lib;
-      try { lib = await materialcheck.copyLibrary(platform, sourceId, name); }
+      try { lib = await materialcheck.copyLibrary(sourcePlatform, sourceId, targetPlatform, name, categories); }
       catch (e) { return json(res, 400, { error: e.message }); }
-      const platformLabel = platform === 'tmall' ? '天猫' : '京东';
-      audit(me, 'materialcheck.library.copy', { detail: [`${platformLabel}复制出新词库「${lib.name}」`] });
+      const platformLabel = (p) => p === 'tmall' ? '天猫' : '京东';
+      audit(me, 'materialcheck.library.copy', { detail: [`从${platformLabel(sourcePlatform)}复制到${platformLabel(targetPlatform)}新词库「${lib.name}」`] });
       return json(res, 200, lib);
     }
 

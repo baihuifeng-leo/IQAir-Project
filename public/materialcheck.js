@@ -1269,6 +1269,31 @@ const MaterialCheck = (() => {
             <button class="mc-btn mc-btn-primary" id="mc-lib-name-confirm">确定</button>
             <button class="mc-btn" id="mc-lib-name-cancel">取消</button>
           </div>
+          <section class="mc-copy-form" id="mc-copy-form" hidden aria-label="复制词库设置">
+            <div class="mc-copy-form-head">
+              <b>复制词库</b>
+              <span id="mc-copy-source"></span>
+            </div>
+            <label class="mc-copy-field">复制到
+              <select id="mc-copy-target-platform" aria-label="目标平台">
+                <option value="tmall">天猫</option>
+                <option value="jd">京东</option>
+              </select>
+            </label>
+            <label class="mc-copy-field mc-copy-name-field">新词库名称
+              <input id="mc-copy-name-input" placeholder="词库名称…" aria-label="新词库名称">
+            </label>
+            <div class="mc-copy-categories">
+              <div class="mc-copy-categories-head"><b>复制关键词分类</b><button type="button" class="mc-btn mc-btn-mini" id="mc-copy-toggle-categories">全不选</button></div>
+              <div class="mc-copy-category-list">
+                ${CATEGORIES.map((category) => `<label class="mc-copy-category"><input type="checkbox" value="${escapeHtml(category)}" checked><span>${escapeHtml(category)}</span></label>`).join('')}
+              </div>
+            </div>
+            <div class="mc-copy-actions">
+              <button class="mc-btn mc-btn-primary" id="mc-copy-confirm">复制词库</button>
+              <button class="mc-btn" id="mc-copy-cancel">取消</button>
+            </div>
+          </section>
           <span class="mc-lib-spacer"></span>
           <button class="mc-btn" id="mc-lib-autobuild-11">批量识别 1:1 素材…</button>
           <button class="mc-btn" id="mc-lib-autobuild-34">批量识别 3:4 素材…</button>
@@ -1495,17 +1520,67 @@ const MaterialCheck = (() => {
       finally { btn.disabled = false; }
     };
 
-    // 词库操作：新建/复制/重命名共用同一条内联输入行，删除走 confirm() 二次确认
+    // 新建/重命名共用内联输入行；复制独立展示来源、目标平台与分类筛选，避免把
+    // “从哪里复制、复制到哪里、复制哪些词”藏在一次确认之后。
     let opMode = null;
     const nameRow = A.$('#mc-lib-name-row');
     const nameInput = A.$('#mc-lib-name-input');
+    const copyForm = A.$('#mc-copy-form');
+    const copySource = A.$('#mc-copy-source');
+    const copyTarget = A.$('#mc-copy-target-platform');
+    const copyName = A.$('#mc-copy-name-input');
     const showNameRow = (mode, prefill = '') => { opMode = mode; nameRow.hidden = false; nameInput.value = prefill; nameInput.focus(); };
     const hideNameRow = () => { opMode = null; nameRow.hidden = true; nameInput.value = ''; };
+    const hideCopyForm = () => { copyForm.hidden = true; copyName.value = ''; };
+    const showCopyForm = () => {
+      const source = libraries.find((l) => l.id === libraryId);
+      copySource.textContent = `来源：${platform === 'tmall' ? '天猫' : '京东'} · ${source?.name || '当前词库'}`;
+      copyTarget.value = platform === 'tmall' ? 'jd' : 'tmall';
+      copyName.value = `${source?.name || '词库'}（复制）`;
+      copyForm.querySelectorAll('input[type="checkbox"]').forEach((input) => { input.checked = true; });
+      copyForm.hidden = false;
+      copyName.focus();
+    };
 
     A.$('#mc-lib-op-new').onclick = () => showNameRow('new');
-    A.$('#mc-lib-op-copy').onclick = () => showNameRow('copy');
+    A.$('#mc-lib-op-copy').onclick = showCopyForm;
     A.$('#mc-lib-op-rename').onclick = () => showNameRow('rename', libraries.find((l) => l.id === libraryId)?.name || '');
     A.$('#mc-lib-name-cancel').onclick = hideNameRow;
+    A.$('#mc-copy-cancel').onclick = hideCopyForm;
+
+    A.$('#mc-copy-toggle-categories').onclick = (e) => {
+      const boxes = [...copyForm.querySelectorAll('input[type="checkbox"]')];
+      const shouldSelectAll = boxes.some((box) => !box.checked);
+      boxes.forEach((box) => { box.checked = shouldSelectAll; });
+      e.currentTarget.textContent = shouldSelectAll ? '全不选' : '全选';
+    };
+
+    const copyConfirmBtn = A.$('#mc-copy-confirm');
+    copyConfirmBtn.onclick = withBusy(copyConfirmBtn, async () => {
+      const name = copyName.value.trim();
+      const categories = [...copyForm.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value);
+      if (!name) return A.toast('名字不能为空', 'bad');
+      if (!categories.length) return A.toast('至少选择一个要复制的关键词分类', 'bad');
+      clearTimeout(autoSaveTimer);
+      try {
+        const targetPlatform = copyTarget.value;
+        const lib = await call('/api/materialcheck/libraries/copy', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourcePlatform: platform, sourceId: libraryId, targetPlatform, name, categories })
+        });
+        platform = targetPlatform;
+        libraryId = lib.id;
+        sessionStorage.setItem('mc-platform', platform);
+        sessionStorage.setItem(`mc-library-${platform}`, libraryId);
+        A.$('#mc-platform-switch').value = platform;
+        await loadLibraries();
+        await loadProducts();
+        renderLibrarySwitch();
+        hideCopyForm();
+        A.toast(`已复制到${platform === 'tmall' ? '天猫' : '京东'}词库`);
+        renderLibrary();
+      } catch (e) { A.toast(e.message, 'bad'); }
+    });
 
     const confirmName = async () => {
       const name = nameInput.value.trim();
@@ -1521,15 +1596,6 @@ const MaterialCheck = (() => {
           await loadLibraries();
           await loadProducts();
           A.toast('已新建词库');
-        } else if (opMode === 'copy') {
-          const lib = await call(`/api/materialcheck/libraries/copy?platform=${encodeURIComponent(platform)}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceId: libraryId, name })
-          });
-          libraryId = lib.id;
-          sessionStorage.setItem(`mc-library-${platform}`, libraryId);
-          await loadLibraries();
-          await loadProducts();
-          A.toast('已复制词库');
         } else if (opMode === 'rename') {
           await call(`/api/materialcheck/libraries/rename?platform=${encodeURIComponent(platform)}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: libraryId, name })
