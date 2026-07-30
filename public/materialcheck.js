@@ -254,6 +254,16 @@ const MaterialCheck = (() => {
     panel.style.right = 'auto';
   }
 
+  /** 根据素材本身的宽高比给预览窗定初始大小；只在图片大到放不进屏幕时才等比缩小。 */
+  function fitSourcePreviewToImage(panel, image) {
+    if (!image.naturalWidth || !image.naturalHeight) return;
+    const maxWidth = Math.max(260, innerWidth - 48);
+    const maxImageHeight = Math.max(220, innerHeight - 100);
+    const scale = Math.min(1, maxWidth / image.naturalWidth, maxImageHeight / image.naturalHeight);
+    panel.style.width = Math.round(image.naturalWidth * scale) + 'px';
+    moveSourcePreview(parseFloat(panel.style.left) || innerWidth - panel.offsetWidth - 24, parseFloat(panel.style.top) || 82);
+  }
+
   function ensureSourcePreviewPanel() {
     if (sourcePreviewPanel) return sourcePreviewPanel;
     const panel = document.createElement('section');
@@ -263,7 +273,8 @@ const MaterialCheck = (() => {
     panel.setAttribute('aria-label', '素材预览');
     panel.innerHTML = `
       <div class="mc-source-panel-head" data-role="drag"><span class="mc-source-panel-title"></span><button type="button" class="mc-source-panel-close" aria-label="关闭素材预览">×</button></div>
-      <img class="mc-source-panel-image" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">`;
+      <img class="mc-source-panel-image" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+      <span class="mc-source-panel-resize" data-role="resize" title="拖动调整预览大小" aria-hidden="true"></span>`;
     document.body.appendChild(panel);
 
     panel.querySelector('.mc-source-panel-close').onclick = closeSourcePreview;
@@ -282,6 +293,32 @@ const MaterialCheck = (() => {
     handle.addEventListener('pointerup', stopDrag);
     handle.addEventListener('pointercancel', stopDrag);
 
+    const resizeHandle = panel.querySelector('[data-role="resize"]');
+    let resize = null;
+    resizeHandle.addEventListener('pointerdown', (e) => {
+      const rect = panel.getBoundingClientRect();
+      resize = { startX: e.clientX, startWidth: rect.width };
+      resizeHandle.setPointerCapture(e.pointerId);
+      panel.classList.add('is-resizing');
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    resizeHandle.addEventListener('pointermove', (e) => {
+      if (!resize) return;
+      const image = panel.querySelector('.mc-source-panel-image');
+      // 窗口再宽也不能让图片因高度上限被截成“宽窗小图”。按原图比例反算最大宽度，
+      // 让拖动后的窗口和图片仍然保持同一个展示比例。
+      const ratioBound = image.naturalWidth && image.naturalHeight
+        ? (innerHeight - 100) * image.naturalWidth / image.naturalHeight
+        : innerWidth - 24;
+      const width = Math.min(Math.max(260, resize.startWidth + e.clientX - resize.startX), innerWidth - 24, ratioBound);
+      panel.style.width = Math.round(width) + 'px';
+      moveSourcePreview(parseFloat(panel.style.left) || 12, parseFloat(panel.style.top) || 12);
+    });
+    const stopResize = () => { resize = null; panel.classList.remove('is-resizing'); };
+    resizeHandle.addEventListener('pointerup', stopResize);
+    resizeHandle.addEventListener('pointercancel', stopResize);
+
     document.addEventListener('pointerdown', (e) => {
       if (!panel.hidden && !panel.contains(e.target) && !e.target.closest('[data-mc-preview-src]')) closeSourcePreview();
     });
@@ -296,9 +333,13 @@ const MaterialCheck = (() => {
     panel.querySelector('.mc-source-panel-title').textContent = caption || '素材预览';
     const image = panel.querySelector('.mc-source-panel-image');
     image.alt = caption || '被检测的素材';
+    image.onload = () => fitSourcePreviewToImage(panel, image);
     image.src = src;
     panel.hidden = false;
-    requestAnimationFrame(() => moveSourcePreview(innerWidth - panel.offsetWidth - 24, 82));
+    requestAnimationFrame(() => {
+      moveSourcePreview(innerWidth - panel.offsetWidth - 24, 82);
+      if (image.complete) fitSourcePreviewToImage(panel, image);
+    });
   }
 
   function wireSourcePreviews(root) {
