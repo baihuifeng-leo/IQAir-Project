@@ -254,6 +254,18 @@ async function run() {
     assert.strictEqual(r.status, 'warn');
   });
 
+  t('matchAgainstProduct 单字写错应归为错词而不是缺词，并保留错误字位置', () => {
+    const p = { id: 'coldfire', name: 'GCX MG ColdFire', keywords: ['GCX MG ColdFire 过滤筒'] };
+    const r = M.matchAgainstProduct('GCX MG ColdFire 过滤桶', p, [p]);
+    assert.deepStrictEqual(r.missingKeywords, []);
+    assert.deepStrictEqual(r.wrongKeywords, [{
+      expected: 'GCX MG ColdFire 过滤筒', actual: 'GCXMGColdFire过滤桶',
+      differences: [{ expectedIndex: 15, actualIndex: 15, expected: '筒', actual: '桶', type: 'replace' }]
+    }]);
+    assert.strictEqual(r.matchedKeywords[0].status, 'wrong');
+    assert.strictEqual(r.status, 'warn');
+  });
+
   t('classifyKeywordMatch 逐字命中标记为 exact，理由列表为空', () => {
     const r = M.classifyKeywordMatch('CCM颗粒物>1,000,000 mg', 'CCM颗粒物>1,000,000 mg');
     assert.deepStrictEqual(r, { found: true, exact: true, reasons: [] });
