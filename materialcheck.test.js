@@ -223,6 +223,16 @@ async function run() {
     assert.deepStrictEqual(withCrossedProduct.unregisteredKeywords, []);
   });
 
+  t('matchAgainstProduct 未入库词会排除已登记长词的片段及只用版式符号拼接的已登记词', () => {
+    const hp = {
+      id: 'hp',
+      name: 'HP',
+      keywords: ['热销70+国家和地区', '百万级净化量*', '真H13级滤芯']
+    };
+    const r = M.matchAgainstProduct('热销70+国家和地区\n70+\n百万级净化量*|真H13级滤芯\nSF', hp, [hp]);
+    assert.deepStrictEqual(r.unregisteredKeywords, ['SF']);
+  });
+
   t('matchAgainstProduct 缺词判定为提醒状态', () => {
     const r = M.matchAgainstProduct('GC-Multi', productA, products);
     assert.deepStrictEqual(r.missingKeywords, ['抗菌滤网认证号XXX']);

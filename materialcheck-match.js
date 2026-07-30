@@ -227,10 +227,15 @@ function unregisteredOcrLines(ocrText, allProducts) {
   String(ocrText || '').split('\n').forEach((raw) => {
     const line = raw.trim();
     const norm = normalize(line);
+    // OCR 常会把长词拆成短行，例如词库有“热销70+国家和地区”，识别结果却只有
+    // “70+”。这不是新词，只是已登记长词的一段，不能作为未入库词提示。
+    const containedByRegisteredKeyword = registeredLongestFirst.some((keyword) => keyword.includes(norm));
     // 一行可能把两个已登记词紧挨着识别出来；逐个移除后没有残留，也算已入库，
-    // 不能因为 OCR 的换行合并而误报为未入库词。
+    // 不能因为 OCR 的换行合并而误报为未入库词。词与词之间的 |、/、· 等通常只是
+    // 版式分隔符，移除已登记词后仅剩这些字符时也视为已覆盖。
     const remainder = registeredLongestFirst.reduce((rest, keyword) => rest.split(keyword).join(''), norm);
-    if (!norm || seen.has(norm) || !remainder || isPriceLikeLine(line)) return;
+    const onlyLayoutSeparatorsRemain = remainder.replace(/[|｜/／\\·•—–－_]+/g, '') === '';
+    if (!norm || seen.has(norm) || containedByRegisteredKeyword || !remainder || onlyLayoutSeparatorsRemain || isPriceLikeLine(line)) return;
     seen.add(norm);
     lines.push(line);
   });
