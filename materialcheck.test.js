@@ -727,6 +727,34 @@ async function run() {
     assert.strictEqual(saved.products[1].keywords[0].text, '同一个词');
   });
 
+  await tAsync('saveProducts 只更新实际变更产品的词库更新时间，并能保留旧时间', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    const first = await store.saveProducts(PF, libId, [
+      { id: 'pa', name: 'A', keywords: ['关键词 A'] },
+      { id: 'pb', name: 'B', keywords: ['关键词 B'] }
+    ]);
+    const firstA = first.products[0].updatedAt;
+    const firstB = first.products[1].updatedAt;
+    assert.ok(Number.isFinite(Date.parse(firstA)));
+    assert.ok(Number.isFinite(Date.parse(firstB)));
+
+    const same = await store.saveProducts(PF, libId, first.products);
+    assert.strictEqual(same.products[0].updatedAt, firstA);
+    assert.strictEqual(same.products[1].updatedAt, firstB);
+
+    const renamed = await store.saveProducts(PF, libId, [{ ...same.products[0], name: 'A 新名称' }, same.products[1]]);
+    assert.strictEqual(renamed.products[0].updatedAt, firstA);
+
+    await new Promise((resolve) => setTimeout(resolve, 3));
+    const changed = await store.saveProducts(PF, libId, [
+      { ...renamed.products[0], keywords: ['关键词 A', '新增词'] },
+      renamed.products[1]
+    ]);
+    assert.notStrictEqual(changed.products[0].updatedAt, firstA);
+    assert.strictEqual(changed.products[1].updatedAt, firstB);
+  });
+
   await tAsync('saveProducts 拒绝不认识的平台参数', async () => {
     const store = await freshStore();
     await assert.rejects(store.saveProducts('pdd', 'lib_x', []), /平台参数不对/);

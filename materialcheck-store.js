@@ -104,7 +104,9 @@ function normalizeLibrary(raw) {
     // 没配置过预期价格的产品（老数据/还没填的产品）就是 null，不参与价格校验
     price: (typeof p.price === 'number' && Number.isFinite(p.price)) ? p.price : null,
     // 只接受本站 /uploads/ 下的相对路径，跟 saveProducts 的校验保持一致
-    imageUrl: (typeof p.imageUrl === 'string' && p.imageUrl.startsWith('/uploads/')) ? p.imageUrl : null
+    imageUrl: (typeof p.imageUrl === 'string' && p.imageUrl.startsWith('/uploads/')) ? p.imageUrl : null,
+    // 产品级时间只在该产品的词库或资料实际变动时更新；老数据没有可信的历史时间就保留为空。
+    updatedAt: (typeof p.updatedAt === 'string' && Number.isFinite(Date.parse(p.updatedAt))) ? p.updatedAt : null
   }));
   return { id: String(r.id || makeLibraryId()), name: String(r.name || '未命名词库'), products };
 }
@@ -368,12 +370,13 @@ class MaterialCheckStore {
     if ((products || []).some((p) => !String(p.name || '').trim())) {
       throw new Error('产品名称不能为空');
     }
+    const existingById = new Map(this.platforms[platform].libraries[idx].products.map((p) => [p.id, p]));
     const cleanProducts = (products || []).map((p) => {
       const type = match.PRODUCT_TYPES.includes(p.type) ? p.type : '';
       const price = (p.price === '' || p.price == null) ? null : Number(p.price);
       // 只接受本站 /uploads/ 下的相对路径，防止存进任意字符串当图片地址用
       const imageUrl = (typeof p.imageUrl === 'string' && p.imageUrl.startsWith('/uploads/')) ? p.imageUrl : null;
-      return {
+      const next = {
         id: p.id,
         name: String(p.name || '').trim(),
         type,
@@ -381,6 +384,11 @@ class MaterialCheckStore {
         price: Number.isFinite(price) && price > 0 ? price : null,
         imageUrl
       };
+      const previous = existingById.get(next.id);
+      // 这是“词库”时间，不把改名称、分类、价格或封面也算作关键词更新；
+      // 这样用户看到的时间只对应真正的增删改词，整体自动保存也不会误刷新其它产品。
+      const unchanged = previous && JSON.stringify(cleanKeywords(previous.keywords)) === JSON.stringify(next.keywords);
+      return { ...next, updatedAt: unchanged ? (previous.updatedAt || null) : new Date().toISOString() };
     });
 
     const clean = {
