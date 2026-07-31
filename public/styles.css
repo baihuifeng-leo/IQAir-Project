@@ -2059,6 +2059,17 @@ body.rpt-presenting .rpt-wm-note {
 .mc-copy-category:has(input:checked) { border-color: var(--mint); background: var(--mint-dim); }
 .mc-copy-category input { accent-color: var(--mint); margin: 0; }
 .mc-copy-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.mc-bulk-keyword-form { flex: 1 1 100%; display: grid; gap: 12px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface-2); }
+.mc-bulk-keyword-form[hidden] { display: none; }
+.mc-bulk-keyword-list { display: grid; gap: 8px; }
+.mc-bulk-keyword-group { display: grid; gap: 8px; padding: 11px 12px; border-radius: 10px; background: var(--field-bg); }
+.mc-bulk-keyword-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mc-bulk-keyword-head span { color: var(--dim); font-size: 11.5px; white-space: nowrap; }
+.mc-bulk-keyword-locations { display: flex; flex-wrap: wrap; gap: 5px; }
+.mc-bulk-keyword-location { padding: 3px 7px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--text); font-size: 11.5px; }
+.mc-bulk-keyword-edit { display: grid; gap: 5px; color: var(--dim); font-size: 11.5px; }
+.mc-bulk-keyword-edit input { min-height: 34px; padding: 7px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
+.mc-bulk-keyword-edit input:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
 
 .mc-cat-select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-chip-editor { display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; gap: 6px; min-height: 30px; }
