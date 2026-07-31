@@ -1191,6 +1191,25 @@ async function run() {
     assert.deepStrictEqual(second.candidates, ['新的卖点']);
   });
 
+  await tAsync('autobuildScan 可复用检测台历史素材的 OCR，而不只限于批量识别缓存', async () => {
+    const store = await freshStore();
+    const buf = Buffer.from('material-already-scanned-at-detection-desk');
+    const imageName = 'previously-detected.jpg';
+    await require('fs').promises.writeFile(require('path').join(store.uploadDir, imageName), buf);
+    store.records.push({
+      imagePath: '/uploads/materialcheck/' + imageName,
+      ocrText: 'GC-Multi\n来自检测台的既有 OCR',
+      ocrConfidence: 0.98
+    });
+    assert.strictEqual(await store.autobuildCacheExistsFor(buf), true);
+    const result = await store.autobuildScan({
+      buf, ext: '.jpg', filename: 'GC-Multi.jpg', platform: PF, libraryId: store.getLibrary(PF).id, reuseOcr: true,
+      ocr: async () => { throw new Error('复用检测台历史结果时不应启动 OCR'); }
+    });
+    assert.strictEqual(result.reusedOcr, true);
+    assert.deepStrictEqual(result.candidates, ['来自检测台的既有 OCR']);
+  });
+
   await tAsync('autobuildScan 自动从真实尺寸识别比例；不符合两种规格时拒绝 OCR', async () => {
     const store = await freshStore();
     const ocr = stubOcr('GC-Multi\n新的卖点一', 0.95);

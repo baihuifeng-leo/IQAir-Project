@@ -1104,7 +1104,7 @@ const MaterialCheck = (() => {
       const source = e.recognizedCandidates || e.candidates;
       if (e.status !== 'resolved' || !source.length) return;
       let g = groups.get(e.productId);
-      if (!g) { g = { productName: e.productName, cands: new Map(), mode: 'append', included: true }; groups.set(e.productId, g); }
+      if (!g) { g = { productName: e.productName, targetProductId: e.productId, cands: new Map(), mode: 'append', included: true }; groups.set(e.productId, g); }
       source.forEach((text) => {
         const norm = stripSpaces(text);
         const existing = g.cands.get(norm);
@@ -1148,13 +1148,13 @@ const MaterialCheck = (() => {
     }
 
     if (groups.size) {
-      html += `<h3>识别出的关键词（默认全选，取消勾选不需要的）</h3><p class="mc-ab-hint">同一产品在 1:1 与 3:4 素材都出现的词，会自动标为“通用”。如果 OCR 归属判断有误，可为单条词重新选择产品；选择“替换全部词”时，仅保留本次勾选的词。</p>`;
+      html += `<h3>识别出的关键词（默认全选，取消勾选不需要的）</h3><p class="mc-ab-hint">同一产品在 1:1 与 3:4 素材都出现的词，会自动标为“通用”。如果 OCR 的产品判断有误，可在产品组顶部一次更正所属产品；选择“替换全部词”时，仅保留本次勾选的词。</p>`;
       html += [...groups.entries()].map(([pid, g]) => {
         const items = [...g.cands.entries()];
         return `<div class="mc-ab-group" data-pid="${escapeHtml(pid)}">
-          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}><span>${escapeHtml(g.productName)}</span></label><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
+          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}></label><label class="mc-ab-product-assignment"><span>识别产品</span><select data-role="group-product" ${g.included ? '' : 'disabled'} aria-label="OCR 识别产品">${products.map((product) => `<option value="${escapeHtml(product.id)}" ${g.targetProductId === product.id ? 'selected' : ''}>${escapeHtml(product.name)}</option>`).join('')}</select></label><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
           <div class="mc-ab-cands">${items.map(([norm, c]) =>
-            `<div class="mc-ab-cand ${g.included ? '' : 'is-ignored'}"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''} ${g.included ? '' : 'disabled'} aria-label="是否导入 ${escapeHtml(c.text)}"><span class="mc-ab-cand-text">${escapeHtml(c.text)}</span><label class="mc-ab-candidate-product">归属 <select data-role="candidate-product" data-norm="${escapeHtml(norm)}" ${g.included ? '' : 'disabled'} aria-label="${escapeHtml(c.text)} 的归属产品">${products.map((product) => `<option value="${escapeHtml(product.id)}" ${c.productId === product.id ? 'selected' : ''}>${escapeHtml(product.name)}</option>`).join('')}</select></label><span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></div>`
+            `<div class="mc-ab-cand ${g.included ? '' : 'is-ignored'}"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''} ${g.included ? '' : 'disabled'} aria-label="是否导入 ${escapeHtml(c.text)}"><span class="mc-ab-cand-text">${escapeHtml(c.text)}</span><span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></div>`
           ).join('')}</div>
         </div>`;
       }).join('');
@@ -1196,7 +1196,7 @@ const MaterialCheck = (() => {
       const g = groups.get(groupEl.dataset.pid);
       groupEl.querySelector('[data-role="product-include"]').onchange = (e) => {
         g.included = e.target.checked;
-        groupEl.querySelectorAll('input[data-norm], [data-role="candidate-product"], [data-role="import-mode"]').forEach((control) => {
+        groupEl.querySelectorAll('input[data-norm], [data-role="group-product"], [data-role="import-mode"]').forEach((control) => {
           control.disabled = !g.included;
         });
         groupEl.querySelectorAll('.mc-ab-cand').forEach((candidate) => candidate.classList.toggle('is-ignored', !g.included));
@@ -1206,9 +1206,7 @@ const MaterialCheck = (() => {
         cb.onchange = () => { g.cands.get(cb.dataset.norm).checked = cb.checked; };
       });
       groupEl.querySelector('[data-role="import-mode"]').onchange = (e) => { g.mode = e.target.value; };
-      groupEl.querySelectorAll('[data-role="candidate-product"]').forEach((sel) => {
-        sel.onchange = () => { g.cands.get(sel.dataset.norm).productId = sel.value; };
-      });
+      groupEl.querySelector('[data-role="group-product"]').onchange = (e) => { g.targetProductId = e.target.value; };
     });
 
     const cancelBtn = autobuildBody.querySelector('#mc-ab-cancel');
@@ -1222,10 +1220,10 @@ const MaterialCheck = (() => {
           if (!g.included) return;
           const selected = [...g.cands.values()].filter((c) => c.checked);
           selected.forEach((candidate) => {
-            const plan = writePlans.get(candidate.productId) || { replace: false, candidates: [] };
+            const plan = writePlans.get(g.targetProductId) || { replace: false, candidates: [] };
             plan.replace = plan.replace || g.mode === 'replace';
             if (!plan.candidates.some((item) => stripSpaces(item.text) === stripSpaces(candidate.text))) plan.candidates.push(candidate);
-            writePlans.set(candidate.productId, plan);
+            writePlans.set(g.targetProductId, plan);
           });
         });
         let addedCount = 0;

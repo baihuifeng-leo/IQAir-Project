@@ -239,8 +239,30 @@ class MaterialCheckStore {
     return Boolean(hash && this.autobuildOcrCache[hash]?.ocrText);
   }
 
-  autobuildCacheExistsFor(buf) {
-    return this.autobuildCacheExists(crypto.createHash('sha256').update(buf).digest('hex'));
+  /** 批量识别复用范围覆盖两类来源：本功能的专用缓存，以及检测台已经保存过的历史素材。
+   * 历史记录早于本缓存机制，没有内容哈希；这里按上传图片本体临时算哈希兼容旧数据。 */
+  async findReusableAutobuildOcr(buf) {
+    const contentHash = crypto.createHash('sha256').update(buf).digest('hex');
+    const cached = this.autobuildOcrCache[contentHash];
+    if (cached?.ocrText) return cached;
+
+    for (const record of [...this.records].reverse()) {
+      if (!record?.ocrText || typeof record.imagePath !== 'string') continue;
+      const basename = path.basename(record.imagePath);
+      if (!basename || basename !== record.imagePath.split('/').pop()) continue;
+      try {
+        const previous = await fsp.readFile(path.join(this.uploadDir, basename));
+        const previousHash = crypto.createHash('sha256').update(previous).digest('hex');
+        if (previousHash === contentHash) {
+          return { ocrText: record.ocrText, ocrConfidence: record.ocrConfidence, savedAt: record.timestamp };
+        }
+      } catch { /* 历史素材可能被管理员清理，继续找下一条 */ }
+    }
+    return null;
+  }
+
+  async autobuildCacheExistsFor(buf) {
+    return Boolean(await this.findReusableAutobuildOcr(buf));
   }
 
   _assertPlatform(platform) {
@@ -489,7 +511,7 @@ class MaterialCheckStore {
     const ratioMismatch = ratioMismatchWarning(claimedRatio, buf);
 
     const contentHash = crypto.createHash('sha256').update(buf).digest('hex');
-    const cached = reuseOcr ? this.autobuildOcrCache[contentHash] : null;
+    const cached = reuseOcr ? await this.findReusableAutobuildOcr(buf) : null;
     const { text: ocrText, confidence: ocrConfidence } = cached
       ? { text: cached.ocrText, confidence: cached.ocrConfidence }
       : await this._runOcrQueued(imagePath, ocr);

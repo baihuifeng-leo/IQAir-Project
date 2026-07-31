@@ -782,7 +782,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/materialcheck/autobuild/cache' && req.method === 'POST') {
       const buf = await readBinary(req, MAX_IMAGE);
       if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
-      return json(res, 200, { exists: materialcheck.autobuildCacheExistsFor(buf) });
+      return json(res, 200, { exists: await materialcheck.autobuildCacheExistsFor(buf) });
     }
 
     if (p === '/api/materialcheck/autobuild/scan' && req.method === 'POST') {
