@@ -266,6 +266,24 @@ async function run() {
     assert.strictEqual(r.status, 'warn');
   });
 
+  t('matchAgainstProduct 词库词被未配置前后缀包住时应提示前后缀不一致，而不是精确命中', () => {
+    const p = { id: 'hyper', name: 'HyperHEPA CF 滤芯', keywords: [{ text: 'Premax滤芯或H11滤芯', category: '附加权益' }] };
+    const r = M.matchAgainstProduct('赠Premax滤芯或H11滤芯', p, [p]);
+    assert.deepStrictEqual(r.missingKeywords, []);
+    assert.deepStrictEqual(r.expandedKeywords, [{
+      expected: 'Premax滤芯或H11滤芯', actual: '赠Premax滤芯或H11滤芯', prefix: '赠', suffix: ''
+    }]);
+    assert.strictEqual(r.matchedKeywords[0].status, 'expanded');
+    assert.strictEqual(r.status, 'warn');
+  });
+
+  t('matchAgainstProduct 同行由其它已配置关键词覆盖的组合文案不应误报前后缀不一致', () => {
+    const p = { id: 'promo', name: '促销产品', keywords: [{ text: '3期免息', category: '日常销售利益点' }, { text: '晒单送10元现金红包', category: '日常销售利益点' }] };
+    const r = M.matchAgainstProduct('3期免息|晒单送10元现金红包', p, [p]);
+    assert.deepStrictEqual(r.expandedKeywords, []);
+    assert.strictEqual(r.status, 'pass');
+  });
+
   t('classifyKeywordMatch 逐字命中标记为 exact，理由列表为空', () => {
     const r = M.classifyKeywordMatch('CCM颗粒物>1,000,000 mg', 'CCM颗粒物>1,000,000 mg');
     assert.deepStrictEqual(r, { found: true, exact: true, reasons: [] });
