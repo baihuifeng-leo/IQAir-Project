@@ -1171,6 +1171,26 @@ async function run() {
     assert.strictEqual(store.records.length, before); // 只是扫描预览，不落检测记录
   });
 
+  await tAsync('autobuildScan 相同素材确认复用时读取已缓存 OCR，但按当前词库重新生成候选词', async () => {
+    const store = await freshStore();
+    const buf = Buffer.from('same-material-content');
+    let calls = 0;
+    const first = await store.autobuildScan({
+      buf, ext: '.jpg', filename: 'GC-Multi.jpg', platform: PF, libraryId: store.getLibrary(PF).id,
+      ocr: async () => { calls++; return { text: 'GC-Multi\n新的卖点', confidence: 0.96 }; }
+    });
+    assert.strictEqual(first.reusedOcr, false);
+    assert.strictEqual(calls, 1);
+    const hash = require('crypto').createHash('sha256').update(buf).digest('hex');
+    assert.strictEqual(store.autobuildCacheExists(hash), true);
+    const second = await store.autobuildScan({
+      buf, ext: '.jpg', filename: 'GC-Multi.jpg', platform: PF, libraryId: store.getLibrary(PF).id, reuseOcr: true,
+      ocr: async () => { throw new Error('确认复用后不应重新调用 OCR'); }
+    });
+    assert.strictEqual(second.reusedOcr, true);
+    assert.deepStrictEqual(second.candidates, ['新的卖点']);
+  });
+
   await tAsync('autobuildScan 自动从真实尺寸识别比例；不符合两种规格时拒绝 OCR', async () => {
     const store = await freshStore();
     const ocr = stubOcr('GC-Multi\n新的卖点一', 0.95);

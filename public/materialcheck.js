@@ -1104,11 +1104,11 @@ const MaterialCheck = (() => {
       const source = e.recognizedCandidates || e.candidates;
       if (e.status !== 'resolved' || !source.length) return;
       let g = groups.get(e.productId);
-      if (!g) { g = { productName: e.productName, cands: new Map(), mode: 'append' }; groups.set(e.productId, g); }
+      if (!g) { g = { productName: e.productName, cands: new Map(), mode: 'append', included: true }; groups.set(e.productId, g); }
       source.forEach((text) => {
         const norm = stripSpaces(text);
         const existing = g.cands.get(norm);
-        if (!existing) g.cands.set(norm, { text, checked: true, ratio: e.ratio });
+        if (!existing) g.cands.set(norm, { text, checked: true, category: '其它', ratio: e.ratio });
         else if (existing.ratio !== e.ratio) existing.ratio = 'both';
       });
     });
@@ -1124,7 +1124,7 @@ const MaterialCheck = (() => {
 
     let html = '';
     if (scanning.length) {
-      html += `<div class="mc-progress"><div class="mc-progress-bar" style="width:${Math.round((doneCount / entries.length) * 100)}%"></div></div>
+      html += `<div class="mc-progress mc-autobuild-progress"><div class="mc-progress-bar" style="width:${Math.round((doneCount / entries.length) * 100)}%"></div></div>
         <p class="rv-empty">识别中… ${doneCount}/${entries.length}</p>`;
     }
 
@@ -1152,9 +1152,9 @@ const MaterialCheck = (() => {
       html += [...groups.entries()].map(([pid, g]) => {
         const items = [...g.cands.entries()];
         return `<div class="mc-ab-group" data-pid="${escapeHtml(pid)}">
-          <div class="mc-ab-group-head"><span>${escapeHtml(g.productName)}</span><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode"><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
+          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}><span>${escapeHtml(g.productName)}</span></label><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
           <div class="mc-ab-cands">${items.map(([norm, c]) =>
-            `<label class="mc-ab-cand"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''}>${escapeHtml(c.text)}<span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></label>`
+            `<label class="mc-ab-cand ${g.included ? '' : 'is-ignored'}"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''} ${g.included ? '' : 'disabled'}><span class="mc-ab-cand-text">${escapeHtml(c.text)}</span><select data-role="candidate-category" data-norm="${escapeHtml(norm)}" ${g.included ? '' : 'disabled'} aria-label="${escapeHtml(c.text)} 的所属分类">${CATEGORIES.map((cat) => `<option value="${escapeHtml(cat)}" ${c.category === cat ? 'selected' : ''}>${escapeHtml(cat)}</option>`).join('')}</select><span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></label>`
           ).join('')}</div>
         </div>`;
       }).join('');
@@ -1194,10 +1194,21 @@ const MaterialCheck = (() => {
 
     autobuildBody.querySelectorAll('.mc-ab-group').forEach((groupEl) => {
       const g = groups.get(groupEl.dataset.pid);
+      groupEl.querySelector('[data-role="product-include"]').onchange = (e) => {
+        g.included = e.target.checked;
+        groupEl.querySelectorAll('input[data-norm], [data-role="candidate-category"], [data-role="import-mode"]').forEach((control) => {
+          control.disabled = !g.included;
+        });
+        groupEl.querySelectorAll('.mc-ab-cand').forEach((candidate) => candidate.classList.toggle('is-ignored', !g.included));
+      };
       groupEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+        if (cb.dataset.role === 'product-include') return;
         cb.onchange = () => { g.cands.get(cb.dataset.norm).checked = cb.checked; };
       });
       groupEl.querySelector('[data-role="import-mode"]').onchange = (e) => { g.mode = e.target.value; };
+      groupEl.querySelectorAll('[data-role="candidate-category"]').forEach((sel) => {
+        sel.onchange = () => { g.cands.get(sel.dataset.norm).category = sel.value; };
+      });
     });
 
     const cancelBtn = autobuildBody.querySelector('#mc-ab-cancel');
@@ -1209,18 +1220,19 @@ const MaterialCheck = (() => {
         let addedCount = 0;
         let replacedProducts = 0;
         groups.forEach((g, pid) => {
+          if (!g.included) return;
           const product = products.find((p) => p.id === pid);
           if (!product) return;
           const selected = [...g.cands.values()].filter((c) => c.checked);
           if (g.mode === 'replace') {
-            product.keywords = selected.map((c) => ({ text: c.text, category: '其它', ratio: c.ratio }));
+            product.keywords = selected.map((c) => ({ text: c.text, category: c.category, ratio: c.ratio }));
             replacedProducts++;
             return;
           }
           const existing = new Set((product.keywords || []).map((k) => stripSpaces(keywordText(k))));
           selected.forEach((c) => {
             if (existing.has(stripSpaces(c.text))) return;
-            product.keywords.push({ text: c.text, category: '其它', ratio: c.ratio });
+            product.keywords.push({ text: c.text, category: c.category, ratio: c.ratio });
             existing.add(stripSpaces(c.text));
             addedCount++;
           });
@@ -1247,11 +1259,16 @@ const MaterialCheck = (() => {
     const scanPlatform = platform, scanLibraryId = libraryId;
     async function scanOne(e) {
       try {
-        const result = await call(`/api/materialcheck/autobuild/scan?filename=${encodeURIComponent(e.filename)}&platform=${encodeURIComponent(scanPlatform)}&libraryId=${encodeURIComponent(scanLibraryId)}`, {
+        const cached = await call('/api/materialcheck/autobuild/cache', {
+          method: 'POST', headers: { 'Content-Type': e.file.type }, body: e.file
+        });
+        const reuseOcr = cached.exists && window.confirm(`检测到「${e.filename}」与之前上传的素材完全相同。\n\n是否直接调用上一次 OCR 扫描结果？\n选择“取消”将重新扫描。`);
+        const result = await call(`/api/materialcheck/autobuild/scan?filename=${encodeURIComponent(e.filename)}&platform=${encodeURIComponent(scanPlatform)}&libraryId=${encodeURIComponent(scanLibraryId)}&reuseOcr=${reuseOcr}`, {
           method: 'POST', headers: { 'Content-Type': e.file.type }, body: e.file
         });
         if (result.ratioMismatch) A.toast(`${e.filename}：${result.ratioMismatch}`, 'bad');
         e.ocrText = result.ocrText;
+        e.reusedOcr = result.reusedOcr;
         e.ratio = result.ratio;
         if (result.productId) {
           e.status = 'resolved';

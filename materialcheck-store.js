@@ -152,8 +152,12 @@ class MaterialCheckStore {
     this.uploadDir = uploadDir;
     this.productsFile = path.join(dir, 'products.json');
     this.recordsFile = path.join(dir, 'records.jsonl');
+    // 批量词库识别的 OCR 结果按素材内容哈希缓存。它不保存产品归属或候选词，
+    // 因而再次调用时会基于当前词库重新判定，避免旧词库结果污染新词库。
+    this.autobuildOcrCacheFile = path.join(dir, 'autobuild-ocr-cache.json');
     this.platforms = { tmall: emptyPlatform(), jd: emptyPlatform() };
     this.records = [];
+    this.autobuildOcrCache = {};
     this.pending = new Map();
     // 服务端并发队列：单台 VM 是单进程 Node，OCR 是 CPU 密集操作，
     // 这里跨所有请求、所有用户地限制同时在跑的 OCR 进程数，
@@ -214,12 +218,29 @@ class MaterialCheckStore {
       if (broken) console.warn(`[materialcheck] 跳过 ${broken} 行损坏的记录`);
     } catch { /* 首次运行，没有文件 */ }
 
+    try {
+      const rawCache = JSON.parse(await fsp.readFile(this.autobuildOcrCacheFile, 'utf8'));
+      this.autobuildOcrCache = rawCache && typeof rawCache === 'object' ? rawCache : {};
+    } catch { /* 缓存首次使用时再创建 */ }
+
     const total = PLATFORMS.reduce((n, p) => n + this.platforms[p].libraries.reduce((m, l) => m + l.products.length, 0), 0);
     console.log(`[materialcheck] 载入 ${total} 个产品，${this.records.length} 条历史记录`);
   }
 
   async _persistPlatforms() {
     await fsp.writeFile(this.productsFile, JSON.stringify(this.platforms, null, 1));
+  }
+
+  async _persistAutobuildOcrCache() {
+    await fsp.writeFile(this.autobuildOcrCacheFile, JSON.stringify(this.autobuildOcrCache, null, 1));
+  }
+
+  autobuildCacheExists(hash) {
+    return Boolean(hash && this.autobuildOcrCache[hash]?.ocrText);
+  }
+
+  autobuildCacheExistsFor(buf) {
+    return this.autobuildCacheExists(crypto.createHash('sha256').update(buf).digest('hex'));
   }
 
   _assertPlatform(platform) {
@@ -447,7 +468,7 @@ class MaterialCheckStore {
    * 词库维护动作），也不直接改词库——候选词要经过前端的审核页面，人工确认后才会
    * 通过已有的 saveProducts（PUT /api/materialcheck/products）真正落盘。
    */
-  async autobuildScan({ buf, ext, filename, platform, libraryId, ratio, requireDetectedRatio = false, ocr = runOcr }) {
+  async autobuildScan({ buf, ext, filename, platform, libraryId, ratio, requireDetectedRatio = false, reuseOcr = false, ocr = runOcr }) {
     this._assertPlatform(platform);
     const lib = this.getLibrary(platform, libraryId);
     if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
@@ -467,7 +488,15 @@ class MaterialCheckStore {
     const url = '/uploads/materialcheck/' + name;
     const ratioMismatch = ratioMismatchWarning(claimedRatio, buf);
 
-    const { text: ocrText, confidence: ocrConfidence } = await this._runOcrQueued(imagePath, ocr);
+    const contentHash = crypto.createHash('sha256').update(buf).digest('hex');
+    const cached = reuseOcr ? this.autobuildOcrCache[contentHash] : null;
+    const { text: ocrText, confidence: ocrConfidence } = cached
+      ? { text: cached.ocrText, confidence: cached.ocrConfidence }
+      : await this._runOcrQueued(imagePath, ocr);
+    if (!cached) {
+      this.autobuildOcrCache[contentHash] = { ocrText, ocrConfidence, savedAt: new Date().toISOString() };
+      await this._persistAutobuildOcrCache();
+    }
     const resolution = match.resolveProductForUpload(filename, ocrText, lib.products);
 
     if (!resolution.product) {
@@ -475,7 +504,7 @@ class MaterialCheckStore {
         filename, imagePath: url, ocrText, ocrConfidence, ratio: effectiveRatio, ratioMismatch,
         productId: null, productName: null,
         candidateProducts: (resolution.candidates || []).map((p) => ({ id: p.id, name: p.name })),
-        candidates: []
+        candidates: [], reusedOcr: Boolean(cached)
       };
     }
 
@@ -484,7 +513,8 @@ class MaterialCheckStore {
       productId: resolution.product.id, productName: resolution.product.name,
       candidateProducts: [],
       candidates: match.buildKeywordCandidates(ocrText, resolution.product),
-      recognizedCandidates: match.buildKeywordCandidates(ocrText, resolution.product, { includeExisting: true })
+      recognizedCandidates: match.buildKeywordCandidates(ocrText, resolution.product, { includeExisting: true }),
+      reusedOcr: Boolean(cached)
     };
   }
 
