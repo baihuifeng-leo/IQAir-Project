@@ -1279,6 +1279,7 @@ const MaterialCheck = (() => {
           <div class="mc-lib-ops">
             <button class="mc-btn" id="mc-lib-op-new">+ 新建词库</button>
             <button class="mc-btn" id="mc-lib-op-copy">复制词库</button>
+            <button class="mc-btn" id="mc-lib-op-bulk-keywords">批量修改相同词</button>
             <button class="mc-btn" id="mc-lib-op-rename">重命名</button>
             <button class="mc-btn mc-btn-danger" id="mc-lib-op-delete">删除词库</button>
           </div>
@@ -1311,6 +1312,10 @@ const MaterialCheck = (() => {
               <button class="mc-btn mc-btn-primary" id="mc-copy-confirm">复制词库</button>
               <button class="mc-btn" id="mc-copy-cancel">取消</button>
             </div>
+          </section>
+          <section class="mc-bulk-keyword-form" id="mc-bulk-keyword-form" hidden aria-label="批量修改相同关键词">
+            <div class="mc-copy-form-head"><b>批量修改相同关键词</b><span>仅列出当前词库中完全相同、且出现至少两次的词</span></div>
+            <div class="mc-bulk-keyword-list" id="mc-bulk-keyword-list"></div>
           </section>
           <span class="mc-lib-spacer"></span>
           <button class="mc-btn" id="mc-lib-autobuild-11">批量识别 1:1 素材…</button>
@@ -1544,6 +1549,8 @@ const MaterialCheck = (() => {
     const nameRow = A.$('#mc-lib-name-row');
     const nameInput = A.$('#mc-lib-name-input');
     const copyForm = A.$('#mc-copy-form');
+    const bulkKeywordForm = A.$('#mc-bulk-keyword-form');
+    const bulkKeywordList = A.$('#mc-bulk-keyword-list');
     const copySource = A.$('#mc-copy-source');
     const copyTarget = A.$('#mc-copy-target-platform');
     const copyName = A.$('#mc-copy-name-input');
@@ -1560,8 +1567,54 @@ const MaterialCheck = (() => {
       copyName.focus();
     };
 
+    /** 相同词只按原文完全相等分组，不把“空格/符号归一化后相同”的不同写法擅自合并。 */
+    const duplicateKeywordGroups = () => {
+      const groups = new Map();
+      products.forEach((product) => (product.keywords || []).forEach((keyword, index) => {
+        const text = keywordText(keyword);
+        if (!text) return;
+        if (!groups.has(text)) groups.set(text, { text, locations: [] });
+        groups.get(text).locations.push({ product, index, category: keywordCategory(keyword) });
+      }));
+      return [...groups.values()]
+        .filter((group) => group.locations.length > 1)
+        .sort((a, b) => b.locations.length - a.locations.length || a.text.localeCompare(b.text, 'zh-CN'));
+    };
+
+    const renderBulkKeywordGroups = () => {
+      const groups = duplicateKeywordGroups();
+      bulkKeywordList.innerHTML = groups.length ? groups.map((group, groupIndex) => `
+        <article class="mc-bulk-keyword-group" data-group-index="${groupIndex}">
+          <div class="mc-bulk-keyword-head"><b>${escapeHtml(group.text)}</b><span>共 ${group.locations.length} 处</span></div>
+          <div class="mc-bulk-keyword-locations">${group.locations.map((location) => `<span class="mc-bulk-keyword-location">${escapeHtml(location.product.name)} <i>·</i> ${escapeHtml(location.category)}</span>`).join('')}</div>
+          <div class="mc-bulk-keyword-edit"><label>统一改为<input value="${escapeHtml(group.text)}" data-role="bulk-keyword-input" aria-label="将「${escapeHtml(group.text)}」统一修改为"></label><button type="button" class="mc-btn mc-btn-primary" data-role="bulk-keyword-apply">同步 ${group.locations.length} 处</button></div>
+        </article>`).join('') : '<p class="rv-empty">当前词库没有出现两次以上的完全相同关键词。</p>';
+
+      bulkKeywordList.querySelectorAll('[data-role="bulk-keyword-apply"]').forEach((button) => {
+        button.onclick = () => {
+          const group = groups[Number(button.closest('[data-group-index]').dataset.groupIndex)];
+          const input = button.closest('.mc-bulk-keyword-group').querySelector('[data-role="bulk-keyword-input"]');
+          const nextText = input.value.trim();
+          if (!nextText) return A.toast('关键词不能为空', 'bad');
+          if (nextText === group.text) return A.toast('关键词没有变化');
+          group.locations.forEach(({ product, index }) => {
+            const keyword = product.keywords[index];
+            product.keywords[index] = typeof keyword === 'string' ? nextText : { ...keyword, text: nextText };
+          });
+          drawAll();
+          renderBulkKeywordGroups();
+          scheduleAutoSave();
+          A.toast(`已同步修改 ${group.locations.length} 处关键词`);
+        };
+      });
+    };
+
     A.$('#mc-lib-op-new').onclick = () => showNameRow('new');
     A.$('#mc-lib-op-copy').onclick = showCopyForm;
+    A.$('#mc-lib-op-bulk-keywords').onclick = () => {
+      bulkKeywordForm.hidden = !bulkKeywordForm.hidden;
+      if (!bulkKeywordForm.hidden) renderBulkKeywordGroups();
+    };
     A.$('#mc-lib-op-rename').onclick = () => showNameRow('rename', libraries.find((l) => l.id === libraryId)?.name || '');
     A.$('#mc-lib-name-cancel').onclick = hideNameRow;
     A.$('#mc-copy-cancel').onclick = hideCopyForm;
