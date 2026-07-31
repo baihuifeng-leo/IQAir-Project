@@ -1077,7 +1077,7 @@ const MaterialCheck = (() => {
 
   // ── 批量自动识别（词库维护动作，不写检测记录，也不直接改真实词库——
   //    候选词先进审核页，人工确认后才走已有的保存关键词库接口落盘） ──
-  let autobuildMask, autobuildBody;
+  let autobuildMask, autobuildBody, autobuildActions;
   function stripSpaces(s) { return String(s || '').replace(/\s+/g, ''); }
 
   function buildAutobuildSheet() {
@@ -1087,10 +1087,12 @@ const MaterialCheck = (() => {
     autobuildMask.innerHTML = `
       <div class="sheet sheet-wide" role="dialog">
         <div class="sheet-head"><h2>批量自动识别</h2><button class="kill" id="mc-ab-close" title="关闭">×</button></div>
-        <div class="sheet-body" id="mc-ab-body"></div>
+        <div class="sheet-body mc-ab-body" id="mc-ab-body"></div>
+        <div class="mc-ab-actions" id="mc-ab-actions"></div>
       </div>`;
     document.body.appendChild(autobuildMask);
     autobuildBody = autobuildMask.querySelector('#mc-ab-body');
+    autobuildActions = autobuildMask.querySelector('#mc-ab-actions');
     autobuildMask.querySelector('#mc-ab-close').onclick = () => (autobuildMask.hidden = true);
     autobuildMask.onclick = (e) => { if (e.target === autobuildMask) autobuildMask.hidden = true; };
   }
@@ -1148,11 +1150,11 @@ const MaterialCheck = (() => {
     }
 
     if (groups.size) {
-      html += `<h3>识别出的关键词（默认全选，取消勾选不需要的）</h3><p class="mc-ab-hint">同一产品在 1:1 与 3:4 素材都出现的词，会自动标为“通用”。OCR 认错产品时，在产品组顶部把整组关键词改写入正确产品词库；关键词本身不需要逐条调整归属或分类。</p>`;
+      html += `<h3>识别出的关键词（默认全选，取消勾选不需要的）</h3><p class="mc-ab-hint">同一产品在 1:1 与 3:4 素材都出现的词，会自动标为“通用”。产品判断有误时，可在产品组顶部选择正确的产品型号；整组勾选词会写入该产品词库。</p>`;
       html += [...groups.entries()].map(([pid, g]) => {
         const items = [...g.cands.entries()];
         return `<div class="mc-ab-group" data-pid="${escapeHtml(pid)}">
-          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}></label><span class="mc-ab-origin-product">OCR 识别：${escapeHtml(g.productName)}</span><label class="mc-ab-product-assignment"><span>写入词库</span><select data-role="group-product" ${g.included ? '' : 'disabled'} aria-label="将本组 ${items.length} 条词写入产品词库">${products.map((product) => `<option value="${escapeHtml(product.id)}" ${g.targetProductId === product.id ? 'selected' : ''}>${escapeHtml(product.name)}</option>`).join('')}</select></label><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
+          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}></label><label class="mc-ab-product-assignment"><span>产品型号</span><select data-role="group-product" ${g.included ? '' : 'disabled'} aria-label="将本组 ${items.length} 条词写入产品词库">${products.map((product) => `<option value="${escapeHtml(product.id)}" ${g.targetProductId === product.id ? 'selected' : ''}>${escapeHtml(product.name)}</option>`).join('')}</select></label><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
           <div class="mc-ab-cands">${items.map(([norm, c]) =>
             `<div class="mc-ab-cand ${g.included ? '' : 'is-ignored'}"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''} ${g.included ? '' : 'disabled'} aria-label="是否导入 ${escapeHtml(c.text)}"><span class="mc-ab-cand-text">${escapeHtml(c.text)}</span><span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></div>`
           ).join('')}</div>
@@ -1163,12 +1165,12 @@ const MaterialCheck = (() => {
     }
 
     const canConfirm = !scanning.length && groups.size > 0;
-    html += `<div class="mc-ab-actions">
+    const actionsHtml = `
       <button class="mc-btn" id="mc-ab-cancel">取消</button>
-      <button class="mc-btn mc-btn-primary" id="mc-ab-confirm" ${canConfirm ? '' : 'disabled'}>确认导入</button>
-    </div>`;
+      <button class="mc-btn mc-btn-primary" id="mc-ab-confirm" ${canConfirm ? '' : 'disabled'}>确认导入</button>`;
 
     autobuildBody.innerHTML = html;
+    autobuildActions.innerHTML = actionsHtml;
 
     autobuildBody.querySelectorAll('[data-role="pick-confirm"]').forEach((btn) => {
       btn.onclick = async () => {
@@ -1209,10 +1211,10 @@ const MaterialCheck = (() => {
       groupEl.querySelector('[data-role="group-product"]').onchange = (e) => { g.targetProductId = e.target.value; };
     });
 
-    const cancelBtn = autobuildBody.querySelector('#mc-ab-cancel');
+    const cancelBtn = autobuildActions.querySelector('#mc-ab-cancel');
     if (cancelBtn) cancelBtn.onclick = () => { autobuildMask.hidden = true; };
 
-    const confirmBtn = autobuildBody.querySelector('#mc-ab-confirm');
+    const confirmBtn = autobuildActions.querySelector('#mc-ab-confirm');
     if (confirmBtn && !confirmBtn.disabled) {
       confirmBtn.onclick = () => {
         const writePlans = new Map();
