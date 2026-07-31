@@ -3,6 +3,7 @@ const MaterialCheck = (() => {
   let libraries = []; // 当前平台下的词库列表 [{id,name,productCount}]
   let libraryDirectory = []; // 历史记录筛选用：两个平台全部词库的扁平列表 [{id,name,platform}]
   let products = [];
+  let libraryViewMode = 'products'; // products | bulk：批量管理属于关键词库内部页面
 
   const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
   // 同一个产品的 1:1 和 3:4 素材文案有重叠也有差异（3:4 通常比 1:1 多一段满赠/权益说明），
@@ -73,10 +74,8 @@ const MaterialCheck = (() => {
     A.$('#mc-check-view').hidden = name !== 'check';
     A.$('#mc-history-view').hidden = name !== 'history';
     A.$('#mc-library-view').hidden = name !== 'library';
-    A.$('#mc-bulk-keyword-view').hidden = name !== 'bulk';
     if (name === 'history') renderHistory();
     if (name === 'library') renderLibrary();
-    if (name === 'bulk') renderBulkKeywordView();
   }
 
   async function switchPlatform(next) {
@@ -91,7 +90,6 @@ const MaterialCheck = (() => {
     renderCheckView();
     if (subView === 'library') renderLibrary();
     if (subView === 'history') renderHistory();
-    if (subView === 'bulk') renderBulkKeywordView();
   }
 
   async function switchLibrary(next) {
@@ -101,7 +99,6 @@ const MaterialCheck = (() => {
     try { await loadProducts(); } catch (e) { A.toast(e.message, 'bad'); }
     if (subView === 'library') renderLibrary();
     if (subView === 'history') renderHistory();
-    if (subView === 'bulk') renderBulkKeywordView();
   }
 
   // ── 检测台 ──────────────────────────────────────────
@@ -1305,8 +1302,7 @@ const MaterialCheck = (() => {
       .sort((a, b) => b.locations.length - a.locations.length || a.text.localeCompare(b.text, 'zh-CN'));
   }
 
-  function renderBulkKeywordView() {
-    const el = A.$('#mc-bulk-keyword-view');
+  function renderBulkKeywordView(el) {
     if (libraryRole() !== 'edit') {
       el.innerHTML = '<p class="rv-empty">没有编辑关键词库的权限。</p>';
       return;
@@ -1319,7 +1315,7 @@ const MaterialCheck = (() => {
     }).filter((group) => group.products.length);
     el.innerHTML = `
       <section class="mc-bulk-page" aria-label="相同词批量管理">
-        <header class="mc-bulk-page-head"><div><h2>相同词批量管理</h2><p>只显示当前词库中出现于两个及以上产品的完全相同关键词。修改、改分类或删除会自动同步到全部覆盖产品。</p></div><span class="mc-bulk-page-count">${groups.length} 组相同词</span></header>
+        <header class="mc-bulk-page-head"><div><button type="button" class="mc-bulk-back" data-role="bulk-back">← 返回词库</button><h2>相同词批量管理</h2><p>只显示当前词库中出现于两个及以上产品的完全相同关键词。修改、改分类或删除会自动同步到全部覆盖产品。</p></div><span class="mc-bulk-page-count">${groups.length} 组相同词</span></header>
         <div class="mc-bulk-keyword-grid">${groups.length ? groups.map((group, groupIndex) => {
           const productCount = new Set(group.locations.map(({ product }) => product.id)).size;
           return `<article class="mc-bulk-keyword-card" data-group-index="${groupIndex}">
@@ -1343,7 +1339,7 @@ const MaterialCheck = (() => {
         return true;
       };
       input.oninput = applyText;
-      input.onchange = () => { if (applyText()) renderBulkKeywordView(); };
+      input.onchange = () => { if (applyText()) renderBulkKeywordView(el); };
     });
     el.querySelectorAll('[data-role="bulk-keyword-category"]').forEach((select) => {
       select.onchange = () => {
@@ -1354,7 +1350,7 @@ const MaterialCheck = (() => {
           product.keywords[index] = typeof keyword === 'string' ? { text: keyword, category, ratio: 'both' } : { ...keyword, category };
         });
         scheduleAutoSave();
-        renderBulkKeywordView();
+        renderBulkKeywordView(el);
       };
     });
     el.querySelectorAll('[data-role="bulk-keyword-delete"]').forEach((button) => {
@@ -1369,16 +1365,18 @@ const MaterialCheck = (() => {
         });
         removeIndexes.forEach((indexes, product) => { product.keywords = product.keywords.filter((_, index) => !indexes.has(index)); });
         scheduleAutoSave();
-        renderBulkKeywordView();
+        renderBulkKeywordView(el);
         A.toast(`已从 ${productCount} 个产品中删除「${group.text}」，正在自动同步…`);
       };
     });
+    el.querySelector('[data-role="bulk-back"]').onclick = () => { libraryViewMode = 'products'; renderLibrary(); };
   }
 
   async function renderLibrary() {
     const el = A.$('#mc-library-view');
     const role = libraryRole();
     if (role === 'none') { el.innerHTML = '<p class="rv-empty">没有查看关键词库的权限</p>'; return; }
+    if (libraryViewMode === 'bulk') return renderBulkKeywordView(el);
     const readOnly = role !== 'edit';
 
     el.innerHTML = `
@@ -1388,7 +1386,6 @@ const MaterialCheck = (() => {
           <div class="mc-lib-ops">
             <button class="mc-btn" id="mc-lib-op-new">+ 新建词库</button>
             <button class="mc-btn" id="mc-lib-op-copy">复制词库</button>
-            <button class="mc-btn" id="mc-lib-op-bulk-keywords">相同词批量管理</button>
             <button class="mc-btn" id="mc-lib-op-rename">重命名</button>
             <button class="mc-btn mc-btn-danger" id="mc-lib-op-delete">删除词库</button>
           </div>
@@ -1423,7 +1420,8 @@ const MaterialCheck = (() => {
             </div>
           </section>
           <span class="mc-lib-spacer"></span>
-          <div class="mc-autobuild-dropzone" id="mc-autobuild-dropzone" tabindex="0" role="button" aria-label="批量上传素材自动识别关键词"><b>批量识别素材</b><span>点击选择或拖入图片 · 自动判断 1:1 / 3:4</span></div>
+          <button type="button" class="mc-library-tool-card" id="mc-lib-op-bulk-keywords"><b>相同词批量管理</b><span>按产品类型统一修改、分类或删除</span></button>
+          <div class="mc-library-tool-card mc-autobuild-dropzone" id="mc-autobuild-dropzone" tabindex="0" role="button" aria-label="批量上传素材自动识别关键词"><b>批量识别素材</b><span>点击选择或拖入图片 · 自动判断 1:1 / 3:4</span></div>
           <input type="file" id="mc-autobuild-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
         </div>
@@ -1670,7 +1668,7 @@ const MaterialCheck = (() => {
 
     A.$('#mc-lib-op-new').onclick = () => showNameRow('new');
     A.$('#mc-lib-op-copy').onclick = showCopyForm;
-    A.$('#mc-lib-op-bulk-keywords').onclick = () => switchSub('bulk');
+    A.$('#mc-lib-op-bulk-keywords').onclick = () => { libraryViewMode = 'bulk'; renderLibrary(); };
     A.$('#mc-lib-op-rename').onclick = () => showNameRow('rename', libraries.find((l) => l.id === libraryId)?.name || '');
     A.$('#mc-lib-name-cancel').onclick = hideNameRow;
     A.$('#mc-copy-cancel').onclick = hideCopyForm;
@@ -1780,7 +1778,6 @@ const MaterialCheck = (() => {
   function init(api) {
     A = api;
     A.$('#mc-tab-library').hidden = libraryRole() === 'none';
-    A.$('#mc-tab-bulk-keywords').hidden = libraryRole() !== 'edit';
     A.$$('#mc-subview-switch .mc-subtab').forEach((b) => (b.onclick = () => switchSub(b.dataset.sub)));
 
     platform = sessionStorage.getItem('mc-platform') || 'tmall';

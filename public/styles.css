@@ -2039,9 +2039,9 @@ body.rpt-presenting .rpt-wm-note {
 
 .mc-lib-actionbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 10px; }
 .mc-lib-ops { display: flex; flex-wrap: wrap; gap: 8px; }
-.mc-autobuild-dropzone { min-width: 230px; display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px dashed var(--line-soft); border-radius: 10px; color: var(--text); cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
-.mc-autobuild-dropzone span { font-size: 11.5px; color: var(--dim); }
-.mc-autobuild-dropzone:hover, .mc-autobuild-dropzone:focus-visible, .mc-autobuild-dropzone.drop-hot { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface)); outline: none; }
+.mc-library-tool-card { min-width: 230px; display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px dashed var(--line-soft); border-radius: 10px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.mc-library-tool-card span { font-size: 11.5px; color: var(--dim); }
+.mc-library-tool-card:hover, .mc-library-tool-card:focus-visible, .mc-autobuild-dropzone.drop-hot { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface)); outline: none; }
 .mc-autobuild-dropzone.drop-hot { transform: translateY(-1px); }
 .mc-lib-name-row { display: flex; gap: 8px; align-items: center; }
 .mc-lib-name-row[hidden] { display: none; } /* author 规则的 display:flex 优先级跟 UA 的 [hidden] 打平，后者会被覆盖——显式钉住 */
@@ -2068,6 +2068,8 @@ body.rpt-presenting .rpt-wm-note {
 .mc-bulk-page { display: grid; gap: 18px; }
 .mc-bulk-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); }
 .mc-bulk-page-head h2 { margin: 0 0 5px; font-size: 21px; letter-spacing: -0.02em; }
+.mc-bulk-back { display: inline-flex; margin: 0 0 9px; padding: 0; border: 0; background: transparent; color: var(--dim); font: 600 12px var(--f-body); cursor: pointer; }
+.mc-bulk-back:hover, .mc-bulk-back:focus-visible { color: var(--mint); outline: none; }
 .mc-bulk-page-head p { max-width: 68ch; margin: 0; color: var(--dim); font-size: 13px; line-height: 1.55; }
 .mc-bulk-page-count { flex: 0 0 auto; padding: 5px 9px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--dim); font-size: 12px; white-space: nowrap; }
 .mc-bulk-keyword-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 12px; align-items: start; }
