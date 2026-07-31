@@ -889,7 +889,6 @@ const MaterialCheck = (() => {
             <button class="mc-btn" data-role="copy-to" ${copyTargets.length ? '' : 'disabled'}>复制到…</button>
             <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
           </div>
-          <div class="mc-pcard-updated" title="${escapeHtml(p.updatedAt ? `关键词库最近更新：${productUpdatedAtHtml(p)}` : '关键词库尚未记录更新时间')}">词库更新 <time data-role="updated-at" datetime="${escapeHtml(p.updatedAt || '')}">${escapeHtml(productUpdatedAtHtml(p))}</time></div>
           <div class="mc-copy-row" data-role="copy-row" hidden>
             <select data-role="copy-target" aria-label="复制关键词到哪个产品">${copyOptionsHtml}</select>
             <button class="mc-btn mc-btn-primary" data-role="copy-confirm">确定覆盖</button>
@@ -905,6 +904,7 @@ const MaterialCheck = (() => {
             <div class="mc-chip-editor" data-role="chips"></div>
           </div>
         </div>
+        <div class="mc-pcard-updated" title="${escapeHtml(p.updatedAt ? `关键词库最近更新：${productUpdatedAtHtml(p)}` : '关键词库尚未记录更新时间')}">词库更新 <time data-role="updated-at" datetime="${escapeHtml(p.updatedAt || '')}">${escapeHtml(productUpdatedAtHtml(p))}</time></div>
       </div>`;
   }
 
