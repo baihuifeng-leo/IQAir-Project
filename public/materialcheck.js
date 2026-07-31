@@ -1573,7 +1573,7 @@ const MaterialCheck = (() => {
       products.forEach((product) => (product.keywords || []).forEach((keyword, index) => {
         const text = keywordText(keyword);
         if (!text) return;
-        if (!groups.has(text)) groups.set(text, { text, locations: [] });
+        if (!groups.has(text)) groups.set(text, { text, category: keywordCategory(keyword), locations: [] });
         groups.get(text).locations.push({ product, index, category: keywordCategory(keyword) });
       }));
       return [...groups.values()]
@@ -1585,26 +1585,39 @@ const MaterialCheck = (() => {
       const groups = duplicateKeywordGroups();
       bulkKeywordList.innerHTML = groups.length ? groups.map((group, groupIndex) => `
         <article class="mc-bulk-keyword-group" data-group-index="${groupIndex}">
-          <div class="mc-bulk-keyword-head"><b>${escapeHtml(group.text)}</b><span>共 ${group.locations.length} 处</span></div>
-          <div class="mc-bulk-keyword-locations">${group.locations.map((location) => `<span class="mc-bulk-keyword-location">${escapeHtml(location.product.name)} <i>·</i> ${escapeHtml(location.category)}</span>`).join('')}</div>
-          <div class="mc-bulk-keyword-edit"><label>统一改为<input value="${escapeHtml(group.text)}" data-role="bulk-keyword-input" aria-label="将「${escapeHtml(group.text)}」统一修改为"></label><button type="button" class="mc-btn mc-btn-primary" data-role="bulk-keyword-apply">同步 ${group.locations.length} 处</button></div>
+          <div class="mc-bulk-keyword-head"><span>共 ${group.locations.length} 个产品</span><select class="mc-cat-badge-select ${CAT_CLASS[group.category]}" data-role="bulk-keyword-category" aria-label="「${escapeHtml(group.text)}」的分类">${CATEGORIES.map((category) => `<option value="${escapeHtml(category)}" ${category === group.category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}</select></div>
+          <label class="mc-bulk-keyword-edit">关键词<input value="${escapeHtml(group.text)}" data-role="bulk-keyword-input" aria-label="将「${escapeHtml(group.text)}」同步修改为"></label>
+          <div class="mc-bulk-keyword-locations">${group.locations.map((location) => `<span class="mc-bulk-keyword-location">${escapeHtml(location.product.name)}</span>`).join('')}</div>
         </article>`).join('') : '<p class="rv-empty">当前词库没有出现两次以上的完全相同关键词。</p>';
 
-      bulkKeywordList.querySelectorAll('[data-role="bulk-keyword-apply"]').forEach((button) => {
-        button.onclick = () => {
-          const group = groups[Number(button.closest('[data-group-index]').dataset.groupIndex)];
-          const input = button.closest('.mc-bulk-keyword-group').querySelector('[data-role="bulk-keyword-input"]');
+      bulkKeywordList.querySelectorAll('[data-role="bulk-keyword-input"]').forEach((input) => {
+        const group = groups[Number(input.closest('[data-group-index]').dataset.groupIndex)];
+        const applyText = () => {
           const nextText = input.value.trim();
-          if (!nextText) return A.toast('关键词不能为空', 'bad');
-          if (nextText === group.text) return A.toast('关键词没有变化');
+          if (!nextText || nextText === group.text) return false;
           group.locations.forEach(({ product, index }) => {
             const keyword = product.keywords[index];
             product.keywords[index] = typeof keyword === 'string' ? nextText : { ...keyword, text: nextText };
           });
+          scheduleAutoSave();
+          return true;
+        };
+        input.oninput = applyText;
+        input.onchange = () => { if (applyText()) { drawAll(); renderBulkKeywordGroups(); } };
+      });
+      bulkKeywordList.querySelectorAll('[data-role="bulk-keyword-category"]').forEach((select) => {
+        select.onchange = () => {
+          const group = groups[Number(select.closest('[data-group-index]').dataset.groupIndex)];
+          const category = select.value;
+          group.locations.forEach(({ product, index }) => {
+            const keyword = product.keywords[index];
+            product.keywords[index] = typeof keyword === 'string'
+              ? { text: keyword, category, ratio: 'both' }
+              : { ...keyword, category };
+          });
           drawAll();
           renderBulkKeywordGroups();
           scheduleAutoSave();
-          A.toast(`已同步修改 ${group.locations.length} 处关键词`);
         };
       });
     };
