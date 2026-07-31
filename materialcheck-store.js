@@ -447,12 +447,19 @@ class MaterialCheckStore {
    * 词库维护动作），也不直接改词库——候选词要经过前端的审核页面，人工确认后才会
    * 通过已有的 saveProducts（PUT /api/materialcheck/products）真正落盘。
    */
-  async autobuildScan({ buf, ext, filename, platform, libraryId, ratio, ocr = runOcr }) {
+  async autobuildScan({ buf, ext, filename, platform, libraryId, ratio, requireDetectedRatio = false, ocr = runOcr }) {
     this._assertPlatform(platform);
     const lib = this.getLibrary(platform, libraryId);
     if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
     if (!lib.products.length) throw new Error('还没有配置任何产品的关键词，先去「关键词库」里加一个产品');
     const claimedRatio = match.RATIOS.includes(ratio) ? ratio : null;
+    const detectedRatio = classifyRatioFromSize(sniffImageSize(buf));
+    if (requireDetectedRatio && !claimedRatio && !detectedRatio) {
+      const size = sniffImageSize(buf);
+      const measured = size ? `${size.width}×${size.height}` : '无法读取尺寸';
+      throw new Error(`素材比例不符合要求（检测到 ${measured}），只支持接近 1:1 或 3:4 的图片`);
+    }
+    const effectiveRatio = claimedRatio || detectedRatio;
 
     const name = crypto.randomBytes(9).toString('hex') + ext;
     const imagePath = path.join(this.uploadDir, name);
@@ -465,7 +472,7 @@ class MaterialCheckStore {
 
     if (!resolution.product) {
       return {
-        filename, imagePath: url, ocrText, ocrConfidence, ratio: claimedRatio, ratioMismatch,
+        filename, imagePath: url, ocrText, ocrConfidence, ratio: effectiveRatio, ratioMismatch,
         productId: null, productName: null,
         candidateProducts: (resolution.candidates || []).map((p) => ({ id: p.id, name: p.name })),
         candidates: []
@@ -473,10 +480,11 @@ class MaterialCheckStore {
     }
 
     return {
-      filename, imagePath: url, ocrText, ocrConfidence, ratio: claimedRatio, ratioMismatch,
+      filename, imagePath: url, ocrText, ocrConfidence, ratio: effectiveRatio, ratioMismatch,
       productId: resolution.product.id, productName: resolution.product.name,
       candidateProducts: [],
-      candidates: match.buildKeywordCandidates(ocrText, resolution.product)
+      candidates: match.buildKeywordCandidates(ocrText, resolution.product),
+      recognizedCandidates: match.buildKeywordCandidates(ocrText, resolution.product, { includeExisting: true })
     };
   }
 
@@ -487,7 +495,10 @@ class MaterialCheckStore {
     if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
     const product = lib.products.find((p) => p.id === productId);
     if (!product) throw new Error('选的这个产品不存在');
-    return match.buildKeywordCandidates(ocrText, product);
+    return {
+      candidates: match.buildKeywordCandidates(ocrText, product),
+      recognizedCandidates: match.buildKeywordCandidates(ocrText, product, { includeExisting: true })
+    };
   }
 
   async resolvePending(pendingId, productId, uploadedBy) {
