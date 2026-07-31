@@ -2170,7 +2170,7 @@ body.rpt-presenting .rpt-wm-note {
    素材原图是什么比例就按什么比例收进这个区域，长宽不够的地方露出背后的底色；
    占位态是分区色的渐变底 + 完整产品名（最多三行，超出省略号）；
    "更换封面/删除封面"悬浮在右下角，默认隐藏，hover/聚焦卡片时才显出来 */
-.mc-pcard-cover { position: relative; flex: 0 0 auto; height: 132px; background: var(--field-bg); overflow: hidden; }
+.mc-pcard-cover { order: 0; position: relative; flex: 0 0 auto; height: 132px; background: var(--field-bg); overflow: hidden; }
 .mc-pcard-cover img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .mc-pcard-cover-empty {
   width: 100%; height: 100%; padding: 10px 14px; text-align: center;
@@ -2183,7 +2183,7 @@ body.rpt-presenting .rpt-wm-note {
   -webkit-box-pack: center; -webkit-box-align: center;
   overflow: hidden;
 }
-.mc-pcard-cover-actions { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity var(--fast); }
+.mc-pcard-cover-actions { position: absolute; right: 8px; bottom: 8px; z-index: 2; display: flex; gap: 6px; opacity: 0; transition: opacity var(--fast); }
 .mc-pcard:hover .mc-pcard-cover-actions, .mc-pcard-cover-actions:focus-within { opacity: 1; }
 .mc-pcard-cover-btn {
   transition: background var(--fast);
@@ -2191,30 +2191,48 @@ body.rpt-presenting .rpt-wm-note {
   background: var(--scrim); color: #fff; font-size: 11.5px;
 }
 .mc-pcard-cover-btn:hover { background: #04070dcc; }
+.mc-pcard-cover-icon {
+  position: absolute; left: 8px; bottom: 8px; z-index: 2;
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0;
+  border: none; border-radius: 999px; cursor: pointer; font-family: inherit;
+  background: var(--scrim); color: #fff; font-size: 15px; line-height: 1;
+  transition: background var(--fast), transform var(--fast);
+}
+.mc-pcard-cover-icon:hover:not(:disabled) { background: #04070dcc; transform: scale(1.08); }
+.mc-pcard-cover-icon:disabled { opacity: 0.42; cursor: default; }
+.mc-pcard-cover-icon svg, .mc-pcard-expand-btn svg, .mc-pcard-delete-btn svg { width: 14px; height: 14px; display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* 放大按钮：常驻显示（不像更换/删除封面那样要 hover 才出现）——
    这是收起卡片唯一的展开入口，得让人一眼看到 */
 .mc-pcard-expand-btn {
-  position: absolute; right: 8px; top: 8px; z-index: 1;
-  width: 26px; height: 26px; display: grid; place-items: center;
-  border: none; border-radius: 999px; cursor: pointer;
+  position: absolute; left: 8px; top: 8px; z-index: 3;
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; padding: 0;
+  border: none; border-radius: 999px; cursor: pointer; font-family: inherit;
   background: var(--scrim); color: #fff; font-size: 13px;
   transition: background var(--fast), transform var(--fast);
 }
 .mc-pcard-expand-btn:hover { background: #04070dcc; transform: scale(1.08); }
+.mc-pcard-delete-btn {
+  position: absolute; right: 8px; top: 8px; z-index: 3;
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; padding: 0;
+  border: none; border-radius: 999px; cursor: pointer; font-family: inherit;
+  background: var(--scrim); color: #fff; font-size: 18px; line-height: 1;
+  transition: background var(--fast), transform var(--fast);
+}
+.mc-pcard-delete-btn:hover { background: var(--dis); transform: scale(1.08); }
 /* 卡片展开时，封面/内容两个节点被挪进浮窗，原位置留个淡化的空壳占住网格位置，
    避免其它卡片这时候跟着重新排布 */
 .mc-pcard-expanding { opacity: 0.35; pointer-events: none; }
 
-.mc-pcard-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px 14px; gap: 8px; }
-/* 名称/价格/词数/移动分区/复制/删除全部挤在同一行，
-   名称占剩余空间，其它都是固定宽度的控件 */
+.mc-pcard-body { order: 1; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px 14px; gap: 8px; }
+/* 名称、价格和移动分区放在一行，名称占剩余空间。 */
 .mc-pcard-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mc-pcard-name { flex: 1 1 100px; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-weight: 600; font-size: 13.5px; }
 .mc-pcard-price { flex: 0 0 76px; width: 76px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; }
 .mc-pcard-count { color: var(--dimmer); font-size: 12px; white-space: nowrap; }
-.mc-pcard-updated { flex: 0 0 auto; padding: 9px 14px 10px; border-top: 1px solid var(--line-soft); color: var(--dimmer); font-size: 11.5px; line-height: 1.35; }
+.mc-pcard-updated { order: 2; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 9px 14px 10px; border-top: 1px solid var(--line-soft); color: var(--dimmer); font-size: 11.5px; line-height: 1.35; }
 .mc-pcard-updated time { color: var(--dim); font-variant-numeric: tabular-nums; }
+.mc-pcard-updated .mc-pcard-count { margin-left: auto; }
 .mc-pcard-expanding .mc-pcard-updated { display: none; }
 .mc-pcard-move { flex: 0 0 auto; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
 /* 加关键词的输入行，单独一行，跟卡片头部的产品属性控件分开 */
@@ -2223,6 +2241,35 @@ body.rpt-presenting .rpt-wm-note {
 .mc-ratio-select { flex: 0 0 auto; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; }
 /* 关键词区：卡片高度固定，词多的话这里超出内部滚动（收起态是概览，不强求看全） */
 .mc-chip-editor-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; }
+
+/* 收起态卡片的职责是快速浏览词库：封面与维护控件收紧，腾出的高度全部交给关键词区。
+   这些规则限定在网格里，放大编辑浮窗维持原来的舒展尺寸和触控面积。 */
+.mc-pcards-grid .mc-pcard-cover { height: 104px; }
+.mc-pcards-grid .mc-pcard-body { padding: 8px 10px 9px; gap: 6px; }
+.mc-pcards-grid .mc-pcard-head, .mc-pcards-grid .mc-pcard-kwrow { gap: 6px; }
+.mc-pcards-grid .mc-pcard-kwrow { flex-wrap: nowrap; }
+.mc-pcards-grid .mc-pcard-name { flex: 1 1 86px; min-width: 78px; padding: 5px 8px; font-size: 12.5px; }
+.mc-pcards-grid .mc-pcard-price { flex-basis: 66px; width: 66px; padding: 5px 7px; font-size: 12px; }
+.mc-pcards-grid .mc-pcard-count { font-size: 11.5px; }
+.mc-pcards-grid .mc-pcard-move { padding: 5px 7px; font-size: 11.5px; }
+.mc-pcards-grid .mc-pcard-head .mc-btn, .mc-pcards-grid .mc-pcard-kwrow .mc-btn { padding: 5px 8px; font-size: 11.5px; }
+.mc-pcards-grid .mc-kw-input-inline { flex: 1 1 0; padding: 6px 8px; font-size: 12px; }
+.mc-pcards-grid .mc-cat-select { flex: 0 0 82px; min-width: 0; width: 82px; padding: 6px 8px; font-size: 12px; }
+.mc-pcards-grid .mc-ratio-select { flex: 0 0 58px; min-width: 0; width: 58px; padding: 6px 7px; font-size: 12px; }
+.mc-pcards-grid .mc-pcard-updated { padding: 7px 10px 8px; }
+.mc-expand-cover-slot .mc-pcard-copy-btn, .mc-expand-cover-slot .mc-copy-drawer { display: none; }
+
+/* 收起态的每条词固定成一行：文字使用左侧剩余宽度，彩色分类在前、比例在后，
+   三列在所有词条中垂直对齐，便于快速扫读。 */
+.mc-pcards-grid .mc-chip-editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
+.mc-pcards-grid .mc-chip-editor .mc-chip {
+  display: grid; grid-template-columns: minmax(0, 1fr) 98px 58px 18px; align-items: center; gap: 6px;
+  width: 100%; box-sizing: border-box; padding: 4px 8px;
+}
+.mc-pcards-grid .mc-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-pcards-grid .mc-cat-badge-select { width: 98px; margin-left: 0; text-align: center; }
+.mc-pcards-grid .mc-ratio-badge-select { width: 58px; margin-left: 0; text-align: center; }
+.mc-pcards-grid .mc-chip-del { justify-self: end; }
 
 /* 展开浮窗：点卡片右上角放大按钮触发。不是重新渲染一份，是把卡片自己的
    .mc-pcard-cover / .mc-pcard-body 两个节点原样挪进浮窗里两个槽位——编辑状态、
@@ -2318,11 +2365,17 @@ body.rpt-presenting .rpt-wm-note {
 .mc-pcard-handle:hover { color: var(--text); background: var(--surface-2); }
 .mc-pcard-dragging { opacity: 0.5; }
 
-/* "复制到…"：跟词库改名那条内联行一样的隐藏/展开模式，同样要钉住 [hidden]，
-   否则 .mc-copy-row 的 display:flex 跟 UA 的 [hidden]{display:none} 优先级打平会被覆盖 */
-.mc-copy-row { display: flex; gap: 8px; align-items: center; }
-.mc-copy-row[hidden] { display: none; }
-.mc-copy-row select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+/* 封面左下的复制入口展开为轻量抽屉，避免把低频的覆盖操作长期占用关键词编辑空间。 */
+.mc-copy-drawer {
+  position: absolute; left: 8px; bottom: 8px; z-index: 4; width: min(216px, calc(100% - 16px));
+  display: flex; flex-direction: column; gap: 7px; padding: 9px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+  box-shadow: 0 14px 28px -14px #000;
+}
+.mc-copy-drawer[hidden] { display: none; }
+.mc-copy-drawer select { width: 100%; min-width: 0; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12px; }
+.mc-copy-drawer-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.mc-copy-drawer-actions .mc-btn { padding: 5px 8px; font-size: 11.5px; }
 
 .mc-cat-badge, .mc-cat-badge-select { border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
 /* 分类徽章现在是个可选的下拉框（点了能直接改分类），不是纯展示的 <small> 了——
