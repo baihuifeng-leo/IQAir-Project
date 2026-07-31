@@ -2356,6 +2356,7 @@ body.rpt-presenting .rpt-wm-note {
 .mc-ab-group-head { display: flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 8px; }
 .mc-ab-product-toggle { display: inline-flex; align-items: center; min-width: 0; cursor: pointer; }
 .mc-ab-product-toggle input { inline-size: 16px; block-size: 16px; margin: 0; accent-color: var(--mint); }
+.mc-ab-origin-product { color: var(--dim); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .mc-ab-product-assignment { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--dim); font-size: 12px; font-weight: 500; }
 .mc-ab-product-assignment select { min-width: 156px; max-width: 250px; padding: 5px 7px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--field-bg); color: var(--text); font: inherit; }
 .mc-ab-mode { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; font-weight: 500; }

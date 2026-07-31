@@ -1148,11 +1148,11 @@ const MaterialCheck = (() => {
     }
 
     if (groups.size) {
-      html += `<h3>识别出的关键词（默认全选，取消勾选不需要的）</h3><p class="mc-ab-hint">同一产品在 1:1 与 3:4 素材都出现的词，会自动标为“通用”。如果 OCR 的产品判断有误，可在产品组顶部一次更正所属产品；选择“替换全部词”时，仅保留本次勾选的词。</p>`;
+      html += `<h3>识别出的关键词（默认全选，取消勾选不需要的）</h3><p class="mc-ab-hint">同一产品在 1:1 与 3:4 素材都出现的词，会自动标为“通用”。OCR 认错产品时，在产品组顶部把整组关键词改写入正确产品词库；关键词本身不需要逐条调整归属或分类。</p>`;
       html += [...groups.entries()].map(([pid, g]) => {
         const items = [...g.cands.entries()];
         return `<div class="mc-ab-group" data-pid="${escapeHtml(pid)}">
-          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}></label><label class="mc-ab-product-assignment"><span>识别产品</span><select data-role="group-product" ${g.included ? '' : 'disabled'} aria-label="OCR 识别产品">${products.map((product) => `<option value="${escapeHtml(product.id)}" ${g.targetProductId === product.id ? 'selected' : ''}>${escapeHtml(product.name)}</option>`).join('')}</select></label><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
+          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}></label><span class="mc-ab-origin-product">OCR 识别：${escapeHtml(g.productName)}</span><label class="mc-ab-product-assignment"><span>写入词库</span><select data-role="group-product" ${g.included ? '' : 'disabled'} aria-label="将本组 ${items.length} 条词写入产品词库">${products.map((product) => `<option value="${escapeHtml(product.id)}" ${g.targetProductId === product.id ? 'selected' : ''}>${escapeHtml(product.name)}</option>`).join('')}</select></label><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
           <div class="mc-ab-cands">${items.map(([norm, c]) =>
             `<div class="mc-ab-cand ${g.included ? '' : 'is-ignored'}"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''} ${g.included ? '' : 'disabled'} aria-label="是否导入 ${escapeHtml(c.text)}"><span class="mc-ab-cand-text">${escapeHtml(c.text)}</span><span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></div>`
           ).join('')}</div>
