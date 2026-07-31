@@ -363,7 +363,7 @@ class MaterialCheckStore {
     if (status) rows = rows.filter((r) => r.status === status);
     if (uploadedBy) rows = rows.filter((r) => r.uploadedBy === uploadedBy);
     return rows.slice(-limit).reverse().map((record) => {
-      if (Array.isArray(record.unregisteredKeywords) && Array.isArray(record.wrongKeywords)) return record;
+      if (Array.isArray(record.unregisteredKeywords) && Array.isArray(record.wrongKeywords) && Array.isArray(record.expandedKeywords)) return record;
       const lib = this.getLibrary(record.platform, record.libraryId);
       const product = lib && lib.products.find((p) => p.id === record.productId);
       // 旧记录没有逐词新字段时，用当前词库即时补算，保证历史详情也能辨认后来加入的“错词”规则。
@@ -506,11 +506,11 @@ class MaterialCheckStore {
   }
 
   async _finish({ platform, libraryId, product, allProducts, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning, ratio }) {
-    const { missingKeywords, wrongKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords } = match.matchAgainstProduct(ocrText, product, allProducts, ratio);
+    const { missingKeywords, wrongKeywords, expandedKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords } = match.matchAgainstProduct(ocrText, product, allProducts, ratio);
     const record = {
       id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId,
       filename, imagePath, productId: product.id, productName: product.name, matchMethod: method, ratio,
-      ocrText, ocrConfidence, missingKeywords, wrongKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, warning, matchedKeywords
+      ocrText, ocrConfidence, missingKeywords, wrongKeywords, expandedKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, warning, matchedKeywords
     };
     await this.append(record);
     return record;

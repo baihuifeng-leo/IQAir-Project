@@ -230,6 +230,7 @@ const MaterialCheck = (() => {
   }
 
   const KWD_STATUS_TITLE = {
+    expanded: '词库词已出现，但同一行有未配置的前后缀文字',
     missing: '素材里没有找到这个词',
     wrong: '素材中出现近似词，但有一个字符不一致',
     fuzzy: '不是逐字一致，靠归一化规则判定命中',
@@ -246,6 +247,12 @@ const MaterialCheck = (() => {
     return `<span class="mc-chip mc-chip-warn"><span class="mc-wrong-expected">${escapeHtml(wrong.expected)}</span><span class="mc-wrong-arrow">→</span><span class="mc-wrong-actual">${highlightWrongActual(wrong)}</span></span>`;
   }
 
+  function expandedKeywordHtml(expanded) {
+    const prefix = String(expanded?.prefix || '');
+    const suffix = String(expanded?.suffix || '');
+    return `<span class="mc-chip mc-chip-warn"><span class="mc-expanded-actual">${prefix ? `<mark class="mc-mark-expanded">${escapeHtml(prefix)}</mark>` : ''}${escapeHtml(expanded?.expected)}${suffix ? `<mark class="mc-mark-expanded">${escapeHtml(suffix)}</mark>` : ''}</span></span>`;
+  }
+
   /** 检测台结果卡片里"查看明细"面板：把 matchAgainstProduct 返回的 matchedKeywords
    *  （产品自己词库里每个适用词的命中三态）画成手动展开的明细列表，缺失排最前面，
    *  规则命中的附上具体理由（从 normalize() 的规则表反推出来的，不是写死的猜测）。 */
@@ -255,11 +262,14 @@ const MaterialCheck = (() => {
     }
     const missCount = matchedKeywords.filter((k) => k.status === 'missing').length;
     const wrongCount = matchedKeywords.filter((k) => k.status === 'wrong').length;
+    const expandedCount = matchedKeywords.filter((k) => k.status === 'expanded').length;
     const fuzzyCount = matchedKeywords.filter((k) => k.status === 'fuzzy').length;
     const items = matchedKeywords.map((kw) => {
       const reasonText = (kw.reasons || []).join('、');
       const title = kw.status === 'fuzzy' ? `${KWD_STATUS_TITLE.fuzzy}：${reasonText}` : KWD_STATUS_TITLE[kw.status];
-      const actionText = kw.status === 'missing'
+      const actionText = kw.status === 'expanded'
+        ? `前后缀不一致：${[kw.prefix, kw.suffix].filter(Boolean).join(' / ')}`
+        : kw.status === 'missing'
         ? '未命中'
         : kw.status === 'wrong'
           ? `错为：${kw.actual || '（漏字）'}`
@@ -271,7 +281,7 @@ const MaterialCheck = (() => {
       </span>`;
     }).join('');
     return `<details class="mc-kw-detail"${options.open ? ' open' : ''}>
-      <summary>关键词处理明细（共 ${matchedKeywords.length} 词 · ${wrongCount} 错词 · ${missCount} 缺失 · ${fuzzyCount} 规则命中）</summary>
+      <summary>关键词处理明细（共 ${matchedKeywords.length} 词 · ${expandedCount} 前后缀不一致 · ${wrongCount} 错词 · ${missCount} 缺失 · ${fuzzyCount} 规则命中）</summary>
       <div class="mc-kw-detail-list">${items}</div>
     </details>`;
   }
@@ -462,6 +472,9 @@ const MaterialCheck = (() => {
     if (result.wrongKeywords?.length) {
       detail += `<div class="mc-chip-row">错词：${result.wrongKeywords.map(wrongKeywordHtml).join('')}</div>`;
     }
+    if (result.expandedKeywords?.length) {
+      detail += `<div class="mc-chip-row">前后缀不一致：${result.expandedKeywords.map(expandedKeywordHtml).join('')}</div>`;
+    }
     if (result.extraKeywords?.length) {
       detail += `<div class="mc-chip-row">串词：${result.extraKeywords.map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('')}</div>`;
     }
@@ -609,8 +622,12 @@ const MaterialCheck = (() => {
     (r.extraKeywords || []).forEach((k) => {
       html = html.split(escapeHtml(k)).join(`<mark class="mc-mark-bad">${escapeHtml(k)}</mark>`);
     });
+    (r.expandedKeywords || []).forEach((k) => {
+      html = html.split(escapeHtml(k.actual)).join(expandedKeywordHtml(k));
+    });
     const missing = (r.missingKeywords || []).map((k) => `<span class="mc-chip mc-chip-warn">${escapeHtml(k)}</span>`).join('') || '（无缺词）';
     const wrong = (r.wrongKeywords || []).map(wrongKeywordHtml).join('') || '（无错词）';
+    const expanded = (r.expandedKeywords || []).map(expandedKeywordHtml).join('') || '（无前后缀不一致）';
     const extra = (r.extraKeywords || []).map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('') || '（无串词）';
     const unregistered = (r.unregisteredKeywords || []).map((k) => `<span class="mc-chip mc-chip-note">${escapeHtml(k)}</span>`).join('') || '（无未入库词）';
     const priceRow = r.priceIssue
@@ -620,6 +637,7 @@ const MaterialCheck = (() => {
       <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')} ${sourcePreviewHtml(r.imagePath, r.filename)}</p>
       <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
       <div class="mc-chip-row"><b>错词：</b>${wrong}</div>
+      <div class="mc-chip-row"><b>前后缀不一致：</b>${expanded}</div>
       <div class="mc-chip-row"><b>串词：</b>${extra}</div>
       <div class="mc-chip-row mc-unregistered-row"><b>未入库词：</b><span class="mc-unregistered-note">仅供核对，不影响通过</span>${unregistered}</div>
       ${priceRow}

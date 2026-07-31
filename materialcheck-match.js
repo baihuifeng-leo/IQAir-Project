@@ -111,22 +111,60 @@ function classifyKeywordMatch(text, keywordRaw) {
   return { found: true, exact: false, wrong: false, reasons };
 }
 
+/**
+ * 关键词作为一行文案的一部分出现时，不能仅凭 includes() 就断言它“逐字命中”。
+ *
+ * 例如词库登记「Premax滤芯或H11滤芯」，素材实际写成「赠Premax滤芯或H11滤芯」：
+ * 核心词确实出现了，但“赠”会改变权益含义，应该交给审核人确认。反过来，
+ * 「3期免息|晒单送10元现金红包」这类同行组合，只要其余文字也能被本产品的其它
+ * 已配置关键词完整覆盖，就仍是正常排版，不制造提醒。
+ */
+function findUncoveredAffix(text, keywordRaw, coveredKeywords) {
+  const expected = String(keywordRaw || '');
+  if (!expected) return null;
+  const known = (coveredKeywords || []).map((kw) => normalize(keywordText(kw))).filter(Boolean);
+
+  for (const line of String(text || '').split(/\r?\n/)) {
+    let start = line.indexOf(expected);
+    while (start !== -1) {
+      const prefix = line.slice(0, start);
+      const suffix = line.slice(start + expected.length);
+      let remainder = normalize(prefix + suffix);
+      known.forEach((keyword) => { remainder = remainder.split(keyword).join(''); });
+      // 仅剩下常见版式分隔符时，说明同行的其它文案都已由词库覆盖。
+      const meaningfulRemainder = remainder.replace(/[|｜/／\\·•—–－_()[\]{}【】（）]+/g, '');
+      if (meaningfulRemainder) return { expected, actual: line, prefix, suffix };
+      start = line.indexOf(expected, start + expected.length);
+    }
+  }
+  return null;
+}
+
+// 产品名称/型号常常天然带品牌或系列前缀（例如「IQAir Atem Car」），不适合一律按
+// 前后缀不一致报警。该提醒只用于会因“赠/限时/满减”等附加文字而改变审核含义的
+// 商业文案分类；词库未分类的旧词维持原有兼容行为。
+function shouldCheckUncoveredAffix(keyword) {
+  return ['附加权益', '大促销售权益', '日常销售利益点', '国补', '价格'].includes(keywordCategory(keyword));
+}
+
 /** 检测台关键词明细面板：把产品自己词库里适用于这个素材比例的每个词都判一遍
  *  三态（命中/规则命中/缺失），红色缺词排最前面，方便优先看问题。 */
 function matchedKeywordDetail(text, product, materialRatio) {
-  return (product.keywords || [])
-    .filter((kw) => keywordApplies(kw, materialRatio))
+  const applicableKeywords = (product.keywords || []).filter((kw) => keywordApplies(kw, materialRatio));
+  return applicableKeywords
     .map((kw) => {
       const { found, exact, wrong, reasons, actual, differences } = classifyKeywordMatch(text, keywordText(kw));
+      const expanded = exact && shouldCheckUncoveredAffix(kw) ? findUncoveredAffix(text, keywordText(kw), applicableKeywords) : null;
       return {
         text: keywordText(kw),
         category: keywordCategory(kw),
-        status: wrong ? 'wrong' : !found ? 'missing' : exact ? 'exact' : 'fuzzy',
-        reasons, actual, differences
+        status: expanded ? 'expanded' : wrong ? 'wrong' : !found ? 'missing' : exact ? 'exact' : 'fuzzy',
+        reasons, actual: expanded ? expanded.actual : actual, differences,
+        prefix: expanded?.prefix, suffix: expanded?.suffix
       };
     })
     .sort((a, b) => {
-      const order = { wrong: 0, missing: 1, fuzzy: 2, exact: 3 };
+      const order = { expanded: 0, wrong: 1, missing: 2, fuzzy: 3, exact: 4 };
       return order[a.status] - order[b.status];
     });
 }
@@ -388,6 +426,9 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
   const wrongKeywords = matchedKeywords
     .filter((kw) => kw.status === 'wrong')
     .map((kw) => ({ expected: kw.text, actual: kw.actual, differences: kw.differences }));
+  const expandedKeywords = matchedKeywords
+    .filter((kw) => kw.status === 'expanded')
+    .map((kw) => ({ expected: kw.text, actual: kw.actual, prefix: kw.prefix, suffix: kw.suffix }));
 
   // 用归一化后的文字判断"这个词本产品是不是已经有了"，不能只比较原始字符串——
   // 同一句话在不同产品词库里可能就差一个全角/半角符号、一个空格（实测 HP250 XE
@@ -419,8 +460,8 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
   const priceIssue = checkPrice(text, product);
   const unregisteredKeywords = unregisteredOcrLines(text, allProducts);
 
-  const status = (extraKeywords.length > 0 || priceIssue) ? 'error' : (missingKeywords.length > 0 || wrongKeywords.length > 0) ? 'warn' : 'pass';
-  return { missingKeywords, wrongKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords };
+  const status = (extraKeywords.length > 0 || priceIssue) ? 'error' : (missingKeywords.length > 0 || wrongKeywords.length > 0 || expandedKeywords.length > 0) ? 'warn' : 'pass';
+  return { missingKeywords, wrongKeywords, expandedKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords };
 }
 
 module.exports = {
@@ -428,5 +469,5 @@ module.exports = {
   normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, hasStrongOcrProductEvidence, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
   extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates, unregisteredOcrLines,
-  classifyKeywordMatch, findOneCharMistake, matchedKeywordDetail
+  classifyKeywordMatch, findOneCharMistake, findUncoveredAffix, matchedKeywordDetail
 };
