@@ -779,6 +779,12 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, result);
     }
 
+    if (p === '/api/materialcheck/autobuild/cache' && req.method === 'POST') {
+      const buf = await readBinary(req, MAX_IMAGE);
+      if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
+      return json(res, 200, { exists: materialcheck.autobuildCacheExistsFor(buf) });
+    }
+
     if (p === '/api/materialcheck/autobuild/scan' && req.method === 'POST') {
       const ct = (req.headers['content-type'] || '').split(';')[0].trim();
       const ext = IMAGE_EXT[ct];
@@ -792,7 +798,7 @@ const server = http.createServer(async (req, res) => {
       const buf = await readBinary(req, MAX_IMAGE);
       if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
       let result;
-      try { result = await materialcheck.autobuildScan({ buf, ext, filename, platform, libraryId, ratio, requireDetectedRatio: !ratio }); }
+      try { result = await materialcheck.autobuildScan({ buf, ext, filename, platform, libraryId, ratio, requireDetectedRatio: !ratio, reuseOcr: url.searchParams.get('reuseOcr') === 'true' }); }
       catch (e) { return json(res, 400, { error: e.message }); }
       return json(res, 200, result);
     }
