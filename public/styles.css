@@ -2356,7 +2356,6 @@ body.rpt-presenting .rpt-wm-note {
 .mc-ab-group-head { display: flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 8px; }
 .mc-ab-product-toggle { display: inline-flex; align-items: center; min-width: 0; cursor: pointer; }
 .mc-ab-product-toggle input { inline-size: 16px; block-size: 16px; margin: 0; accent-color: var(--mint); }
-.mc-ab-origin-product { color: var(--dim); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .mc-ab-product-assignment { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--dim); font-size: 12px; font-weight: 500; }
 .mc-ab-product-assignment select { min-width: 156px; max-width: 250px; padding: 5px 7px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--field-bg); color: var(--text); font: inherit; }
 .mc-ab-mode { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; font-weight: 500; }
@@ -2369,7 +2368,7 @@ body.rpt-presenting .rpt-wm-note {
 .mc-ab-cand-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mc-ab-cand.is-ignored { opacity: 0.52; }
 .mc-ab-cand-ratio { font-size: 10px; padding: 1px 6px; border-radius: 5px; }
-.mc-ab-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; position: sticky; bottom: 0; background: var(--surface); padding-top: 10px; }
+.mc-ab-actions { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 10px; padding: 13px 20px 16px; border-top: 1px solid var(--line-soft); background: var(--surface-2); }
 
 @media (max-width: 620px) {
   .mc-ab-group-head { align-items: flex-start; flex-wrap: wrap; }
