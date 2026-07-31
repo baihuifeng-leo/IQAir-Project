@@ -1597,7 +1597,7 @@ const MaterialCheck = (() => {
       const groups = duplicateKeywordGroups();
       bulkKeywordList.innerHTML = groups.length ? groups.map((group, groupIndex) => `
         <article class="mc-bulk-keyword-group" data-group-index="${groupIndex}">
-          <div class="mc-bulk-keyword-head"><span>共 ${group.locations.length} 个产品</span><select class="mc-cat-badge-select ${CAT_CLASS[group.category]}" data-role="bulk-keyword-category" aria-label="「${escapeHtml(group.text)}」的分类">${CATEGORIES.map((category) => `<option value="${escapeHtml(category)}" ${category === group.category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}</select></div>
+          <div class="mc-bulk-keyword-head"><span>共 ${group.locations.length} 个产品</span><select class="mc-cat-badge-select ${CAT_CLASS[group.category]}" data-role="bulk-keyword-category" aria-label="「${escapeHtml(group.text)}」的分类">${CATEGORIES.map((category) => `<option value="${escapeHtml(category)}" ${category === group.category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}</select><button type="button" class="mc-btn mc-btn-danger mc-btn-mini" data-role="bulk-keyword-delete" aria-label="从 ${group.locations.length} 个产品中删除关键词「${escapeHtml(group.text)}」">删除该词</button></div>
           <label class="mc-bulk-keyword-edit">关键词<input value="${escapeHtml(group.text)}" data-role="bulk-keyword-input" aria-label="将「${escapeHtml(group.text)}」同步修改为"></label>
           <div class="mc-bulk-keyword-locations">${group.locations.map((location) => `<span class="mc-bulk-keyword-location">${escapeHtml(location.product.name)}</span>`).join('')}</div>
         </article>`).join('') : '<p class="rv-empty">当前词库没有出现两次以上的完全相同关键词。</p>';
@@ -1630,6 +1630,24 @@ const MaterialCheck = (() => {
           drawAll();
           renderBulkKeywordGroups();
           scheduleAutoSave();
+        };
+      });
+      bulkKeywordList.querySelectorAll('[data-role="bulk-keyword-delete"]').forEach((button) => {
+        button.onclick = () => {
+          const group = groups[Number(button.closest('[data-group-index]').dataset.groupIndex)];
+          if (!confirm(`删除关键词「${group.text}」？它会从 ${group.locations.length} 个产品中一并移除。`)) return;
+          const removeIndexes = new Map();
+          group.locations.forEach(({ product, index }) => {
+            if (!removeIndexes.has(product)) removeIndexes.set(product, new Set());
+            removeIndexes.get(product).add(index);
+          });
+          removeIndexes.forEach((indexes, product) => {
+            product.keywords = product.keywords.filter((_, index) => !indexes.has(index));
+          });
+          drawAll();
+          renderBulkKeywordGroups();
+          scheduleAutoSave();
+          A.toast(`已从 ${group.locations.length} 个产品中删除「${group.text}」，正在自动同步…`);
         };
       });
     };
