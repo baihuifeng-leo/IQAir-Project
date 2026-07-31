@@ -787,12 +787,12 @@ const server = http.createServer(async (req, res) => {
       if (!MATERIALCHECK_PLATFORMS.includes(platform)) return json(res, 400, { error: '平台参数不对，只能是 tmall 或 jd' });
       const libraryId = url.searchParams.get('libraryId') || undefined;
       const filename = decodeURIComponent(url.searchParams.get('filename') || ('upload' + ext));
+      // 词库维护和检测台共用真实图片尺寸判定，前端不再通过两个比例入口预先分类。
       const ratio = url.searchParams.get('ratio') || undefined;
-      if (!['1:1', '3:4'].includes(ratio)) return json(res, 400, { error: '缺少素材比例参数，只能是 1:1 或 3:4' });
       const buf = await readBinary(req, MAX_IMAGE);
       if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
       let result;
-      try { result = await materialcheck.autobuildScan({ buf, ext, filename, platform, libraryId, ratio }); }
+      try { result = await materialcheck.autobuildScan({ buf, ext, filename, platform, libraryId, ratio, requireDetectedRatio: !ratio }); }
       catch (e) { return json(res, 400, { error: e.message }); }
       return json(res, 200, result);
     }
@@ -803,7 +803,7 @@ const server = http.createServer(async (req, res) => {
       let candidates;
       try { candidates = materialcheck.autobuildCandidatesFor({ platform, libraryId, productId, ocrText }); }
       catch (e) { return json(res, 400, { error: e.message }); }
-      return json(res, 200, { candidates });
+      return json(res, 200, candidates);
     }
 
     if (p === '/api/materialcheck/resolve' && req.method === 'POST') {

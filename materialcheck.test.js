@@ -1171,14 +1171,16 @@ async function run() {
     assert.strictEqual(store.records.length, before); // 只是扫描预览，不落检测记录
   });
 
-  await tAsync('autobuildScan 把传入的 ratio 原样带回结果，并在像素比例对不上入口时给出提示', async () => {
+  await tAsync('autobuildScan 自动从真实尺寸识别比例；不符合两种规格时拒绝 OCR', async () => {
     const store = await freshStore();
     const ocr = stubOcr('GC-Multi\n新的卖点一', 0.95);
     const result = await store.autobuildScan({
-      buf: fakePng(1440, 1920), ext: '.png', filename: 'GC-Multi.png', platform: PF, libraryId: store.getLibrary(PF).id, ratio: '1:1', ocr
+      buf: fakePng(1440, 1920), ext: '.png', filename: 'GC-Multi.png', platform: PF, libraryId: store.getLibrary(PF).id, requireDetectedRatio: true, ocr
     });
-    assert.strictEqual(result.ratio, '1:1');
-    assert.ok(result.ratioMismatch && result.ratioMismatch.includes('3:4'));
+    assert.strictEqual(result.ratio, '3:4');
+    await assert.rejects(() => store.autobuildScan({
+      buf: fakePng(1600, 900), ext: '.png', filename: 'GC-Multi-wide.png', platform: PF, libraryId: store.getLibrary(PF).id, requireDetectedRatio: true, ocr
+    }), /只支持接近 1:1 或 3:4/);
   });
 
   await tAsync('autobuildScan 文件名和 OCR 都判断不出产品时，返回待人工指定，候选词为空', async () => {
@@ -1195,7 +1197,8 @@ async function run() {
       platform: PF, libraryId: store.getLibrary(PF).id, productId: 'pb',
       ocrText: 'GCX XE\n静音悬浮马达\n又一个新卖点'
     });
-    assert.deepStrictEqual(candidates, ['又一个新卖点']);
+    assert.deepStrictEqual(candidates.candidates, ['又一个新卖点']);
+    assert.deepStrictEqual(candidates.recognizedCandidates, ['GCX XE', '静音悬浮马达', '又一个新卖点']);
   });
 
   await tAsync('autobuildCandidatesFor 产品不存在时抛出错误', async () => {

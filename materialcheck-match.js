@@ -280,7 +280,7 @@ function isPriceLikeLine(line) {
  * 和这个产品自己已经有的词完全一样的（去空格后比较，不做模糊/相似度匹配）。
  * 同一行在这张图里出现多次只算一个候选。
  */
-function buildKeywordCandidates(ocrText, product) {
+function buildKeywordCandidates(ocrText, product, { includeExisting = false } = {}) {
   const existing = new Set((product.keywords || []).map((k) => normalize(keywordText(k))));
   const seen = new Set();
   const candidates = [];
@@ -288,7 +288,7 @@ function buildKeywordCandidates(ocrText, product) {
     const line = raw.trim();
     if (!line) return;
     const norm = normalize(line);
-    if (seen.has(norm) || existing.has(norm) || isPriceLikeLine(line)) return;
+    if (seen.has(norm) || (!includeExisting && existing.has(norm)) || isPriceLikeLine(line)) return;
     seen.add(norm);
     candidates.push(line);
   });

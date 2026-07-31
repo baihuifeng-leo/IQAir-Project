@@ -1100,10 +1100,11 @@ const MaterialCheck = (() => {
   function autobuildGroups(entries) {
     const groups = new Map();
     entries.forEach((e) => {
-      if (e.status !== 'resolved' || !e.candidates.length) return;
+      const source = e.recognizedCandidates || e.candidates;
+      if (e.status !== 'resolved' || !source.length) return;
       let g = groups.get(e.productId);
-      if (!g) { g = { productName: e.productName, cands: new Map() }; groups.set(e.productId, g); }
-      e.candidates.forEach((text) => {
+      if (!g) { g = { productName: e.productName, cands: new Map(), mode: 'append' }; groups.set(e.productId, g); }
+      source.forEach((text) => {
         const norm = stripSpaces(text);
         const existing = g.cands.get(norm);
         if (!existing) g.cands.set(norm, { text, checked: true, ratio: e.ratio });
@@ -1146,11 +1147,11 @@ const MaterialCheck = (() => {
     }
 
     if (groups.size) {
-      html += `<h3>识别出的候选关键词（默认全选，取消勾选不需要的）</h3>`;
+      html += `<h3>识别出的关键词（默认全选，取消勾选不需要的）</h3><p class="mc-ab-hint">同一产品在 1:1 与 3:4 素材都出现的词，会自动标为“通用”。选择“替换全部词”时，仅保留本次勾选的词。</p>`;
       html += [...groups.entries()].map(([pid, g]) => {
         const items = [...g.cands.entries()];
         return `<div class="mc-ab-group" data-pid="${escapeHtml(pid)}">
-          <div class="mc-ab-group-head">${escapeHtml(g.productName)}<span class="mc-pcard-count">${items.length} 条新候选</span></div>
+          <div class="mc-ab-group-head"><span>${escapeHtml(g.productName)}</span><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode"><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
           <div class="mc-ab-cands">${items.map(([norm, c]) =>
             `<label class="mc-ab-cand"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''}>${escapeHtml(c.text)}<span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></label>`
           ).join('')}</div>
@@ -1184,6 +1185,7 @@ const MaterialCheck = (() => {
           e.productId = productId;
           e.productName = product ? product.name : '';
           e.candidates = j.candidates;
+          e.recognizedCandidates = j.recognizedCandidates || j.candidates;
         } catch (err) { A.toast(err.message, 'bad'); }
         drawAutobuildReview(entries);
       };
@@ -1194,6 +1196,7 @@ const MaterialCheck = (() => {
       groupEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
         cb.onchange = () => { g.cands.get(cb.dataset.norm).checked = cb.checked; };
       });
+      groupEl.querySelector('[data-role="import-mode"]').onchange = (e) => { g.mode = e.target.value; };
     });
 
     const cancelBtn = autobuildBody.querySelector('#mc-ab-cancel');
@@ -1203,17 +1206,26 @@ const MaterialCheck = (() => {
     if (confirmBtn && !confirmBtn.disabled) {
       confirmBtn.onclick = () => {
         let addedCount = 0;
+        let replacedProducts = 0;
         groups.forEach((g, pid) => {
           const product = products.find((p) => p.id === pid);
           if (!product) return;
-          g.cands.forEach((c) => {
-            if (!c.checked) return;
+          const selected = [...g.cands.values()].filter((c) => c.checked);
+          if (g.mode === 'replace') {
+            product.keywords = selected.map((c) => ({ text: c.text, category: '其它', ratio: c.ratio }));
+            replacedProducts++;
+            return;
+          }
+          const existing = new Set((product.keywords || []).map((k) => stripSpaces(keywordText(k))));
+          selected.forEach((c) => {
+            if (existing.has(stripSpaces(c.text))) return;
             product.keywords.push({ text: c.text, category: '其它', ratio: c.ratio });
+            existing.add(stripSpaces(c.text));
             addedCount++;
           });
         });
         autobuildMask.hidden = true;
-        A.toast(`已导入 ${addedCount} 条新关键词，正在保存…`);
+        A.toast(`${replacedProducts ? `已替换 ${replacedProducts} 个产品的词库；` : ''}已追加 ${addedCount} 条关键词，正在保存…`);
         saveLibraryNow({ silent: false });
       };
     }
@@ -1221,12 +1233,12 @@ const MaterialCheck = (() => {
 
   let autobuildSeq = 0;
 
-  async function openAutobuild(fileList, ratio) {
+  async function openAutobuild(fileList) {
     if (!products.length) return A.toast('先去下面新增至少一个产品，再批量识别', 'bad');
     if (!autobuildMask) buildAutobuildSheet();
     const entries = fileList.map((file) => ({
-      eid: 'e' + (autobuildSeq++), file, filename: file.name, status: 'scanning', ratio,
-      productId: null, productName: null, candidates: [], candidateProducts: [], ocrText: '', errorMsg: ''
+      eid: 'e' + (autobuildSeq++), file, filename: file.name, status: 'scanning', ratio: null,
+      productId: null, productName: null, candidates: [], recognizedCandidates: [], candidateProducts: [], ocrText: '', errorMsg: ''
     }));
     autobuildMask.hidden = false;
     drawAutobuildReview(entries);
@@ -1234,16 +1246,18 @@ const MaterialCheck = (() => {
     const scanPlatform = platform, scanLibraryId = libraryId;
     async function scanOne(e) {
       try {
-        const result = await call(`/api/materialcheck/autobuild/scan?filename=${encodeURIComponent(e.filename)}&platform=${encodeURIComponent(scanPlatform)}&libraryId=${encodeURIComponent(scanLibraryId)}&ratio=${encodeURIComponent(e.ratio)}`, {
+        const result = await call(`/api/materialcheck/autobuild/scan?filename=${encodeURIComponent(e.filename)}&platform=${encodeURIComponent(scanPlatform)}&libraryId=${encodeURIComponent(scanLibraryId)}`, {
           method: 'POST', headers: { 'Content-Type': e.file.type }, body: e.file
         });
         if (result.ratioMismatch) A.toast(`${e.filename}：${result.ratioMismatch}`, 'bad');
         e.ocrText = result.ocrText;
+        e.ratio = result.ratio;
         if (result.productId) {
           e.status = 'resolved';
           e.productId = result.productId;
           e.productName = result.productName;
           e.candidates = result.candidates;
+          e.recognizedCandidates = result.recognizedCandidates || result.candidates;
         } else {
           e.status = 'unresolved';
           e.candidateProducts = result.candidateProducts || [];
@@ -1318,10 +1332,8 @@ const MaterialCheck = (() => {
             <div class="mc-bulk-keyword-list" id="mc-bulk-keyword-list"></div>
           </section>
           <span class="mc-lib-spacer"></span>
-          <button class="mc-btn" id="mc-lib-autobuild-11">批量识别 1:1 素材…</button>
-          <button class="mc-btn" id="mc-lib-autobuild-34">批量识别 3:4 素材…</button>
-          <input type="file" id="mc-autobuild-file-11" accept="image/png,image/jpeg,image/webp" multiple hidden>
-          <input type="file" id="mc-autobuild-file-34" accept="image/png,image/jpeg,image/webp" multiple hidden>
+          <div class="mc-autobuild-dropzone" id="mc-autobuild-dropzone" tabindex="0" role="button" aria-label="批量上传素材自动识别关键词"><b>批量识别素材</b><span>点击选择或拖入图片 · 自动判断 1:1 / 3:4</span></div>
+          <input type="file" id="mc-autobuild-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
         </div>
         <p class="mc-lib-error" id="mc-lib-error" hidden></p>
@@ -1718,15 +1730,19 @@ const MaterialCheck = (() => {
     });
 
     if (!readOnly) {
-      [['11', '1:1'], ['34', '3:4']].forEach(([suffix, ratio]) => {
-        const abFile = A.$(`#mc-autobuild-file-${suffix}`);
-        A.$(`#mc-lib-autobuild-${suffix}`).onclick = () => abFile.click();
-        abFile.onchange = (e) => {
-          const files = [...e.target.files];
-          e.target.value = '';
-          if (files.length) openAutobuild(files, ratio);
-        };
-      });
+      const abFile = A.$('#mc-autobuild-file');
+      const abZone = A.$('#mc-autobuild-dropzone');
+      const acceptAutobuildFiles = (files) => {
+        const images = [...files].filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type));
+        if (images.length) openAutobuild(images);
+        else A.toast('请选择 PNG、JPG 或 WebP 图片', 'bad');
+      };
+      abZone.onclick = () => abFile.click();
+      abZone.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abFile.click(); } };
+      abFile.onchange = (e) => { acceptAutobuildFiles(e.target.files); e.target.value = ''; };
+      ['dragenter', 'dragover'].forEach((ev) => abZone.addEventListener(ev, (e) => { e.preventDefault(); abZone.classList.add('drop-hot'); }));
+      ['dragleave', 'drop'].forEach((ev) => abZone.addEventListener(ev, () => abZone.classList.remove('drop-hot')));
+      abZone.addEventListener('drop', (e) => { e.preventDefault(); acceptAutobuildFiles(e.dataTransfer.files); });
     }
   }
 
