@@ -1124,12 +1124,15 @@ const MaterialCheck = (() => {
     entries.forEach((e) => {
       const source = e.recognizedCandidates || e.candidates;
       if (e.status !== 'resolved' || !source.length) return;
-      let g = groups.get(e.productId);
-      if (!g) { g = { productName: e.productName, targetProductId: e.productId, cands: new Map(), mode: 'append', included: true }; groups.set(e.productId, g); }
+      const targetProductId = e.targetProductId || e.productId;
+      const targetProductName = e.targetProductName || e.productName;
+      let g = groups.get(targetProductId);
+      if (!g) { g = { productName: targetProductName, targetProductId, entries: [], cands: new Map(), mode: 'append', included: true }; groups.set(targetProductId, g); }
+      g.entries.push(e);
       source.forEach((text) => {
         const norm = stripSpaces(text);
         const existing = g.cands.get(norm);
-        if (!existing) g.cands.set(norm, { text, checked: true, productId: e.productId, ratio: e.ratio });
+        if (!existing) g.cands.set(norm, { text, checked: true, productId: targetProductId, ratio: e.ratio });
         else if (existing.ratio !== e.ratio) existing.ratio = 'both';
       });
     });
@@ -1169,11 +1172,12 @@ const MaterialCheck = (() => {
     }
 
     if (groups.size) {
-      html += `<h3>识别出的关键词（默认全选，取消勾选不需要的）</h3><p class="mc-ab-hint">同一产品在 1:1 与 3:4 素材都出现的词，会自动标为“通用”。产品判断有误时，可在产品组顶部选择正确的产品型号；整组勾选词会写入该产品词库。</p>`;
+      html += `<h3>识别出的关键词（默认全选，取消勾选不需要的）</h3><p class="mc-ab-hint">同一产品在 1:1 与 3:4 素材都出现的词，会自动标为“通用”。每张素材都可单独更正产品型号；选择后会立即重新归入对应产品组。</p>`;
       html += [...groups.entries()].map(([pid, g]) => {
         const items = [...g.cands.entries()];
         return `<div class="mc-ab-group" data-pid="${escapeHtml(pid)}">
-          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}></label><label class="mc-ab-product-assignment"><span>产品型号</span><select data-role="group-product" ${g.included ? '' : 'disabled'} aria-label="将本组 ${items.length} 条词写入产品词库">${products.map((product) => `<option value="${escapeHtml(product.id)}" ${g.targetProductId === product.id ? 'selected' : ''}>${escapeHtml(product.name)}</option>`).join('')}</select></label><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
+          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}></label><span class="mc-ab-product-name">${escapeHtml(g.productName)}</span><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
+          <div class="mc-ab-sources">${g.entries.map((entry) => `<div class="mc-ab-source" data-eid="${escapeHtml(entry.eid)}"><span class="mc-ab-source-file" title="${escapeHtml(entry.filename)}">${escapeHtml(entry.filename)}</span><span class="mc-ab-cand-ratio ${RATIO_CLASS[entry.ratio]}">${RATIO_LABEL[entry.ratio]}</span><label><span>产品型号</span><select data-role="source-product" aria-label="更正「${escapeHtml(entry.filename)}」的产品型号">${products.map((product) => `<option value="${escapeHtml(product.id)}" ${g.targetProductId === product.id ? 'selected' : ''}>${escapeHtml(product.name)}</option>`).join('')}</select></label></div>`).join('')}</div>
           <div class="mc-ab-cands">${items.map(([norm, c]) =>
             `<div class="mc-ab-cand ${g.included ? '' : 'is-ignored'}"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''} ${g.included ? '' : 'disabled'} aria-label="是否导入 ${escapeHtml(c.text)}"><span class="mc-ab-cand-text">${escapeHtml(c.text)}</span><span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></div>`
           ).join('')}</div>
@@ -1206,6 +1210,8 @@ const MaterialCheck = (() => {
           e.status = 'resolved';
           e.productId = productId;
           e.productName = product ? product.name : '';
+          e.targetProductId = productId;
+          e.targetProductName = product ? product.name : '';
           e.candidates = j.candidates;
           e.recognizedCandidates = j.recognizedCandidates || j.candidates;
         } catch (err) { A.toast(err.message, 'bad'); }
@@ -1217,7 +1223,7 @@ const MaterialCheck = (() => {
       const g = groups.get(groupEl.dataset.pid);
       groupEl.querySelector('[data-role="product-include"]').onchange = (e) => {
         g.included = e.target.checked;
-        groupEl.querySelectorAll('input[data-norm], [data-role="group-product"], [data-role="import-mode"]').forEach((control) => {
+        groupEl.querySelectorAll('input[data-norm], [data-role="import-mode"]').forEach((control) => {
           control.disabled = !g.included;
         });
         groupEl.querySelectorAll('.mc-ab-cand').forEach((candidate) => candidate.classList.toggle('is-ignored', !g.included));
@@ -1227,7 +1233,32 @@ const MaterialCheck = (() => {
         cb.onchange = () => { g.cands.get(cb.dataset.norm).checked = cb.checked; };
       });
       groupEl.querySelector('[data-role="import-mode"]').onchange = (e) => { g.mode = e.target.value; };
-      groupEl.querySelector('[data-role="group-product"]').onchange = (e) => { g.targetProductId = e.target.value; };
+    });
+
+    autobuildBody.querySelectorAll('[data-role="source-product"]').forEach((select) => {
+      select.onchange = async () => {
+        const sourceEl = select.closest('.mc-ab-source');
+        const entry = entries.find((e) => e.eid === sourceEl.dataset.eid);
+        const productId = select.value;
+        const product = products.find((p) => p.id === productId);
+        if (!entry || !product || productId === (entry.targetProductId || entry.productId)) return;
+        select.disabled = true;
+        try {
+          const j = await call('/api/materialcheck/autobuild/candidates', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform, libraryId, productId, ocrText: entry.ocrText })
+          });
+          entry.targetProductId = productId;
+          entry.targetProductName = product.name;
+          entry.candidates = j.candidates;
+          entry.recognizedCandidates = j.recognizedCandidates || j.candidates;
+        } catch (err) {
+          A.toast(err.message, 'bad');
+          select.disabled = false;
+          return;
+        }
+        drawAutobuildReview(entries);
+      };
     });
 
     const cancelBtn = autobuildActions.querySelector('#mc-ab-cancel');
@@ -1302,6 +1333,8 @@ const MaterialCheck = (() => {
           e.status = 'resolved';
           e.productId = result.productId;
           e.productName = result.productName;
+          e.targetProductId = result.productId;
+          e.targetProductName = result.productName;
           e.candidates = result.candidates;
           e.recognizedCandidates = result.recognizedCandidates || result.candidates;
         } else {

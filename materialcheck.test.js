@@ -5,6 +5,7 @@ const fsp = fs.promises;
 const os = require('os');
 const path = require('path');
 const EventEmitter = require('events');
+const vm = require('vm');
 
 let pass = 0, fail = 0;
 const t = (name, fn) => {
@@ -15,6 +16,16 @@ const tAsync = async (name, fn) => {
   try { await fn(); pass++; console.log('✓', name); }
   catch (e) { fail++; console.log('✗', name, '-', e.message); }
 };
+
+/** 前端批量审核的分组函数没有独立模块；这个最小 VM 只取出真实源码里的
+ * autobuildGroups，不启动页面或请求接口，用来锁定“逐素材改产品后必须重新分组”的行为。 */
+function frontendAutobuildGroups(entries) {
+  const source = fs.readFileSync(path.join(__dirname, 'public', 'materialcheck.js'), 'utf8')
+    .replace('return { init };', 'return { autobuildGroups };');
+  const context = { console, window: {}, document: {}, setTimeout, clearTimeout, requestAnimationFrame: (fn) => fn() };
+  vm.runInNewContext(source + '\nthis.__materialcheck = MaterialCheck;', context, { filename: 'public/materialcheck.js' });
+  return context.__materialcheck.autobuildGroups(entries);
+}
 
 // 伪造一个 child_process 长得像的对象：stdout/stdin/exit 都能模拟，
 // 用来测试 PaddleOcrWorker 的 stdin/stdout 按行 JSON 协议，不需要真的起进程。
@@ -161,6 +172,13 @@ async function run() {
     const r = M.resolveProduct('这款 GC-Multi 带 抗菌滤网认证号XXX', products);
     assert.strictEqual(r.resolved.id, 'pa');
     assert.strictEqual(r.ambiguous, false);
+  });
+
+  t('resolveProduct OCR 出现完整产品型号时优先型号，避免被其它产品的通用词淹没', () => {
+    const target = { id: 'target', name: 'HyperHEPA CF 滤芯', keywords: ['HyperHEPA CF 滤芯', 'ColdFire甲醛分解技术'] };
+    const polluted = { id: 'polluted', name: 'Atem Car', keywords: ['IQAir', '瑞士设计', '德国制造', '咨询享管家服务', '官方正品品质保证'] };
+    const r = M.resolveProduct('IQAir 瑞士设计 德国制造 咨询享管家服务 官方正品品质保证 HyperHEPA CF 滤芯 ColdFire甲醛分解技术', [target, polluted]);
+    assert.strictEqual(r.resolved.id, 'target');
   });
 
   t('resolveProduct 零命中时不确定', () => {
@@ -1271,6 +1289,16 @@ async function run() {
   await tAsync('autobuildCandidatesFor 产品不存在时抛出错误', async () => {
     const store = await freshStore();
     assert.throws(() => store.autobuildCandidatesFor({ platform: PF, libraryId: store.getLibrary(PF).id, productId: 'nope', ocrText: '随便' }), /不存在/);
+  });
+
+  t('批量审核按每张素材手动指定的目标产品重新分组，不把误判素材收进同一产品', () => {
+    const groups = frontendAutobuildGroups([
+      { status: 'resolved', productId: 'wrong', productName: '误判产品', targetProductId: 'cf', targetProductName: 'HyperHEPA CF 滤芯', candidates: ['CF 关键词'], ratio: '1:1' },
+      { status: 'resolved', productId: 'wrong', productName: '误判产品', targetProductId: 'hf', targetProductName: 'HyperHEPA HF 滤芯', candidates: ['HF 关键词'], ratio: '3:4' },
+      { status: 'resolved', productId: 'wrong', productName: '误判产品', targetProductId: 'plus', targetProductName: 'HyperHEPA Plus 滤芯', candidates: ['Plus 关键词'], ratio: '1:1' }
+    ]);
+    assert.strictEqual(groups.size, 3);
+    assert.deepStrictEqual([...groups.keys()].sort(), ['cf', 'hf', 'plus']);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

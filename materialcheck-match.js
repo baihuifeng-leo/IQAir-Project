@@ -334,16 +334,23 @@ function resolveByFilename(filename, products) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-/** 按每个产品自己的专属关键词在文本里命中的数量打分，只有明显领先（不并列）才算确定。 */
+/** 按每个产品自己的专属关键词在文本里命中的数量打分，只有明显领先（不并列）才算确定。
+ * 完整产品型号是最强归属证据：词库里难免有 IQAir、产地、促销等共享词，甚至历史误导入的
+ * 其它产品词；只要 OCR 直接写出了某个产品名，必须优先于这类数量优势。 */
 function resolveProduct(text, products) {
+  const normalizedText = normalize(text);
   const scored = products
-    .map((p) => ({ product: p, hits: findKeywordHits(text, p.keywords || []) }))
-    .filter((s) => s.hits.length > 0)
-    .sort((a, b) => b.hits.length - a.hits.length);
+    .map((p) => {
+      const hits = findKeywordHits(text, p.keywords || []);
+      const hasExactProductName = Boolean(normalize(p.name)) && normalizedText.includes(normalize(p.name));
+      return { product: p, hits, hasExactProductName, score: hits.length + (hasExactProductName ? 1000 : 0) };
+    })
+    .filter((s) => s.hits.length > 0 || s.hasExactProductName)
+    .sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) return { resolved: null, ambiguous: false, hits: [] };
   if (scored.length === 1) return { resolved: scored[0].product, ambiguous: false, hits: scored[0].hits };
-  if (scored[0].hits.length > scored[1].hits.length) return { resolved: scored[0].product, ambiguous: false, hits: scored[0].hits };
+  if (scored[0].score > scored[1].score) return { resolved: scored[0].product, ambiguous: false, hits: scored[0].hits };
   return { resolved: null, ambiguous: true, candidates: scored.map((s) => s.product) };
 }
 
