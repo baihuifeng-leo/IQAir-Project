@@ -788,6 +788,25 @@ const MaterialCheck = (() => {
 
   let autoSaveTimer = null;
 
+  function productUpdatedAtHtml(p) {
+    if (!p.updatedAt || Number.isNaN(new Date(p.updatedAt).getTime())) return '尚未记录';
+    return new Date(p.updatedAt).toLocaleString('zh-CN', { hour12: false });
+  }
+
+  function refreshProductUpdatedAt(savedProducts) {
+    const savedById = new Map((savedProducts || []).map((p) => [p.id, p.updatedAt || null]));
+    products.forEach((p) => { if (savedById.has(p.id)) p.updatedAt = savedById.get(p.id); });
+    document.querySelectorAll('.mc-pcard[data-pid]').forEach((card) => {
+      const p = products.find((item) => item.id === card.dataset.pid);
+      const time = card.querySelector('[data-role="updated-at"]');
+      if (p && time) {
+        time.textContent = productUpdatedAtHtml(p);
+        time.dateTime = p.updatedAt || '';
+        time.title = p.updatedAt ? `关键词库最近更新：${productUpdatedAtHtml(p)}` : '关键词库尚未记录更新时间';
+      }
+    });
+  }
+
   /** 立即保存当前关键词库。silent=true 用于自动保存：不重画整个页面、不拿服务端返回值
    *  覆盖本地 products——这个变量正被卡片上的 input/checkbox 事件处理器直接引用着，
    *  贸然重新赋值会让后续编辑写到已经跟 DOM 脱钩的旧对象上，静默保存失败或者页面上
@@ -801,6 +820,7 @@ const MaterialCheck = (() => {
         body: JSON.stringify({ products })
       });
       if (errEl) errEl.hidden = true;
+      refreshProductUpdatedAt(saved.products);
       if (!silent) {
         products = saved.products;
         await loadLibraries();
@@ -884,6 +904,7 @@ const MaterialCheck = (() => {
             <div class="mc-chip-editor" data-role="chips"></div>
           </div>
         </div>
+        <div class="mc-pcard-updated" title="${escapeHtml(p.updatedAt ? `关键词库最近更新：${productUpdatedAtHtml(p)}` : '关键词库尚未记录更新时间')}">词库更新 <time data-role="updated-at" datetime="${escapeHtml(p.updatedAt || '')}">${escapeHtml(productUpdatedAtHtml(p))}</time></div>
       </div>`;
   }
 
