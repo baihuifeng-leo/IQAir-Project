@@ -876,23 +876,21 @@ const MaterialCheck = (() => {
         <div class="mc-pcard-cover" data-role="cover">
           ${productCoverHtml(p)}
           ${coverActionsHtml(p)}
+          <button type="button" class="mc-pcard-cover-icon mc-pcard-copy-btn" data-role="copy-to" ${copyTargets.length ? '' : 'disabled'} title="复制关键词到其它产品" aria-label="复制「${escapeHtml(p.name)}」的关键词到其它产品"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="10" height="10" rx="1.5"></rect><path d="M16 8V6.5A1.5 1.5 0 0 0 14.5 5h-8A1.5 1.5 0 0 0 5 6.5v8A1.5 1.5 0 0 0 6.5 16H8"></path></svg></button>
+          <div class="mc-copy-drawer" data-role="copy-row" hidden>
+            <select data-role="copy-target" aria-label="复制关键词到哪个产品">${copyOptionsHtml}</select>
+            <div class="mc-copy-drawer-actions"><button class="mc-btn mc-btn-primary" data-role="copy-confirm">确定覆盖</button><button class="mc-btn" data-role="copy-cancel">取消</button></div>
+          </div>
           <input type="file" class="mc-pcard-cover-file" data-role="cover-file" accept="image/png,image/jpeg,image/webp" aria-label="上传「${escapeHtml(p.name)}」的封面图" hidden>
         </div>
-        <button type="button" class="mc-pcard-expand-btn" data-role="expand" title="放大编辑" aria-label="放大编辑「${escapeHtml(p.name)}」">⛶</button>
+        <button type="button" class="mc-pcard-expand-btn" data-role="expand" title="放大编辑" aria-label="放大编辑「${escapeHtml(p.name)}」"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"></path></svg></button>
+        <button type="button" class="mc-pcard-delete-btn" data-role="del" title="删除产品" aria-label="删除「${escapeHtml(p.name)}」"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"></path></svg></button>
         <div class="mc-pcard-body">
           <div class="mc-pcard-head">
             <button type="button" class="mc-pcard-handle" data-role="handle" aria-label="拖动调整「${escapeHtml(p.name)}」的顺序" title="拖动调整顺序">⠿</button>
             <input class="mc-pcard-name" data-role="name" value="${escapeHtml(p.name)}" placeholder="名称/型号…" aria-label="产品名称 / 型号">
             <input class="mc-pcard-price" data-role="price" type="number" min="0" step="1" value="${p.price != null ? p.price : ''}" placeholder="价格" aria-label="预期价格" title="设置后会强校验：素材图里的价格必须跟这个一致，不一致直接判报错">
-            <span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span>
             <select class="mc-pcard-move" data-role="move" aria-label="移到其它分区" title="移到其它分区">${typeMoveOptionsHtml(p.type || '')}</select>
-            <button class="mc-btn" data-role="copy-to" ${copyTargets.length ? '' : 'disabled'}>复制到…</button>
-            <button class="mc-btn mc-btn-danger mc-pcard-del" data-role="del">删除</button>
-          </div>
-          <div class="mc-copy-row" data-role="copy-row" hidden>
-            <select data-role="copy-target" aria-label="复制关键词到哪个产品">${copyOptionsHtml}</select>
-            <button class="mc-btn mc-btn-primary" data-role="copy-confirm">确定覆盖</button>
-            <button class="mc-btn" data-role="copy-cancel">取消</button>
           </div>
           <div class="mc-pcard-kwrow">
             <input class="mc-kw-input-inline" placeholder="输入关键词…" data-role="kw-input" aria-label="输入关键词">
@@ -904,7 +902,7 @@ const MaterialCheck = (() => {
             <div class="mc-chip-editor" data-role="chips"></div>
           </div>
         </div>
-        <div class="mc-pcard-updated" title="${escapeHtml(p.updatedAt ? `关键词库最近更新：${productUpdatedAtHtml(p)}` : '关键词库尚未记录更新时间')}">词库更新 <time data-role="updated-at" datetime="${escapeHtml(p.updatedAt || '')}">${escapeHtml(productUpdatedAtHtml(p))}</time></div>
+        <div class="mc-pcard-updated" title="${escapeHtml(p.updatedAt ? `关键词库最近更新：${productUpdatedAtHtml(p)}` : '关键词库尚未记录更新时间')}"><span>词库更新 <time data-role="updated-at" datetime="${escapeHtml(p.updatedAt || '')}">${escapeHtml(productUpdatedAtHtml(p))}</time></span><span class="mc-pcard-count" data-role="count">${p.keywords.length} 词</span></div>
       </div>`;
   }
 
