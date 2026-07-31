@@ -3,6 +3,7 @@ const MaterialCheck = (() => {
   let libraries = []; // 当前平台下的词库列表 [{id,name,productCount}]
   let libraryDirectory = []; // 历史记录筛选用：两个平台全部词库的扁平列表 [{id,name,platform}]
   let products = [];
+  let libraryViewMode = 'products'; // products | bulk：批量管理属于关键词库内部页面
 
   const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
   // 同一个产品的 1:1 和 3:4 素材文案有重叠也有差异（3:4 通常比 1:1 多一段满赠/权益说明），
@@ -1280,10 +1281,102 @@ const MaterialCheck = (() => {
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, entries.length) }, worker));
   }
 
+  const BULK_PRODUCT_TYPES = [
+    ['machine', '机器', 'mc-bulk-type-machine'],
+    ['filter', '滤芯', 'mc-bulk-type-filter'],
+    ['accessory', '附件', 'mc-bulk-type-accessory'],
+    ['', '未分类', 'mc-bulk-type-none']
+  ];
+
+  /** 相同词只按原文完全相等分组，不把“空格/符号归一化后相同”的不同写法擅自合并。 */
+  function duplicateKeywordGroups() {
+    const groups = new Map();
+    products.forEach((product) => (product.keywords || []).forEach((keyword, index) => {
+      const text = keywordText(keyword);
+      if (!text) return;
+      if (!groups.has(text)) groups.set(text, { text, category: keywordCategory(keyword), locations: [] });
+      groups.get(text).locations.push({ product, index });
+    }));
+    return [...groups.values()]
+      .filter((group) => group.locations.length > 1)
+      .sort((a, b) => b.locations.length - a.locations.length || a.text.localeCompare(b.text, 'zh-CN'));
+  }
+
+  function renderBulkKeywordView(el) {
+    if (libraryRole() !== 'edit') {
+      el.innerHTML = '<p class="rv-empty">没有编辑关键词库的权限。</p>';
+      return;
+    }
+    const groups = duplicateKeywordGroups();
+    const productGroups = (locations) => BULK_PRODUCT_TYPES.map(([type, label, cls]) => {
+      const unique = new Map();
+      locations.filter(({ product }) => (product.type || '') === type).forEach(({ product }) => unique.set(product.id, product));
+      return { label, cls, products: [...unique.values()] };
+    }).filter((group) => group.products.length);
+    el.innerHTML = `
+      <section class="mc-bulk-page" aria-label="相同词批量管理">
+        <header class="mc-bulk-page-head"><div><button type="button" class="mc-bulk-back" data-role="bulk-back">← 返回词库</button><h2>相同词批量管理</h2><p>只显示当前词库中出现于两个及以上产品的完全相同关键词。修改、改分类或删除会自动同步到全部覆盖产品。</p></div><span class="mc-bulk-page-count">${groups.length} 组相同词</span></header>
+        <div class="mc-bulk-keyword-grid">${groups.length ? groups.map((group, groupIndex) => {
+          const productCount = new Set(group.locations.map(({ product }) => product.id)).size;
+          return `<article class="mc-bulk-keyword-card" data-group-index="${groupIndex}">
+            <div class="mc-bulk-keyword-card-tools"><span>${productCount} 个产品</span><select class="mc-cat-badge-select ${CAT_CLASS[group.category]}" data-role="bulk-keyword-category" aria-label="「${escapeHtml(group.text)}」的分类">${CATEGORIES.map((category) => `<option value="${escapeHtml(category)}" ${category === group.category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}</select><button type="button" class="mc-btn mc-btn-danger mc-btn-mini" data-role="bulk-keyword-delete" aria-label="从 ${productCount} 个产品中删除关键词「${escapeHtml(group.text)}」">删除</button></div>
+            <label class="mc-bulk-keyword-edit">关键词<input value="${escapeHtml(group.text)}" data-role="bulk-keyword-input" aria-label="将「${escapeHtml(group.text)}」同步修改为"></label>
+            <div class="mc-bulk-coverage">${productGroups(group.locations).map((type) => `<details class="mc-bulk-product-type" open><summary><span class="mc-bulk-type-dot ${type.cls}"></span>${type.label}<small>${type.products.length}</small></summary><div class="mc-bulk-product-list">${type.products.map((product) => `<span class="mc-bulk-keyword-location">${escapeHtml(product.name)}</span>`).join('')}</div></details>`).join('')}</div>
+          </article>`;
+        }).join('') : '<p class="rv-empty">当前词库没有出现两次以上的完全相同关键词。</p>'}</div>
+      </section>`;
+
+    el.querySelectorAll('[data-role="bulk-keyword-input"]').forEach((input) => {
+      const group = groups[Number(input.closest('[data-group-index]').dataset.groupIndex)];
+      const applyText = () => {
+        const nextText = input.value.trim();
+        if (!nextText || nextText === group.text) return false;
+        group.locations.forEach(({ product, index }) => {
+          const keyword = product.keywords[index];
+          product.keywords[index] = typeof keyword === 'string' ? nextText : { ...keyword, text: nextText };
+        });
+        scheduleAutoSave();
+        return true;
+      };
+      input.oninput = applyText;
+      input.onchange = () => { if (applyText()) renderBulkKeywordView(el); };
+    });
+    el.querySelectorAll('[data-role="bulk-keyword-category"]').forEach((select) => {
+      select.onchange = () => {
+        const group = groups[Number(select.closest('[data-group-index]').dataset.groupIndex)];
+        const category = select.value;
+        group.locations.forEach(({ product, index }) => {
+          const keyword = product.keywords[index];
+          product.keywords[index] = typeof keyword === 'string' ? { text: keyword, category, ratio: 'both' } : { ...keyword, category };
+        });
+        scheduleAutoSave();
+        renderBulkKeywordView(el);
+      };
+    });
+    el.querySelectorAll('[data-role="bulk-keyword-delete"]').forEach((button) => {
+      button.onclick = () => {
+        const group = groups[Number(button.closest('[data-group-index]').dataset.groupIndex)];
+        const productCount = new Set(group.locations.map(({ product }) => product.id)).size;
+        if (!confirm(`删除关键词「${group.text}」？它会从 ${productCount} 个产品中一并移除。`)) return;
+        const removeIndexes = new Map();
+        group.locations.forEach(({ product, index }) => {
+          if (!removeIndexes.has(product)) removeIndexes.set(product, new Set());
+          removeIndexes.get(product).add(index);
+        });
+        removeIndexes.forEach((indexes, product) => { product.keywords = product.keywords.filter((_, index) => !indexes.has(index)); });
+        scheduleAutoSave();
+        renderBulkKeywordView(el);
+        A.toast(`已从 ${productCount} 个产品中删除「${group.text}」，正在自动同步…`);
+      };
+    });
+    el.querySelector('[data-role="bulk-back"]').onclick = () => { libraryViewMode = 'products'; renderLibrary(); };
+  }
+
   async function renderLibrary() {
     const el = A.$('#mc-library-view');
     const role = libraryRole();
     if (role === 'none') { el.innerHTML = '<p class="rv-empty">没有查看关键词库的权限</p>'; return; }
+    if (libraryViewMode === 'bulk') return renderBulkKeywordView(el);
     const readOnly = role !== 'edit';
 
     el.innerHTML = `
@@ -1293,7 +1386,6 @@ const MaterialCheck = (() => {
           <div class="mc-lib-ops">
             <button class="mc-btn" id="mc-lib-op-new">+ 新建词库</button>
             <button class="mc-btn" id="mc-lib-op-copy">复制词库</button>
-            <button class="mc-btn" id="mc-lib-op-bulk-keywords">批量修改相同词</button>
             <button class="mc-btn" id="mc-lib-op-rename">重命名</button>
             <button class="mc-btn mc-btn-danger" id="mc-lib-op-delete">删除词库</button>
           </div>
@@ -1327,12 +1419,9 @@ const MaterialCheck = (() => {
               <button class="mc-btn" id="mc-copy-cancel">取消</button>
             </div>
           </section>
-          <section class="mc-bulk-keyword-form" id="mc-bulk-keyword-form" hidden aria-label="批量修改相同关键词">
-            <div class="mc-copy-form-head"><b>批量修改相同关键词</b><span>仅列出当前词库中完全相同、且出现至少两次的词</span></div>
-            <div class="mc-bulk-keyword-list" id="mc-bulk-keyword-list"></div>
-          </section>
           <span class="mc-lib-spacer"></span>
-          <div class="mc-autobuild-dropzone" id="mc-autobuild-dropzone" tabindex="0" role="button" aria-label="批量上传素材自动识别关键词"><b>批量识别素材</b><span>点击选择或拖入图片 · 自动判断 1:1 / 3:4</span></div>
+          <button type="button" class="mc-library-tool-card" id="mc-lib-op-bulk-keywords"><b>相同词批量管理</b><span>按产品类型统一修改、分类或删除</span></button>
+          <div class="mc-library-tool-card mc-autobuild-dropzone" id="mc-autobuild-dropzone" tabindex="0" role="button" aria-label="批量上传素材自动识别关键词"><b>批量识别素材</b><span>点击选择或拖入图片 · 自动判断 1:1 / 3:4</span></div>
           <input type="file" id="mc-autobuild-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
         </div>
@@ -1561,8 +1650,6 @@ const MaterialCheck = (() => {
     const nameRow = A.$('#mc-lib-name-row');
     const nameInput = A.$('#mc-lib-name-input');
     const copyForm = A.$('#mc-copy-form');
-    const bulkKeywordForm = A.$('#mc-bulk-keyword-form');
-    const bulkKeywordList = A.$('#mc-bulk-keyword-list');
     const copySource = A.$('#mc-copy-source');
     const copyTarget = A.$('#mc-copy-target-platform');
     const copyName = A.$('#mc-copy-name-input');
@@ -1579,85 +1666,9 @@ const MaterialCheck = (() => {
       copyName.focus();
     };
 
-    /** 相同词只按原文完全相等分组，不把“空格/符号归一化后相同”的不同写法擅自合并。 */
-    const duplicateKeywordGroups = () => {
-      const groups = new Map();
-      products.forEach((product) => (product.keywords || []).forEach((keyword, index) => {
-        const text = keywordText(keyword);
-        if (!text) return;
-        if (!groups.has(text)) groups.set(text, { text, category: keywordCategory(keyword), locations: [] });
-        groups.get(text).locations.push({ product, index, category: keywordCategory(keyword) });
-      }));
-      return [...groups.values()]
-        .filter((group) => group.locations.length > 1)
-        .sort((a, b) => b.locations.length - a.locations.length || a.text.localeCompare(b.text, 'zh-CN'));
-    };
-
-    const renderBulkKeywordGroups = () => {
-      const groups = duplicateKeywordGroups();
-      bulkKeywordList.innerHTML = groups.length ? groups.map((group, groupIndex) => `
-        <article class="mc-bulk-keyword-group" data-group-index="${groupIndex}">
-          <div class="mc-bulk-keyword-head"><span>共 ${group.locations.length} 个产品</span><select class="mc-cat-badge-select ${CAT_CLASS[group.category]}" data-role="bulk-keyword-category" aria-label="「${escapeHtml(group.text)}」的分类">${CATEGORIES.map((category) => `<option value="${escapeHtml(category)}" ${category === group.category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}</select><button type="button" class="mc-btn mc-btn-danger mc-btn-mini" data-role="bulk-keyword-delete" aria-label="从 ${group.locations.length} 个产品中删除关键词「${escapeHtml(group.text)}」">删除该词</button></div>
-          <label class="mc-bulk-keyword-edit">关键词<input value="${escapeHtml(group.text)}" data-role="bulk-keyword-input" aria-label="将「${escapeHtml(group.text)}」同步修改为"></label>
-          <div class="mc-bulk-keyword-locations">${group.locations.map((location) => `<span class="mc-bulk-keyword-location">${escapeHtml(location.product.name)}</span>`).join('')}</div>
-        </article>`).join('') : '<p class="rv-empty">当前词库没有出现两次以上的完全相同关键词。</p>';
-
-      bulkKeywordList.querySelectorAll('[data-role="bulk-keyword-input"]').forEach((input) => {
-        const group = groups[Number(input.closest('[data-group-index]').dataset.groupIndex)];
-        const applyText = () => {
-          const nextText = input.value.trim();
-          if (!nextText || nextText === group.text) return false;
-          group.locations.forEach(({ product, index }) => {
-            const keyword = product.keywords[index];
-            product.keywords[index] = typeof keyword === 'string' ? nextText : { ...keyword, text: nextText };
-          });
-          scheduleAutoSave();
-          return true;
-        };
-        input.oninput = applyText;
-        input.onchange = () => { if (applyText()) { drawAll(); renderBulkKeywordGroups(); } };
-      });
-      bulkKeywordList.querySelectorAll('[data-role="bulk-keyword-category"]').forEach((select) => {
-        select.onchange = () => {
-          const group = groups[Number(select.closest('[data-group-index]').dataset.groupIndex)];
-          const category = select.value;
-          group.locations.forEach(({ product, index }) => {
-            const keyword = product.keywords[index];
-            product.keywords[index] = typeof keyword === 'string'
-              ? { text: keyword, category, ratio: 'both' }
-              : { ...keyword, category };
-          });
-          drawAll();
-          renderBulkKeywordGroups();
-          scheduleAutoSave();
-        };
-      });
-      bulkKeywordList.querySelectorAll('[data-role="bulk-keyword-delete"]').forEach((button) => {
-        button.onclick = () => {
-          const group = groups[Number(button.closest('[data-group-index]').dataset.groupIndex)];
-          if (!confirm(`删除关键词「${group.text}」？它会从 ${group.locations.length} 个产品中一并移除。`)) return;
-          const removeIndexes = new Map();
-          group.locations.forEach(({ product, index }) => {
-            if (!removeIndexes.has(product)) removeIndexes.set(product, new Set());
-            removeIndexes.get(product).add(index);
-          });
-          removeIndexes.forEach((indexes, product) => {
-            product.keywords = product.keywords.filter((_, index) => !indexes.has(index));
-          });
-          drawAll();
-          renderBulkKeywordGroups();
-          scheduleAutoSave();
-          A.toast(`已从 ${group.locations.length} 个产品中删除「${group.text}」，正在自动同步…`);
-        };
-      });
-    };
-
     A.$('#mc-lib-op-new').onclick = () => showNameRow('new');
     A.$('#mc-lib-op-copy').onclick = showCopyForm;
-    A.$('#mc-lib-op-bulk-keywords').onclick = () => {
-      bulkKeywordForm.hidden = !bulkKeywordForm.hidden;
-      if (!bulkKeywordForm.hidden) renderBulkKeywordGroups();
-    };
+    A.$('#mc-lib-op-bulk-keywords').onclick = () => { libraryViewMode = 'bulk'; renderLibrary(); };
     A.$('#mc-lib-op-rename').onclick = () => showNameRow('rename', libraries.find((l) => l.id === libraryId)?.name || '');
     A.$('#mc-lib-name-cancel').onclick = hideNameRow;
     A.$('#mc-copy-cancel').onclick = hideCopyForm;

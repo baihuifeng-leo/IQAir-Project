@@ -2039,9 +2039,9 @@ body.rpt-presenting .rpt-wm-note {
 
 .mc-lib-actionbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 10px; }
 .mc-lib-ops { display: flex; flex-wrap: wrap; gap: 8px; }
-.mc-autobuild-dropzone { min-width: 230px; display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px dashed var(--line-soft); border-radius: 10px; color: var(--text); cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
-.mc-autobuild-dropzone span { font-size: 11.5px; color: var(--dim); }
-.mc-autobuild-dropzone:hover, .mc-autobuild-dropzone:focus-visible, .mc-autobuild-dropzone.drop-hot { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface)); outline: none; }
+.mc-library-tool-card { min-width: 230px; display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px dashed var(--line-soft); border-radius: 10px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.mc-library-tool-card span { font-size: 11.5px; color: var(--dim); }
+.mc-library-tool-card:hover, .mc-library-tool-card:focus-visible, .mc-autobuild-dropzone.drop-hot { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface)); outline: none; }
 .mc-autobuild-dropzone.drop-hot { transform: translateY(-1px); }
 .mc-lib-name-row { display: flex; gap: 8px; align-items: center; }
 .mc-lib-name-row[hidden] { display: none; } /* author 规则的 display:flex 优先级跟 UA 的 [hidden] 打平，后者会被覆盖——显式钉住 */
@@ -2063,18 +2063,42 @@ body.rpt-presenting .rpt-wm-note {
 .mc-copy-category:has(input:checked) { border-color: var(--mint); background: var(--mint-dim); }
 .mc-copy-category input { accent-color: var(--mint); margin: 0; }
 .mc-copy-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-.mc-bulk-keyword-form { flex: 1 1 100%; display: grid; gap: 12px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface-2); }
-.mc-bulk-keyword-form[hidden] { display: none; }
-.mc-bulk-keyword-list { display: grid; gap: 8px; }
-.mc-bulk-keyword-group { display: grid; gap: 8px; padding: 11px 12px; border-radius: 10px; background: var(--field-bg); }
-.mc-bulk-keyword-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.mc-bulk-keyword-head span { color: var(--dim); font-size: 11.5px; white-space: nowrap; }
-.mc-bulk-keyword-head .mc-btn-danger { margin-left: auto; }
-.mc-bulk-keyword-locations { display: flex; flex-wrap: wrap; gap: 5px; }
-.mc-bulk-keyword-location { padding: 3px 7px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--text); font-size: 11.5px; }
-.mc-bulk-keyword-edit { display: grid; gap: 5px; color: var(--dim); font-size: 11.5px; }
-.mc-bulk-keyword-edit input { min-height: 34px; padding: 7px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
+/* 相同词批量管理：独立于词库编辑，信息密度优先。每张卡片只承载一个词，
+   覆盖产品按产品类型收进可折叠区，避免大量产品名把关键词编辑区拉得很长。 */
+.mc-bulk-page { display: grid; gap: 18px; }
+.mc-bulk-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); }
+.mc-bulk-page-head h2 { margin: 0 0 5px; font-size: 21px; letter-spacing: -0.02em; }
+.mc-bulk-back { display: inline-flex; margin: 0 0 9px; padding: 0; border: 0; background: transparent; color: var(--dim); font: 600 12px var(--f-body); cursor: pointer; }
+.mc-bulk-back:hover, .mc-bulk-back:focus-visible { color: var(--mint); outline: none; }
+.mc-bulk-page-head p { max-width: 68ch; margin: 0; color: var(--dim); font-size: 13px; line-height: 1.55; }
+.mc-bulk-page-count { flex: 0 0 auto; padding: 5px 9px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--dim); font-size: 12px; white-space: nowrap; }
+.mc-bulk-keyword-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 12px; align-items: start; }
+.mc-bulk-keyword-card { display: grid; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface-2); }
+.mc-bulk-keyword-card-tools { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.mc-bulk-keyword-card-tools > span { color: var(--dim); font-size: 12px; white-space: nowrap; }
+.mc-bulk-keyword-card-tools .mc-btn-danger { margin-left: auto; }
+.mc-bulk-keyword-edit { display: grid; gap: 6px; color: var(--dim); font-size: 12px; font-weight: 600; }
+.mc-bulk-keyword-edit input { min-height: 42px; padding: 8px 11px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--surface); color: var(--text); font: 700 17px/1.35 var(--f-body); letter-spacing: -0.01em; }
 .mc-bulk-keyword-edit input:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
+.mc-bulk-coverage { display: grid; gap: 6px; }
+.mc-bulk-product-type { border: 1px solid var(--line-soft); border-radius: 8px; background: var(--field-bg); overflow: hidden; }
+.mc-bulk-product-type summary { display: flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 9px; color: var(--text); font-size: 12px; font-weight: 650; cursor: pointer; user-select: none; }
+.mc-bulk-product-type summary::-webkit-details-marker { display: none; }
+.mc-bulk-product-type summary::after { content: '⌄'; margin-left: auto; color: var(--dimmer); transition: transform var(--fast); }
+.mc-bulk-product-type:not([open]) summary::after { transform: rotate(-90deg); }
+.mc-bulk-product-type small { color: var(--dimmer); font-size: 11px; font-weight: 600; }
+.mc-bulk-type-dot { width: 7px; height: 7px; border-radius: 50%; }
+.mc-bulk-type-machine { background: #5b8cff; }
+.mc-bulk-type-filter { background: #3ec9d6; }
+.mc-bulk-type-accessory { background: #f2a355; }
+.mc-bulk-type-none { background: var(--dimmer); }
+.mc-bulk-product-list { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 9px 9px; }
+.mc-bulk-keyword-location { padding: 3px 7px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--text); font-size: 11.5px; }
+
+@media (max-width: 760px) {
+  .mc-bulk-page-head { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .mc-bulk-keyword-grid { grid-template-columns: 1fr; }
+}
 
 .mc-cat-select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
 .mc-chip-editor { display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; gap: 6px; min-height: 30px; }
