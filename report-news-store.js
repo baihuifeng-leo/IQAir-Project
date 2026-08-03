@@ -25,6 +25,7 @@ const FEEDS = [
   { lane: 'commerce', label: '中文电商 AI', url: 'https://news.google.com/rss/search?q=AI+%E7%94%B5%E5%95%86&hl=zh-TW&gl=TW&ceid=TW:zh-Hant' },
   { lane: 'air', label: '空气品质 AI', url: 'https://news.google.com/rss/search?q=AI+%E7%A9%BA%E6%B0%94%E5%93%81%E8%B3%AA&hl=zh-TW&gl=TW&ceid=TW:zh-Hant' }
 ];
+const CHINAZ_AI_URL = 'https://www.chinaz.com/ai/';
 
 const COMMERCE_WORDS = ['电商', '零售', '购物', '淘宝', '天猫', '京东', '拼多多', '抖音', '直播', '营销', '广告', '消费', '零售'];
 const AIR_WORDS = ['空气净化', '空气品质', '空气质量', '净化器', '室内空气', '污染', 'pm2.5', '滤网'];
@@ -50,6 +51,19 @@ function parseFeed(xml, feed) {
     return { lane: feed.lane, title, link, source, description, publishedAt: isNaN(publishedAt) ? null : publishedAt.toISOString() };
   }).filter((x) => x.title && /^https?:\/\//.test(x.link));
 }
+function parseChinazAi(html) {
+  const rows = []; const seen = new Set();
+  const links = html.matchAll(/<a\b[^>]*href=["']([^"']+(?:\.s?html|\/feed\/[^"']+))["'][^>]*class=["'][^"']*home-product_link[^"']*["'][^>]*>([\s\S]{0,9000}?)<\/a>/gi);
+  for (const match of links) {
+    const href = new URL(match[1], CHINAZ_AI_URL); const title = clean(/<h3[^>]*>([\s\S]*?)<\/h3>/i.exec(match[2])?.[1] || '');
+    if (href.hostname !== 'www.chinaz.com' || !title || title.length < 8 || !/[\u4e00-\u9fff]/.test(title) || seen.has(href.href)) continue;
+    if (/推广|广告|GEO(?:入场|服务|营销)|培训课程|招商加盟/.test(title)) continue;
+    seen.add(href.href);
+    rows.push({ lane: 'chinaz', title, link: href.href, source: '站长之家 AI 新闻', description: title, publishedAt: new Date().toISOString() });
+    if (rows.length >= MAX_ITEMS_PER_FEED) break;
+  }
+  return rows;
+}
 
 function requestText(rawUrl, redirects = 0) {
   return new Promise((resolve, reject) => {
@@ -74,7 +88,7 @@ function requestText(rawUrl, redirects = 0) {
 function score(item) {
   const hay = (item.title + ' ' + item.description).toLowerCase();
   const ageDays = item.publishedAt ? Math.max(0, (Date.now() - new Date(item.publishedAt)) / 86400000) : 14;
-  return countHits(hay, HOT_WORDS) * 3 + countHits(hay, COMMERCE_WORDS) * 9 + countHits(hay, AIR_WORDS) * 12 + (item.lane === 'global' ? 4 : 0) - ageDays;
+  return countHits(hay, HOT_WORDS) * 3 + countHits(hay, COMMERCE_WORDS) * 9 + countHits(hay, AIR_WORDS) * 12 + (item.lane === 'chinaz' ? 24 : 0) + (item.lane === 'global' ? 4 : 0) - ageDays;
 }
 
 function shortSummary(item) {
@@ -88,8 +102,25 @@ function toCard(item) {
   const tags = [];
   if (item.lane === 'air' || countHits(hay, AIR_WORDS)) tags.push('空气品质相关');
   if (item.lane === 'commerce' || countHits(hay, COMMERCE_WORDS)) tags.push('电商相关');
+  if (item.lane === 'chinaz') tags.unshift('站长之家优选');
   if (!tags.length) tags.push('全球 AI 热点');
   return { title: item.title, summary: shortSummary(item), source: item.source, url: item.link, publishedAt: item.publishedAt, tags, imageUrl: null };
+}
+
+function metaValue(html, name) {
+  return new RegExp(`<meta[^>]+(?:property|name)=["']${name}["'][^>]+content=["']([^"']+)`, 'i').exec(html)?.[1]
+    || new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${name}["']`, 'i').exec(html)?.[1] || '';
+}
+function articleText(html) {
+  const section = /<[^>]+id=["']article-content["'][^>]*>([\s\S]*?)<\/[^>]+>/i.exec(html)?.[1]
+    || /<(?:article|main)[^>]*>([\s\S]*?)<\/(?:article|main)>/i.exec(html)?.[1] || html;
+  return clean(section).replace(/(责任编辑|相关阅读|本文来自).*/s, '').slice(0, 5000);
+}
+function briefFrom(text, fallback) {
+  const sentences = String(text || '').split(/(?<=[。！？])/).map((x) => x.trim()).filter((x) => x.length >= 18 && /[\u4e00-\u9fff]/.test(x));
+  const picked = sentences.slice(0, 3).join('');
+  const summary = picked || fallback;
+  return { summary: summary.slice(0, 240), keyPoint: (sentences[0] || fallback).slice(0, 86) };
 }
 
 async function withArticleImage(item, getText) {
@@ -114,7 +145,10 @@ class ReportNewsStore {
   async summary() { const data = await this.load(); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || data.weeks[Object.keys(data.weeks).sort().pop()] || null, candidates: data.candidates[key] || [], lastAttempt: data.lastAttempt || null }; }
   async refresh(options = {}) {
     const data = await this.load(); const weekStart = mondayOf();
-    const results = await Promise.allSettled(FEEDS.map(async (feed) => parseFeed(await this.getText(feed.url), feed)));
+    const results = await Promise.allSettled([
+      (async () => parseChinazAi(await this.getText(CHINAZ_AI_URL)))(),
+      ...FEEDS.map(async (feed) => parseFeed(await this.getText(feed.url), feed))
+    ]);
     const candidates = results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
     const seen = new Set();
     const unique = candidates.filter((x) => { const key = x.title.toLowerCase().replace(/\W/g, ''); if (!/[\u4e00-\u9fff]/.test(x.title + x.description) || !key || seen.has(key)) return false; seen.add(key); return true; });
@@ -146,7 +180,16 @@ class ReportNewsStore {
     const candidates = data.candidates[weekStart] || [];
     const picked = Array.isArray(ids) ? ids.map((id) => candidates.find((x) => x.id === id)).filter(Boolean) : [];
     if (picked.length !== 2 || new Set(picked.map((x) => x.id)).size !== 2) throw new Error('请选择两条不同的候选新闻');
-    const news = { weekStart, publishedAt: new Date().toISOString(), pages: { global: picked.map(({ id, lane, ...card }) => card) }, sourceCount: candidates.length };
+    const cards = await Promise.all(picked.map(async ({ id, lane, ...card }) => {
+      try {
+        const html = await this.getText(card.url);
+        const body = articleText(html);
+        const { summary, keyPoint } = briefFrom(body, card.summary);
+        const image = metaValue(html, 'og:image');
+        return { ...card, summary, keyPoint, imageUrl: /^https:\/\//i.test(image) ? image.replace(/&amp;/g, '&') : card.imageUrl, layout: summary.length > 145 ? 'dense' : 'airy' };
+      } catch { return { ...card, keyPoint: card.summary.slice(0, 86), layout: 'airy' }; }
+    }));
+    const news = { weekStart, publishedAt: new Date().toISOString(), pages: { global: cards }, sourceCount: candidates.length };
     data.weeks[weekStart] = news;
     for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
     await this.save(data); return news;
@@ -157,13 +200,11 @@ class ReportNewsStore {
     const host = new URL(url).hostname.toLowerCase();
     if (host === 'localhost' || host === '[::1]' || host === '::1' || host === '0.0.0.0' || host.endsWith('.local') || /(^|\.)((127|10|0)\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) throw new Error('不能读取内网地址');
     const html = await this.getText(url);
-    const meta = (name) => new RegExp(`<meta[^>]+(?:property|name)=["']${name}["'][^>]+content=["']([^"']+)`, 'i').exec(html)?.[1]
-      || new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${name}["']`, 'i').exec(html)?.[1] || '';
-    const title = clean(meta('og:title') || textOf(html, 'title'));
-    const description = clean(meta('description') || meta('og:description'));
+    const title = clean(metaValue(html, 'og:title') || textOf(html, 'title'));
+    const description = clean(metaValue(html, 'description') || metaValue(html, 'og:description') || articleText(html).slice(0, 240));
     if (!title || !/[\u4e00-\u9fff]/.test(title + description)) throw new Error('未读到可用的中文新闻内容');
     const item = { title, description, link: url, source: host.replace(/^www\./, ''), publishedAt: new Date().toISOString(), lane: 'manual' };
-    const card = { ...toCard(item), id: crypto.createHash('sha1').update(url).digest('hex').slice(0, 12), lane: 'manual', imageUrl: /^https:\/\//i.test(meta('og:image')) ? meta('og:image').replace(/&amp;/g, '&') : null };
+    const card = { ...toCard(item), id: crypto.createHash('sha1').update(url).digest('hex').slice(0, 12), lane: 'manual', imageUrl: /^https:\/\//i.test(metaValue(html, 'og:image')) ? metaValue(html, 'og:image').replace(/&amp;/g, '&') : null };
     const data = await this.load(); const list = data.candidates[weekStart] || [];
     data.candidates[weekStart] = [card, ...list.filter((x) => x.id !== card.id)].slice(0, 20);
     await this.save(data); return card;
@@ -198,4 +239,4 @@ class ReportNewsStore {
   async refreshSafely(options) { try { return await this.refresh(options); } catch (e) { const data = await this.load(); data.lastAttempt = { at: new Date().toISOString(), ok: false, error: e.message }; await this.save(data); throw e; } }
 }
 
-module.exports = { ReportNewsStore, parseFeed, mondayOf, shortSummary };
+module.exports = { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary };

@@ -30,7 +30,7 @@
    公共报告目前只是占位，入口先留着。
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
-  let A, sub = 'personal', data = null, news = null, selectedNewsIds = new Set(), chart = null, ro = null;
+  let A, sub = 'personal', data = null, news = null, selectedNewsIds = new Set(), newsPickerOpen = false, chart = null, ro = null;
   let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
   let page = 1, presenting = false, wmSelectedWeek = null, deleteSlideId = null;
 
@@ -608,7 +608,7 @@ const Report = (() => {
     const host = A.$(target); host.replaceChildren();
     if (!cards?.length) { host.innerHTML = '<p class="rpt-news-empty">本周新闻还未发布。系统会自动重试；管理员也可以手动刷新。</p>'; return; }
     cards.forEach((card, i) => {
-      const article = document.createElement('article'); article.className = 'rpt-news-card';
+      const article = document.createElement('article'); article.className = 'rpt-news-card ' + (card.layout || 'airy');
       const visual = document.createElement('div'); visual.className = 'rpt-news-visual';
       if (card.imageUrl) { const img = document.createElement('img'); img.src = card.imageUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onerror = () => img.remove(); visual.appendChild(img); }
       const num = document.createElement('span'); num.className = 'rpt-news-number'; num.textContent = String(i + 1).padStart(2, '0'); visual.appendChild(num);
@@ -616,8 +616,9 @@ const Report = (() => {
       const tags = document.createElement('p'); tags.className = 'rpt-news-tags'; tags.textContent = card.tags.join(' · ');
       const title = document.createElement('h3'); title.className = 'rpt-news-title'; title.textContent = card.title;
       const summary = document.createElement('p'); summary.className = 'rpt-news-summary'; summary.textContent = card.summary;
+      const keyPoint = document.createElement('p'); keyPoint.className = 'rpt-news-keypoint'; keyPoint.textContent = card.keyPoint || card.summary;
       const meta = document.createElement('p'); meta.className = 'rpt-news-meta'; meta.textContent = `${card.source} · ${dateLabel(card.publishedAt)}`;
-      body.append(tags, title, summary, meta); article.append(visual, body); host.appendChild(article);
+      body.append(tags, title, summary, keyPoint, meta); article.append(visual, body); host.appendChild(article);
     });
   }
   function renderNews() {
@@ -628,19 +629,22 @@ const Report = (() => {
     renderNewsDraft();
   }
   function renderNewsDraft() {
-    const editor = A.$('#rpt-news-editor'); editor.hidden = !A.me.admin;
+    const editor = A.$('#rpt-news-editor'); editor.hidden = !A.me.admin || !newsPickerOpen;
     if (!A.me.admin) return;
     const host = A.$('#rpt-news-draft-fields'); host.replaceChildren();
+    const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     (news?.candidates || []).forEach((card) => {
       const box = document.createElement('article'); box.className = 'rpt-news-draft-card';
       const chosen = selectedNewsIds.has(card.id);
-      box.innerHTML = `<label class="rpt-news-pick"><input type="checkbox" ${chosen ? 'checked' : ''}> 选择此新闻</label><p class="rpt-news-tags">${card.tags.join(' · ')}</p><h3>${card.title}</h3><p>${card.summary}</p><small>${card.source} · ${dateLabel(card.publishedAt)}</small>`;
+      box.innerHTML = `<label class="rpt-news-pick"><input type="checkbox" ${chosen ? 'checked' : ''}> 选择此新闻</label><p class="rpt-news-tags">${esc(card.tags.join(' · '))}</p><h3>${esc(card.title)}</h3><p>${esc(card.summary)}</p><small>${esc(card.source)} · ${dateLabel(card.publishedAt)}</small>`;
       box.querySelector('input').onchange = (e) => { if (e.target.checked) { if (selectedNewsIds.size >= 2) { e.target.checked = false; return A.toast('一次只能选择两条新闻', 'bad'); } selectedNewsIds.add(card.id); } else selectedNewsIds.delete(card.id); };
       host.appendChild(box);
     });
   }
+  function openNewsPicker() { newsPickerOpen = true; renderNewsDraft(); }
+  function closeNewsPicker() { newsPickerOpen = false; A.$('#rpt-news-editor').hidden = true; }
   async function refreshNews() {
-    const btn = A.$('#rpt-news-refresh'); btn.disabled = true; btn.textContent = '收集中…';
+    const btn = A.$('#rpt-news-collect'); btn.disabled = true; btn.textContent = '收集中…';
     try { await call('/api/reports/news/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rotate: true }) }); selectedNewsIds.clear(); await loadNews(); A.toast('已换一批中文候选，请选择两条'); }
     catch (e) { A.toast(e.message, 'bad'); }
     finally { btn.disabled = false; btn.textContent = '↻ 换一批'; }
@@ -657,7 +661,7 @@ const Report = (() => {
     try {
       if (selectedNewsIds.size !== 2) return A.toast('请选择两条新闻', 'bad');
       await call('/api/reports/news/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: news.weekStart, ids: [...selectedNewsIds] }) });
-      await loadNews(); A.toast('新闻页已生成，放映模式已同步');
+      await loadNews(); closeNewsPicker(); A.toast('新闻页已生成，放映模式已同步');
     } catch (e) { A.toast(e.message, 'bad'); }
   }
   async function loadNews() { try { news = await call('/api/reports/news/summary'); } catch { news = null; } renderNews(); }
@@ -796,11 +800,12 @@ const Report = (() => {
     A.$('#rpt-delete-page-confirm').onclick = deleteSlide;
     A.$('#rpt-delete-page-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-delete-page-mask') closeDeleteSlide(); });
     A.$('#rpt-present-btn').onclick = togglePresent;
-    A.$('#rpt-news-refresh').onclick = refreshNews;
-    A.$('#rpt-news-refresh').hidden = !A.me.admin;
+    A.$('#rpt-news-open-picker').onclick = openNewsPicker;
+    A.$('#rpt-news-open-picker').hidden = !A.me.admin;
     A.$('#rpt-news-collect').onclick = refreshNews;
     A.$('#rpt-news-publish').onclick = saveNewsDraft;
     A.$('#rpt-news-import-url').onclick = importNewsUrl;
+    A.$('#rpt-news-picker-close').onclick = closeNewsPicker;
     A.$('#rpt-exit-present').onclick = exitPresent;
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) exitPresent(); });
     document.addEventListener('keydown', (e) => {
