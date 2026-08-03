@@ -475,17 +475,22 @@ const Report = (() => {
     const tokens = getComputedStyle(document.documentElement);
     const tk = (name, fallback) => (tokens.getPropertyValue(name) || fallback).trim();
     const colors = [tk('--mint', '#4ee0c1'), tk('--blue', '#5b8cff'), tk('--warn', '#f4a63b')];
+    const axisText = tk('--dim', '#8da0bd'), lineCol = tk('--line', '#1f2b42'), splitCol = tk('--line-soft', '#17203292');
+    const series = WM_CHANNELS.map(([key, label], index) => {
+      const item = { name: label, type: 'line', smooth: 0.25, symbol: 'circle', symbolSize: index ? 5 : 6, lineStyle: { width: index ? 2 : 2.5, color: colors[index], ...(index === 2 ? { type: 'dashed' } : {}) }, itemStyle: { color: colors[index] }, data: ordered.map((week) => week.channels?.[key]?.pv || 0) };
+      if (index === 0) item.areaStyle = { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: colors[0] + '33' }, { offset: 1, color: colors[0] + '00' }] } };
+      return item;
+    });
     wmChart.setOption({
       animationDuration: 420,
       animationEasing: 'cubicOut',
-      color: colors,
-      title: { text: '三渠道流量趋势', subtext: '按每周浏览量自动汇总', left: 0, top: 0, textStyle: { color: tk('--text', '#e9eef8'), fontFamily: 'var(--f-display)', fontSize: 15, fontWeight: 700 }, subtextStyle: { color: tk('--dim', '#8da0bd'), fontSize: 11 } },
-      tooltip: { trigger: 'axis', backgroundColor: tk('--surface', '#101725') + 'f2', borderColor: tk('--line', '#1f2b42'), borderWidth: 1, textStyle: { color: tk('--text', '#e9eef8') }, formatter: (items) => `${ordered[items[0].dataIndex].weekStart}<br>${items.map((item) => `${item.marker}${item.seriesName}　${Math.round(item.value || 0).toLocaleString()}`).join('<br>')}` },
-      legend: { data: WM_CHANNELS.map(([, label]) => label), right: 0, top: 4, itemWidth: 10, itemHeight: 10, textStyle: { color: tk('--dim', '#8da0bd'), fontSize: 11 } },
-      grid: { left: 48, right: 18, top: 64, bottom: 31 },
-      xAxis: { type: 'category', boundaryGap: false, data: ordered.map((week) => quarterWeekLabel(week.weekStart)), axisLine: { lineStyle: { color: tk('--line', '#1f2b42') } }, axisTick: { show: false }, axisLabel: { color: tk('--dim', '#8da0bd'), fontSize: 11 } },
-      yAxis: { type: 'value', minInterval: 1, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: tk('--dim', '#8da0bd'), fontSize: 11 }, splitLine: { lineStyle: { color: tk('--line-soft', '#17203292') } } },
-      series: WM_CHANNELS.map(([key, label]) => ({ name: label, type: 'line', smooth: 0.24, symbol: 'circle', symbolSize: 6, lineStyle: { width: 2.5 }, data: ordered.map((week) => week.channels?.[key]?.pv || 0) }))
+      color: colors, backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis', backgroundColor: tk('--surface', '#101725') + 'f2', borderColor: lineCol, borderWidth: 1, textStyle: { color: tk('--text', '#e9eef8'), fontSize: 12.5 }, extraCssText: 'border-radius:10px;box-shadow:0 20px 44px -18px #0006;', formatter: (items) => `${ordered[items[0].dataIndex].weekStart}<br>${items.map((item) => `${item.marker}${item.seriesName}　${Math.round(item.value || 0).toLocaleString()}`).join('<br>')}` },
+      legend: { data: series.map((item) => item.name), top: 0, textStyle: { color: axisText, fontSize: 11.5 }, icon: 'roundRect', itemWidth: 10, itemHeight: 10 },
+      grid: { left: 52, right: 20, top: 30, bottom: 34 },
+      xAxis: { type: 'category', boundaryGap: false, data: ordered.map((week) => quarterWeekLabel(week.weekStart)), axisLine: { lineStyle: { color: lineCol } }, axisTick: { show: false }, axisLabel: { color: axisText, fontSize: 11 }, splitLine: { show: false } },
+      yAxis: { type: 'value', minInterval: 1, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: axisText, fontSize: 11 }, splitLine: { lineStyle: { color: splitCol } } },
+      series
     }, true);
   }
 
