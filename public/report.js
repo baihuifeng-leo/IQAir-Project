@@ -623,12 +623,13 @@ const Report = (() => {
       const summary = document.createElement('p'); summary.className = 'rpt-news-summary'; summary.textContent = card.summary;
       const keyPoint = document.createElement('p'); keyPoint.className = 'rpt-news-keypoint'; keyPoint.textContent = card.keyPoint || card.summary;
       const bullets = document.createElement('ul'); bullets.className = 'rpt-news-bullets';
-      (card.bullets || []).forEach((point) => { const li = document.createElement('li'); li.textContent = point; bullets.appendChild(li); });
+      const pointLabels = ['事实', '影响', '关注'];
+      (card.bullets || []).forEach((point, index) => { const li = document.createElement('li'); li.className = `rpt-news-point rpt-news-point-${index + 1}`; const label = document.createElement('span'); label.className = 'rpt-news-point-label'; label.textContent = pointLabels[index] || '要点'; li.append(label, document.createTextNode(point)); bullets.appendChild(li); });
       const presenter = document.createElement('p'); presenter.className = 'rpt-news-presenter'; presenter.textContent = card.presenterText || card.keyPoint || card.summary;
       const meta = document.createElement('p'); meta.className = 'rpt-news-meta';
       const sourceLink = document.createElement('a'); sourceLink.href = card.url || '#'; sourceLink.target = '_blank'; sourceLink.rel = 'noreferrer'; sourceLink.textContent = `${card.source} · 原文`; sourceLink.title = '打开新闻原文';
       meta.append(sourceLink, document.createTextNode(` · ${dateLabel(card.publishedAt)}`));
-      body.append(tags, title, summary, bullets, keyPoint, presenter, meta); article.append(visual, body); host.appendChild(article);
+      body.append(tags, title, keyPoint, summary, bullets, presenter, meta); article.append(visual, body); host.appendChild(article);
     });
   }
   function renderNews() {

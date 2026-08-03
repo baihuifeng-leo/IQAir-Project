@@ -1640,6 +1640,7 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-news-bullets { display: grid; gap: 5px; margin: 0; padding: 0; color: var(--text-2); font-size: 12.5px; line-height: 1.5; list-style: none; }
 .rpt-news-bullets li { position: relative; padding-left: 13px; }
 .rpt-news-bullets li::before { content: ''; position: absolute; top: .57em; left: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--mint); }
+.rpt-news-point-label { display: none; }
 .rpt-news-keypoint { margin: 13px 0 0; color: var(--text); font-weight: 700; line-height: 1.5; }
 .rpt-news-presenter { display: none; margin: 12px 0 0; color: var(--text); font-weight: 650; line-height: 1.55; }
 .rpt-news-meta { margin-top: auto; padding-top: 13px; border-top: 1px solid var(--line-soft); }
@@ -1892,17 +1893,27 @@ body.rpt-presenting .rpt-news-grid { flex: 1; min-height: 0; grid-template-colum
 body.rpt-presenting .rpt-news-card { grid-template-rows: minmax(190px, 40%) 1fr; min-height: 0; border-color: #26334a; border-radius: 14px; background: #101725; box-shadow: none; }
 body.rpt-presenting .rpt-news-card.image-focus { border-color: #2e746b; }
 body.rpt-presenting .rpt-news-number { right: 20px; bottom: 15px; font-size: clamp(36px, 3vw, 58px); }
-body.rpt-presenting .rpt-news-body { padding: clamp(18px, 1.7vw, 32px); }
+body.rpt-presenting .rpt-news-body { justify-content: center; padding: clamp(18px, 1.7vw, 32px); }
 body.rpt-presenting .rpt-news-tags { color: #4ee0c1; font-size: clamp(11px, .75vw, 14px); }
 body.rpt-presenting .rpt-news-title { margin-top: 10px; font-size: clamp(24px, 1.85vw, 36px); line-height: 1.24; -webkit-line-clamp: 2; }
 body.rpt-presenting .rpt-news-title a { color: #e9eef8; }
-body.rpt-presenting .rpt-news-keypoint { display: block; margin: clamp(12px, 1.4vh, 20px) 0 0; color: #b8c8e4; font-size: clamp(16px, 1.12vw, 22px); font-weight: 650; line-height: 1.48; }
+body.rpt-presenting .rpt-news-keypoint { display: block; margin: clamp(13px, 1.5vh, 22px) 0 0; color: #8fe8d6; font-size: clamp(16px, 1.12vw, 22px); font-weight: 700; line-height: 1.48; }
+body.rpt-presenting .rpt-news-keypoint::before { content: '核心判断'; display: block; margin-bottom: 5px; color: #7f91af; font: 700 clamp(10px, .65vw, 12px)/1 var(--f-mono); letter-spacing: .06em; }
 body.rpt-presenting .rpt-news-summary { display: -webkit-box; overflow: hidden; margin: clamp(12px, 1.4vh, 20px) 0 0; color: #e0e9f8; font-size: clamp(15px, 1vw, 19px); line-height: 1.62; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
 body.rpt-presenting .rpt-news-bullets { display: grid; gap: clamp(7px, .9vh, 12px); margin-top: clamp(13px, 1.6vh, 22px); color: #e0e9f8; font-size: clamp(15px, .98vw, 19px); line-height: 1.46; }
 body.rpt-presenting .rpt-news-bullets li { padding-left: 16px; }
 body.rpt-presenting .rpt-news-bullets li::before { top: .52em; width: 6px; height: 6px; background: #4ee0c1; }
+body.rpt-presenting .rpt-news-point { padding-left: 0; }
+body.rpt-presenting .rpt-news-point::before { display: none; }
+body.rpt-presenting .rpt-news-point-label { display: inline-block; min-width: 3.4em; margin-right: 8px; font: 700 .74em/1 var(--f-mono); letter-spacing: .04em; }
+body.rpt-presenting .rpt-news-point-1 { color: #a9f0e1; }
+body.rpt-presenting .rpt-news-point-1 .rpt-news-point-label { color: #4ee0c1; }
+body.rpt-presenting .rpt-news-point-2 { color: #cbd9ff; }
+body.rpt-presenting .rpt-news-point-2 .rpt-news-point-label { color: #7ea6ff; }
+body.rpt-presenting .rpt-news-point-3 { color: #fae4b7; }
+body.rpt-presenting .rpt-news-point-3 .rpt-news-point-label { color: #f4c76b; }
 body.rpt-presenting .rpt-news-presenter { display: none; }
-body.rpt-presenting .rpt-news-meta { display: block; padding-top: clamp(10px, 1.2vh, 16px); border-color: #26334a; color: #93a4c2; font-size: clamp(11px, .7vw, 13px); }
+body.rpt-presenting .rpt-news-meta { display: block; margin-top: clamp(16px, 2vh, 28px); padding-top: clamp(10px, 1.2vh, 16px); border-color: #26334a; color: #93a4c2; font-size: clamp(11px, .7vw, 13px); }
 body.rpt-presenting .rpt-news-meta a { color: #a6b7d4; }
 body.rpt-presenting .rpt-news-meta a:hover { color: #4ee0c1; }
 body.rpt-presenting .rv-sub,
