@@ -1894,7 +1894,13 @@ body.rpt-presenting .rpt-news-slide-title { display: flex; align-items: baseline
 body.rpt-presenting .rpt-news-slide-title span { color: #4ee0c1; font: 700 clamp(10px, .65vw, 13px)/1 var(--f-mono); letter-spacing: .08em; }
 body.rpt-presenting .rpt-news-slide-title strong { color: #e9eef8; font: 750 clamp(25px, 2.1vw, 40px)/1.1 var(--f-display); letter-spacing: -.025em; }
 body.rpt-presenting .rpt-news-grid { flex: 1; min-height: 0; overflow: hidden; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(20px, 2.6vw, 52px); margin: 0; }
-body.rpt-presenting .rpt-news-card { grid-template-rows: minmax(150px, 34%) minmax(0, 1fr); min-height: 0; border-color: #26334a; border-radius: 14px; background: #101725; box-shadow: none; }
+body.rpt-presenting .rpt-news-card { grid-template-rows: minmax(140px, 32%) minmax(0, 1fr); min-height: 0; border-color: #26334a; border-radius: 14px; background: #101725; box-shadow: none; }
+/* 封面在加载完成后按真实比例分类：横图给正文更多纵深，竖图改为左右阅读，
+   避免一张海报式素材吞掉整卡高度。 */
+body.rpt-presenting .rpt-news-card.image-wide { grid-template-rows: minmax(130px, 29%) minmax(0, 1fr); }
+body.rpt-presenting .rpt-news-card.image-square { grid-template-rows: minmax(140px, 32%) minmax(0, 1fr); }
+body.rpt-presenting .rpt-news-card.image-portrait { grid-template-columns: minmax(180px, 38%) minmax(0, 1fr); grid-template-rows: 1fr; }
+body.rpt-presenting .rpt-news-card.image-portrait .rpt-news-visual img { object-position: center; }
 body.rpt-presenting .rpt-news-card.image-focus { border-color: #2e746b; }
 body.rpt-presenting .rpt-news-number { right: 20px; bottom: 15px; font-size: clamp(36px, 3vw, 58px); }
 body.rpt-presenting .rpt-news-body { min-height: 0; overflow: hidden; justify-content: center; padding: clamp(18px, 1.7vw, 32px); }
@@ -1918,7 +1924,7 @@ body.rpt-presenting .rpt-news-point-2 .rpt-news-point-label { color: #7ea6ff; }
 body.rpt-presenting .rpt-news-point-3 { color: #fae4b7; }
 body.rpt-presenting .rpt-news-point-3 .rpt-news-point-label { color: #f4c76b; }
 body.rpt-presenting .rpt-news-presenter { display: none; }
-body.rpt-presenting .rpt-news-meta { display: block; margin-top: clamp(16px, 2vh, 28px); padding-top: clamp(10px, 1.2vh, 16px); border-color: #26334a; color: #93a4c2; font-size: clamp(11px, .7vw, 13px); }
+body.rpt-presenting .rpt-news-meta { display: block; margin-top: clamp(12px, 1.5vh, 22px); padding-top: clamp(10px, 1.2vh, 16px); border-color: #26334a; color: #93a4c2; font-size: clamp(11px, .7vw, 13px); }
 body.rpt-presenting .rpt-news-meta a { color: #a6b7d4; }
 body.rpt-presenting .rpt-news-meta a:hover { color: #4ee0c1; }
 body.rpt-presenting .rv-sub,

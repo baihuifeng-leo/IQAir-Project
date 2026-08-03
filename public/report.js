@@ -604,6 +604,11 @@ const Report = (() => {
   }
 
   function dateLabel(v) { return v ? new Date(v).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' }) : '日期未知'; }
+  function classifyNewsImage(article, image) {
+    const ratio = image.naturalWidth / image.naturalHeight;
+    article.classList.remove('image-wide', 'image-square', 'image-portrait');
+    article.classList.add(ratio >= 1.25 ? 'image-wide' : ratio <= 0.8 ? 'image-portrait' : 'image-square');
+  }
   function renderNewsCards(target, cards) {
     const host = A.$(target); host.replaceChildren();
     if (!cards?.length) { host.innerHTML = '<p class="rpt-news-empty">本周新闻还未发布。系统会自动重试；管理员也可以手动刷新。</p>'; return; }
@@ -613,7 +618,7 @@ const Report = (() => {
       if (card.imageUrl) {
         try { visual.style.setProperty('--rpt-news-image', `url(${JSON.stringify(new URL(card.imageUrl, window.location.href).href)})`); } catch { /* 图片地址不合法时保留无图视觉底板 */ }
         const imageLink = document.createElement('button'); imageLink.type = 'button'; imageLink.className = 'rpt-news-image-link'; imageLink.title = '点击查看原图'; imageLink.setAttribute('aria-label', `查看 ${card.title} 原图`);
-        const img = document.createElement('img'); img.src = card.imageUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onerror = () => imageLink.remove(); imageLink.appendChild(img);
+        const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onload = () => classifyNewsImage(article, img); img.onerror = () => imageLink.remove(); img.src = card.imageUrl; imageLink.appendChild(img);
         imageLink.onclick = () => A.lightbox(card.imageUrl, `${card.source} · 原图`); visual.appendChild(imageLink);
       }
       const num = document.createElement('span'); num.className = 'rpt-news-number'; num.textContent = String(i + 1).padStart(2, '0'); visual.appendChild(num);

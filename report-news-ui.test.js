@@ -15,4 +15,9 @@ assert.match(css, /body\.rpt-presenting \.rpt-news-page\s*\{[^}]*overflow:\s*hid
 assert.match(css, /body\.rpt-presenting \.rpt-news-body\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/);
 assert.match(js, /A\.lightbox\(card\.imageUrl/);
 assert.doesNotMatch(js, /imageLink\.href\s*=\s*card\.url/);
+// 放映封面并非一律上图下文：竖图必须切换为左右布局，且正文不会被原文区挤出。
+assert.match(js, /classifyNewsImage\(article, img\)/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-card\.image-portrait\s*\{[^}]*grid-template-columns:/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-card\.image-portrait\s*\{[^}]*grid-template-rows:\s*1fr/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-meta\s*\{[^}]*margin-top:\s*clamp\(12px,\s*1\.5vh,\s*22px\)/);
 console.log('✓ report-news picker remains closeable and compact');
