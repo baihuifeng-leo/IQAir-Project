@@ -25,4 +25,8 @@ assert.match(css, /body\.rpt-presenting \.rpt-news-grid\s*\{[^}]*align-items:\s*
 assert.match(css, /body\.rpt-presenting \.rpt-news-grid > \.rpt-news-card\s*\{[^}]*height:\s*100%/);
 assert.match(css, /body\.rpt-presenting \.rpt-news-card\.image-wide \.rpt-news-body\s*\{[^}]*justify-content:\s*center/);
 assert.match(css, /body\.rpt-presenting \.rpt-news-card\.image-portrait \.rpt-news-summary\s*\{[^}]*font-size:/);
+// 放映页以摘要为主叙事，不再用三行上限产生“...”省略；次级三条要点让位。
+assert.match(css, /body\.rpt-presenting \.rpt-news-summary\s*\{[^}]*display:\s*block/);
+assert.doesNotMatch(css, /body\.rpt-presenting \.rpt-news-summary\s*\{[^}]*-webkit-line-clamp/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-bullets\s*\{[^}]*display:\s*none/);
 console.log('✓ report-news picker remains closeable and compact');
