@@ -557,6 +557,20 @@ async function run() {
     assert.deepStrictEqual(result.matchedKeywords.find((kw) => kw.text === '预估补贴到手价').reasons, ['已配置文案穿插忽略']);
   });
 
+  t('matchAgainstProduct 本产品的完整赠品词已按版面命中时，不把其中的香氛盒误报为串词', () => {
+    const car = { id: 'car', name: 'Atem Car', keywords: ['晒单赠 香氛盒+数据线'] };
+    const other = { id: 'other', name: '其它产品', keywords: ['香氛盒'] };
+    const lines = [
+      { text: '晒单赠', score: 0.99, box: [100, 100, 240, 150] },
+      { text: '¥248', score: 0.99, box: [500, 100, 620, 150] },
+      { text: '香氛盒+数据线', score: 0.99, box: [100, 160, 410, 210] }
+    ];
+    const result = M.matchAgainstProduct(lines.map((line) => line.text).join('\n'), car, [car, other], '1:1', lines);
+    assert.deepStrictEqual(result.missingKeywords, []);
+    assert.deepStrictEqual(result.extraKeywords, []);
+    assert.strictEqual(result.status, 'pass');
+  });
+
   t('checkPrice 没配置 price 的产品不校验；价格对上/图里没价格/价格对不上分别处理', () => {
     const noPrice = { id: 'p1', name: 'X', price: null };
     assert.strictEqual(M.checkPrice('随便什么文字￥299', noPrice), null);
