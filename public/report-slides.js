@@ -133,11 +133,11 @@ const ReportSlides = (() => {
   function bringToFront() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el) return; el.z = nextZ(page); scheduleSave(); render(); }
   function sendToBack() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el) return; el.z = Math.min(...page.elements.map((x) => x.z || 0)) - 1; scheduleSave(); render(); }
   function toggleEditFullscreen() {
-    const shell = host?.querySelector('.rs-shell'); if (!shell || presenting) return;
+    const fullscreenTarget = host; if (!fullscreenTarget || presenting) return;
     const exit = document.exitFullscreen || document.webkitExitFullscreen;
-    const enter = shell.requestFullscreen || shell.webkitRequestFullscreen;
+    const enter = fullscreenTarget.requestFullscreen || fullscreenTarget.webkitRequestFullscreen;
     if (document.fullscreenElement || document.webkitFullscreenElement) exit?.call(document);
-    else if (enter) enter.call(shell).catch?.(() => A.toast('浏览器拒绝了全屏编辑请求，可按 F11 手动放大', 'bad'));
+    else if (enter) enter.call(fullscreenTarget).catch?.(() => A.toast('浏览器拒绝了全屏编辑请求，可按 F11 手动放大', 'bad'));
     else A.toast('这个浏览器不支持全屏编辑，可按 F11 手动放大', 'bad');
   }
   function onFullscreenChange() { if (host?.querySelector('.rs-shell') && !presenting) { updateToolbar(); requestAnimationFrame(scaleCanvas); } }

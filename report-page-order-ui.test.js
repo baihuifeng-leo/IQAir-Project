@@ -18,5 +18,9 @@ assert.match(js, /drop/);
 assert.match(slides, /toggleEditFullscreen, fullscreen \? '退出全屏编辑' : '放大当前画布进行编辑'/);
 assert.match(slides, /function toggleEditFullscreen\(\)/);
 assert.match(slides, /fullscreenchange/);
-assert.match(css, /\.rs-shell:fullscreen\s*,/);
+// 画布会在空白处点击时重渲染；全屏根必须是稳定的宿主容器，不能是会被替换的 shell。
+assert.match(slides, /const fullscreenTarget = host/);
+assert.match(slides, /enter\.call\(fullscreenTarget\)/);
+assert.doesNotMatch(slides, /const shell = host\?\.querySelector\('\.rs-shell'\)/);
+assert.match(css, /\.rpt-page-custom:fullscreen\s*,/);
 console.log('✓ report pages keep drag order and editor fullscreen controls');

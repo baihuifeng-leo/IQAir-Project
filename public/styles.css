@@ -1672,8 +1672,9 @@ body.readonly .rpt-news-editor .kill { display: grid !important; }
 /* ── 个人报告自定义页：固定 16:9 逻辑画布，按容器等比缩放 ── */
 .rpt-page-custom { min-height: min(720px, 64vw); }
 .rs-shell { display: flex; flex-direction: column; gap: 12px; height: 100%; }
-.rs-shell:fullscreen, .rs-shell:-webkit-full-screen { box-sizing: border-box; width: 100%; height: 100%; padding: clamp(14px, 2vw, 30px); background: var(--bg); }
-.rs-shell:fullscreen .rs-viewport, .rs-shell:-webkit-full-screen .rs-viewport { flex: 1; min-height: 0; aspect-ratio: auto; }
+.rpt-page-custom:fullscreen, .rpt-page-custom:-webkit-full-screen { box-sizing: border-box; width: 100%; height: 100%; min-height: 0; padding: clamp(14px, 2vw, 30px); background: var(--bg); }
+.rpt-page-custom:fullscreen .rs-shell, .rpt-page-custom:-webkit-full-screen .rs-shell { height: 100%; }
+.rpt-page-custom:fullscreen .rs-viewport, .rpt-page-custom:-webkit-full-screen .rs-viewport { flex: 1; min-height: 0; aspect-ratio: auto; }
 .rs-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 9px; border: 1px solid var(--line); border-radius: 11px; background: var(--overlay-weak); }
 .rs-toolbar-btn { padding: 6px 10px; font-size: 12px; }
 .rs-toolbar-btn.on { background: var(--mint-dim); color: var(--mint); border-color: var(--mint); }
