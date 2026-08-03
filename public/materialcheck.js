@@ -138,12 +138,14 @@ const MaterialCheck = (() => {
   }
 
   // 统一入口由服务端根据图片真实尺寸归为 1:1 或 3:4，再使用对应的关键词子集。
+  let activeDetectBatch = null;
+
   function renderCheckView() {
     const el = A.$('#mc-check-view');
     el.innerHTML = `
       <div class="mc-upload-zone" id="mc-upload-zone"><strong>上传待检测素材</strong><br>点击选择图片，或拖进这个区域（支持多选；系统自动识别 1:1 或 3:4）</div>
       <input type="file" id="mc-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
-      <div class="mc-batch-summary" id="mc-batch-summary"></div>
+      <div class="mc-batch-summary" id="mc-batch-summary" hidden><span data-role="summary-text"></span><button type="button" class="mc-btn mc-btn-danger mc-btn-mini" id="mc-detect-cancel" hidden>取消本次检测</button></div>
       <div class="mc-progress" id="mc-progress" hidden><div class="mc-progress-bar" id="mc-progress-bar"></div></div>
       <div id="mc-result-list"></div>`;
 
@@ -172,9 +174,13 @@ const MaterialCheck = (() => {
     const uploadLibraryId = libraryId;
     const list = A.$('#mc-result-list');
     const summary = A.$('#mc-batch-summary');
+    const summaryText = summary.querySelector('[data-role="summary-text"]');
+    const cancelBtn = A.$('#mc-detect-cancel');
     const progress = A.$('#mc-progress');
     const progressBar = A.$('#mc-progress-bar');
     const batchRows = addDetectBatch(list, { id: batchId, createdAt: Date.now(), results: fileList }, {});
+    const batchControl = { cancelled: false, controllers: new Set() };
+    activeDetectBatch = batchControl;
 
     const rows = fileList.map((file) => {
       const row = document.createElement('div');
@@ -187,36 +193,63 @@ const MaterialCheck = (() => {
     const updateSummary = () => {
       const done = rows.filter((r) => r.state === 'done').length;
       const pendingPick = rows.filter((r) => r.state === 'needsPick').length;
-      const processing = rows.length - done - pendingPick;
-      summary.textContent = `本次上传 ${rows.length} 张 · 已完成 ${done} · 待选择 ${pendingPick} · 处理中 ${processing}`;
+      const cancelled = rows.filter((r) => r.state === 'cancelled').length;
+      const processing = rows.length - done - pendingPick - cancelled;
+      summary.hidden = false;
+      summaryText.textContent = `本次上传 ${rows.length} 张 · 已完成 ${done} · 待选择 ${pendingPick} · 处理中 ${processing}${cancelled ? ` · 已取消 ${cancelled}` : ''}`;
       // 整批总进度条：按"识别/判定已经跑完"算进度，待人工选择也算跑完了自己那部分，只是还差人点一下
       progress.hidden = false;
       progressBar.style.width = `${rows.length ? Math.round(((done + pendingPick) / rows.length) * 100) : 0}%`;
     };
+    const markCancelled = (entry) => {
+      if (entry.state !== 'processing') return;
+      entry.state = 'cancelled';
+      entry.row.className = 'mc-row mc-row-warn';
+      entry.row.innerHTML = `<span class="mc-row-name">${escapeHtml(entry.file.name)}</span><span class="mc-row-status">本次检测已取消</span>`;
+    };
+    cancelBtn.hidden = false;
+    cancelBtn.disabled = false;
+    cancelBtn.onclick = () => {
+      if (batchControl.cancelled) return;
+      batchControl.cancelled = true;
+      batchControl.controllers.forEach((controller) => controller.abort());
+      rows.forEach(markCancelled);
+      cancelBtn.disabled = true;
+      updateSummary();
+      A.toast('已取消本次检测；未开始的素材不会继续上传');
+    };
     updateSummary();
 
     async function runOne(entry) {
+      if (batchControl.cancelled) { markCancelled(entry); return; }
       entry.state = 'processing';
       entry.row.className = 'mc-row mc-row-pending';
       entry.row.innerHTML = `<span class="mc-row-name">${escapeHtml(entry.file.name)}</span><span class="mc-row-status"><i class="mc-spin"></i> 识别中…</span>`;
       updateSummary();
+      const controller = new AbortController();
+      batchControl.controllers.add(controller);
       try {
         const result = await call(`/api/materialcheck/upload?filename=${encodeURIComponent(entry.file.name)}&batchId=${encodeURIComponent(batchId)}&platform=${encodeURIComponent(uploadPlatform)}&libraryId=${encodeURIComponent(uploadLibraryId)}`, {
           method: 'POST',
           headers: { 'Content-Type': entry.file.type },
-          body: entry.file
+          body: entry.file,
+          signal: controller.signal
         });
+        if (batchControl.cancelled) return;
         entry.state = result.needsManualPick ? 'needsPick' : 'done';
         renderResult(entry.row, result, {
           onRetry: () => runOne(entry),
           onResolved: () => { entry.state = 'done'; updateSummary(); }
         });
       } catch (e) {
+        if (batchControl.cancelled || e.name === 'AbortError') { markCancelled(entry); return; }
         entry.state = 'done';
         entry.row.className = 'mc-row mc-row-error';
         entry.row.querySelector('.mc-row-status').textContent = '上传失败：' + e.message;
+      } finally {
+        batchControl.controllers.delete(controller);
+        updateSummary();
       }
-      updateSummary();
     }
 
     const CONCURRENCY = 3;
@@ -228,6 +261,8 @@ const MaterialCheck = (() => {
       }
     }
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rows.length) }, worker));
+    if (activeDetectBatch === batchControl) activeDetectBatch = null;
+    cancelBtn.hidden = true;
   }
 
   const KWD_STATUS_TITLE = {
@@ -1124,7 +1159,7 @@ const MaterialCheck = (() => {
   /** 按产品分组候选词：同一个产品可能有好几张图，候选词要合并去重（按去空格后的文字）。
    *  每个候选词带着扫描它那张图所属的比例入口（e.ratio）；同一个词如果在 1:1 和 3:4
    *  两边的扫描里都出现过，说明是两种素材共用的，升级成"通用"。 */
-  function autobuildGroups(entries) {
+  function autobuildGroups(entries, reviewState = new Map()) {
     const groups = new Map();
     entries.forEach((e) => {
       const source = e.recognizedCandidates || e.candidates;
@@ -1132,23 +1167,34 @@ const MaterialCheck = (() => {
       const targetProductId = e.targetProductId || e.productId;
       const targetProductName = e.targetProductName || e.productName;
       let g = groups.get(targetProductId);
-      if (!g) { g = { productName: targetProductName, targetProductId, entries: [], cands: new Map(), mode: 'append', included: true }; groups.set(targetProductId, g); }
+      if (!g) {
+        const saved = reviewState.get(targetProductId);
+        g = {
+          productName: targetProductName, targetProductId, entries: [], cands: new Map(),
+          mode: saved?.mode || 'replace', included: saved?.included !== false
+        };
+        groups.set(targetProductId, g);
+      }
       g.entries.push(e);
       source.forEach((text) => {
         const norm = stripSpaces(text);
         const existing = g.cands.get(norm);
-        if (!existing) g.cands.set(norm, { text, checked: true, productId: targetProductId, ratio: e.ratio });
+        if (!existing) {
+          const savedCandidate = reviewState.get(targetProductId)?.cands?.get(norm);
+          g.cands.set(norm, { text, checked: savedCandidate?.checked !== false, productId: targetProductId, ratio: e.ratio });
+        }
         else if (existing.ratio !== e.ratio) existing.ratio = 'both';
       });
     });
+    groups.forEach((group, productId) => reviewState.set(productId, group));
     return groups;
   }
 
-  function drawAutobuildReview(entries) {
+  function drawAutobuildReview(entries, reviewState = new Map()) {
     const scanning = entries.filter((e) => e.status === 'scanning');
     const unresolved = entries.filter((e) => e.status === 'unresolved');
     const errored = entries.filter((e) => e.status === 'error');
-    const groups = autobuildGroups(entries);
+    const groups = autobuildGroups(entries, reviewState);
     const doneCount = entries.length - scanning.length;
 
     let html = '';
@@ -1181,7 +1227,7 @@ const MaterialCheck = (() => {
       html += [...groups.entries()].map(([pid, g]) => {
         const items = [...g.cands.entries()];
         return `<div class="mc-ab-group" data-pid="${escapeHtml(pid)}">
-          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}></label><span class="mc-ab-product-name">${escapeHtml(g.productName)}</span><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append">追加到当前词库</option><option value="replace">替换该产品全部词</option></select></label></div>
+          <div class="mc-ab-group-head"><label class="mc-ab-product-toggle" title="取消勾选会在本次导入中忽略该产品"><input type="checkbox" data-role="product-include" ${g.included ? 'checked' : ''}></label><span class="mc-ab-product-name">${escapeHtml(g.productName)}</span><span class="mc-pcard-count">${items.length} 条识别词</span><label class="mc-ab-mode">写入方式 <select data-role="import-mode" ${g.included ? '' : 'disabled'}><option value="append" ${g.mode === 'append' ? 'selected' : ''}>追加到当前词库</option><option value="replace" ${g.mode === 'replace' ? 'selected' : ''}>替换该产品全部词</option></select></label></div>
           <div class="mc-ab-sources">${g.entries.map((entry) => `<div class="mc-ab-source" data-eid="${escapeHtml(entry.eid)}"><span class="mc-ab-source-file" title="${escapeHtml(entry.filename)}">${escapeHtml(entry.filename)}</span><span class="mc-ab-cand-ratio ${RATIO_CLASS[entry.ratio]}">${RATIO_LABEL[entry.ratio]}</span><label><span>产品型号</span><select data-role="source-product" aria-label="更正「${escapeHtml(entry.filename)}」的产品型号">${products.map((product) => `<option value="${escapeHtml(product.id)}" ${g.targetProductId === product.id ? 'selected' : ''}>${escapeHtml(product.name)}</option>`).join('')}</select></label></div>`).join('')}</div>
           <div class="mc-ab-cands">${items.map(([norm, c]) =>
             `<div class="mc-ab-cand ${g.included ? '' : 'is-ignored'}"><input type="checkbox" data-norm="${escapeHtml(norm)}" ${c.checked ? 'checked' : ''} ${g.included ? '' : 'disabled'} aria-label="是否导入 ${escapeHtml(c.text)}"><span class="mc-ab-cand-text">${escapeHtml(c.text)}</span><span class="mc-ab-cand-ratio ${RATIO_CLASS[c.ratio]}">${RATIO_LABEL[c.ratio]}</span></div>`
@@ -1220,7 +1266,7 @@ const MaterialCheck = (() => {
           e.candidates = j.candidates;
           e.recognizedCandidates = j.recognizedCandidates || j.candidates;
         } catch (err) { A.toast(err.message, 'bad'); }
-        drawAutobuildReview(entries);
+        drawAutobuildReview(entries, reviewState);
       };
     });
 
@@ -1262,7 +1308,7 @@ const MaterialCheck = (() => {
           select.disabled = false;
           return;
         }
-        drawAutobuildReview(entries);
+        drawAutobuildReview(entries, reviewState);
       };
     });
 
@@ -1317,8 +1363,9 @@ const MaterialCheck = (() => {
       eid: 'e' + (autobuildSeq++), file, filename: file.name, status: 'scanning', ratio: null,
       productId: null, productName: null, candidates: [], recognizedCandidates: [], candidateProducts: [], ocrText: '', errorMsg: ''
     }));
+    const reviewState = new Map();
     autobuildMask.hidden = false;
-    drawAutobuildReview(entries);
+    drawAutobuildReview(entries, reviewState);
 
     const scanPlatform = platform, scanLibraryId = libraryId;
     async function scanOne(e) {
@@ -1350,7 +1397,7 @@ const MaterialCheck = (() => {
         e.status = 'error';
         e.errorMsg = err.message;
       }
-      drawAutobuildReview(entries);
+      drawAutobuildReview(entries, reviewState);
     }
 
     const CONCURRENCY = 3;

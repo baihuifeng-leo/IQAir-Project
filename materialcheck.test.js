@@ -19,12 +19,12 @@ const tAsync = async (name, fn) => {
 
 /** 前端批量审核的分组函数没有独立模块；这个最小 VM 只取出真实源码里的
  * autobuildGroups，不启动页面或请求接口，用来锁定“逐素材改产品后必须重新分组”的行为。 */
-function frontendAutobuildGroups(entries) {
+function frontendAutobuildGroups(entries, reviewState) {
   const source = fs.readFileSync(path.join(__dirname, 'public', 'materialcheck.js'), 'utf8')
     .replace('return { init };', 'return { autobuildGroups };');
   const context = { console, window: {}, document: {}, setTimeout, clearTimeout, requestAnimationFrame: (fn) => fn() };
   vm.runInNewContext(source + '\nthis.__materialcheck = MaterialCheck;', context, { filename: 'public/materialcheck.js' });
-  return context.__materialcheck.autobuildGroups(entries);
+  return context.__materialcheck.autobuildGroups(entries, reviewState);
 }
 
 // 伪造一个 child_process 长得像的对象：stdout/stdin/exit 都能模拟，
@@ -894,6 +894,18 @@ async function run() {
     assert.strictEqual(store.pending.size, 0);
   });
 
+  await tAsync('detectFile 客户端取消后不写入检测历史或保留上传素材', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', type: 'machine', keywords: ['GC-Multi'] }]);
+    await assert.rejects(() => store.detectFile({
+      buf: Buffer.from('cancelled-material'), ext: '.jpg', filename: 'GC-Multi.jpg', platform: PF, libraryId: libId,
+      isCancelled: () => true, ocr: stubOcr('GC-Multi', 0.95)
+    }), /已取消/);
+    assert.strictEqual(store.records.length, 0);
+    assert.deepStrictEqual(await fsp.readdir(store.uploadDir), []);
+  });
+
   await tAsync('detectFile 文件名和 OCR 都无法判定时返回待人工选择，不写入历史记录', async () => {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;
@@ -1299,6 +1311,22 @@ async function run() {
     ]);
     assert.strictEqual(groups.size, 3);
     assert.deepStrictEqual([...groups.keys()].sort(), ['cf', 'hf', 'plus']);
+  });
+
+  t('批量审核在后续素材识别完成并重绘时，保留已选择的写入方式与词勾选状态', () => {
+    const reviewState = new Map();
+    const first = [{ status: 'resolved', productId: 'p1', productName: 'Atem Desk', candidates: ['词 A'], ratio: '1:1' }];
+    const initial = frontendAutobuildGroups(first, reviewState);
+    const group = initial.get('p1');
+    assert.strictEqual(group.mode, 'replace');
+    group.mode = 'append';
+    group.cands.get('词A').checked = false;
+
+    const afterAnotherImage = frontendAutobuildGroups([...first, { status: 'resolved', productId: 'p1', productName: 'Atem Desk', candidates: ['词 B'], ratio: '3:4' }], reviewState);
+    const restored = afterAnotherImage.get('p1');
+    assert.strictEqual(restored.mode, 'append');
+    assert.strictEqual(restored.cands.get('词A').checked, false);
+    assert.strictEqual(restored.cands.get('词B').checked, true);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
