@@ -1,6 +1,6 @@
 'use strict';
 
-const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
+const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '其它'];
 const PRODUCT_TYPES = ['machine', 'filter', 'accessory'];
 // 同一个产品的 1:1 和 3:4 素材文案有重叠也有差异（比如 3:4 素材下方多一段满赠权益，
 // 1:1 裁掉了）——RATIOS 是关键词"专属于"某个比例时的合法取值；不在这两个值里
@@ -144,7 +144,7 @@ function findUncoveredAffix(text, keywordRaw, coveredKeywords) {
 // 前后缀不一致报警。该提醒只用于会因“赠/限时/满减”等附加文字而改变审核含义的
 // 商业文案分类；词库未分类的旧词维持原有兼容行为。
 function shouldCheckUncoveredAffix(keyword) {
-  return ['附加权益', '大促销售权益', '日常销售利益点', '国补', '价格'].includes(keywordCategory(keyword));
+  return ['附加权益', '大促销售权益', '日常销售利益点', '国补'].includes(keywordCategory(keyword));
 }
 
 /** 检测台关键词明细面板：把产品自己词库里适用于这个素材比例的每个词都判一遍
