@@ -120,6 +120,15 @@ async function run() {
     assert.ok(Math.abs(confidence - 0.9) < 1e-9);
   });
 
+  await tAsync('runOcr 保留高置信度文字框，供版面级关键词匹配使用', async () => {
+    const stubWorker = { recognize: async () => [
+      { text: '预估补贴', score: 0.95, box: [10, 20, 110, 60] },
+      { text: '噪声', score: 0.2, box: [1, 1, 2, 2] }
+    ] };
+    const { lines } = await runOcr('/tmp/x.jpg', { worker: stubWorker });
+    assert.deepStrictEqual(lines, [{ text: '预估补贴', score: 0.95, box: [10, 20, 110, 60] }]);
+  });
+
   await tAsync('runOcr 全部行都低置信度时返回空文字和 0 置信度', async () => {
     const stubWorker = { recognize: async () => [{ text: '噪声', score: 0.1 }] };
     const { text, confidence } = await runOcr('/tmp/x.jpg', { worker: stubWorker });
@@ -521,6 +530,23 @@ async function run() {
     const p = { id: 'p1', name: 'GC XE', price: 16328 };
     const text = '预估补贴到手价\n支付补贴省15%\n行业63+年深耕\n16328\n★★★★★\n￥\n现金红包60元';
     assert.strictEqual(M.checkPrice(text, p), null);
+  });
+
+  t('matchAgainstProduct 按 OCR 坐标合并同一视觉列的到手价标签，并识别相邻主价格', () => {
+    // 复刻 2026-08-03 GCX 国补主图：Paddle 的原始输出顺序会把“入会有礼”插到
+    // “预估补贴”和“到手价”中间，28188 又与标签分成不同识别框。
+    const p = { id: 'p1', name: 'GCX Series XE', price: 28188, keywords: ['预估补贴到手价'] };
+    const lines = [
+      { text: '预估补贴', score: 0.99, box: [30, 1200, 180, 1260] },
+      { text: '28188', score: 0.99, box: [200, 1200, 520, 1260] },
+      { text: '支付补贴省15%', score: 0.99, box: [620, 1200, 1120, 1260] },
+      { text: '入会有礼', score: 0.99, box: [1180, 1200, 1400, 1260] },
+      { text: '到手价', score: 0.99, box: [30, 1270, 170, 1330] }
+    ];
+    const text = lines.map((line) => line.text).join('\n');
+    const result = M.matchAgainstProduct(text, p, [p], '1:1', lines);
+    assert.deepStrictEqual(result.missingKeywords, []);
+    assert.strictEqual(result.priceIssue, null);
   });
 
   t('checkPrice 没配置 price 的产品不校验；价格对上/图里没价格/价格对不上分别处理', () => {

@@ -465,17 +465,18 @@ class MaterialCheckStore {
     const url = '/uploads/materialcheck/' + name;
     const ratioMismatch = ratioMismatchWarning(claimedRatio, buf);
 
-    let ocrText, ocrConfidence;
+    let ocrText, ocrConfidence, ocrLines;
     try {
       const result = await this._runOcrQueued(imagePath, ocr);
       ocrText = result.text;
       ocrConfidence = result.confidence;
+      ocrLines = result.lines || [];
     } catch (e) {
       await discardIfCancelled();
       const record = {
         id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId: lib.id,
         filename, imagePath: url, productId: null, productName: null, matchMethod: null, ratio: effectiveRatio,
-        ocrText: '', ocrConfidence: null, missingKeywords: [], wrongKeywords: [], extraKeywords: [], unregisteredKeywords: [], status: 'ocr_failed', warning: e.message
+        ocrText: '', ocrConfidence: null, ocrLines: [], missingKeywords: [], wrongKeywords: [], extraKeywords: [], unregisteredKeywords: [], status: 'ocr_failed', warning: e.message
       };
       await this.append(record);
       return record;
@@ -492,7 +493,7 @@ class MaterialCheckStore {
       this._cleanupPending();
       const pendingId = 'mcp_' + crypto.randomBytes(6).toString('hex');
       this.pending.set(pendingId, {
-        imagePath: url, filename, ocrText, ocrConfidence, batchId, uploadedBy, platform, libraryId: lib.id, ratio: effectiveRatio, ratioMismatch, expiresAt: Date.now() + PENDING_TTL_MS
+        imagePath: url, filename, ocrText, ocrConfidence, ocrLines, batchId, uploadedBy, platform, libraryId: lib.id, ratio: effectiveRatio, ratioMismatch, expiresAt: Date.now() + PENDING_TTL_MS
       });
       return { needsManualPick: true, pendingId, ocrText, filename, candidates: resolution.candidates, lowConfidence, ratioMismatch };
     }
@@ -507,7 +508,7 @@ class MaterialCheckStore {
 
     return this._finish({
       platform, libraryId: lib.id, product: resolution.product, allProducts: lib.products, method: resolution.method,
-      ocrText, ocrConfidence, imagePath: url, filename, batchId, uploadedBy, warning, ratio: effectiveRatio
+      ocrText, ocrConfidence, ocrLines, imagePath: url, filename, batchId, uploadedBy, warning, ratio: effectiveRatio
     });
   }
 
@@ -589,17 +590,17 @@ class MaterialCheckStore {
     if (!product) throw new Error('选的这个产品不存在');
     this.pending.delete(pendingId);
     return this._finish({
-      platform: p.platform, libraryId: lib.id, product, allProducts: lib.products, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence,
+      platform: p.platform, libraryId: lib.id, product, allProducts: lib.products, method: 'manual', ocrText: p.ocrText, ocrConfidence: p.ocrConfidence, ocrLines: p.ocrLines,
       imagePath: p.imagePath, filename: p.filename, batchId: p.batchId, uploadedBy: p.uploadedBy || uploadedBy, warning: p.ratioMismatch, ratio: p.ratio
     });
   }
 
-  async _finish({ platform, libraryId, product, allProducts, method, ocrText, ocrConfidence, imagePath, filename, batchId, uploadedBy, warning, ratio }) {
-    const { missingKeywords, wrongKeywords, expandedKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords } = match.matchAgainstProduct(ocrText, product, allProducts, ratio);
+  async _finish({ platform, libraryId, product, allProducts, method, ocrText, ocrConfidence, ocrLines, imagePath, filename, batchId, uploadedBy, warning, ratio }) {
+    const { missingKeywords, wrongKeywords, expandedKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords } = match.matchAgainstProduct(ocrText, product, allProducts, ratio, ocrLines);
     const record = {
       id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId,
       filename, imagePath, productId: product.id, productName: product.name, matchMethod: method, ratio,
-      ocrText, ocrConfidence, missingKeywords, wrongKeywords, expandedKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, warning, matchedKeywords
+      ocrText, ocrConfidence, ocrLines: ocrLines || [], missingKeywords, wrongKeywords, expandedKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, warning, matchedKeywords
     };
     await this.append(record);
     return record;
