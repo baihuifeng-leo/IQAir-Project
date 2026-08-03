@@ -89,13 +89,19 @@ function oneEditDifferences(expected, actual) {
  *  NORMALIZE_STEPS 反推出来的，跟真实匹配逻辑必然一致）；两种都没命中=红色缺词。
  *  做法：依次去掉每一条规则重新跑一遍归一化，如果去掉后就不命中了，说明这条
  *  规则是必需的，记进 reasons。 */
-function classifyKeywordMatch(text, keywordRaw) {
+function classifyKeywordMatch(text, keywordRaw, layoutVariants = []) {
   const rawText = String(text || '');
   const rawKeyword = String(keywordRaw || '');
   if (rawText.includes(rawKeyword)) return { found: true, exact: true, reasons: [] };
 
   const fullyNormalized = normalize(rawText).includes(normalize(rawKeyword));
   if (!fullyNormalized) {
+    // 海报的文字不是文章流：同一个短语可能纵向排版，而同一横排的其它权益会被
+    // Paddle 插到两个识别框中间。坐标重建出的同列/同行文本命中时，仍是素材上的
+    // 原字，只是不能再称为“原始 OCR 字符串连续命中”。
+    if (layoutVariants.some((variant) => normalize(variant).includes(normalize(rawKeyword)))) {
+      return { found: true, exact: false, wrong: false, reasons: ['按素材版面合并'] };
+    }
     const mistake = findOneCharMistake(rawText, rawKeyword);
     return mistake
       ? { found: false, exact: false, wrong: true, reasons: [], ...mistake }
@@ -109,6 +115,37 @@ function classifyKeywordMatch(text, keywordRaw) {
     })
     .map((step) => step.label);
   return { found: true, exact: false, wrong: false, reasons };
+}
+
+/**
+ * 依据 Paddle 的文字框生成小范围的“视觉阅读行”。不把整张图粗暴串成一段，而是
+ * 只合并同一横排（从左到右）或同一纵列（从上到下）的框，供关键词匹配补足 OCR
+ * 返回顺序与海报视觉顺序不一致的场景。
+ */
+function layoutTextVariants(ocrLines) {
+  const lines = (ocrLines || []).map((line) => {
+    const box = line && line.box;
+    if (!Array.isArray(box) || box.length < 4 || !String(line.text || '').trim()) return null;
+    const [left, top, right, bottom] = box.map(Number);
+    if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) return null;
+    return { text: String(line.text), left, top, right, bottom, width: right - left, height: bottom - top, midY: (top + bottom) / 2 };
+  }).filter(Boolean);
+  if (lines.length < 2) return [];
+
+  const variants = new Set();
+  // 同一横排：仅收集与种子垂直中心相近的框，再由左到右合并。
+  lines.forEach((seed) => {
+    const row = lines.filter((line) => Math.abs(line.midY - seed.midY) <= Math.max(seed.height, line.height) * 0.55)
+      .sort((a, b) => a.left - b.left);
+    if (row.length > 1) variants.add(row.map((line) => line.text).join(''));
+  });
+  // 同一纵列：左边缘接近时才上到下合并，避免把卡片其它栏位误拼进去。
+  lines.forEach((seed) => {
+    const column = lines.filter((line) => Math.abs(line.left - seed.left) <= Math.max(24, Math.min(seed.width, line.width) * 0.35))
+      .sort((a, b) => a.top - b.top);
+    if (column.length > 1) variants.add(column.map((line) => line.text).join(''));
+  });
+  return [...variants];
 }
 
 /**
@@ -149,11 +186,12 @@ function shouldCheckUncoveredAffix(keyword) {
 
 /** 检测台关键词明细面板：把产品自己词库里适用于这个素材比例的每个词都判一遍
  *  三态（命中/规则命中/缺失），红色缺词排最前面，方便优先看问题。 */
-function matchedKeywordDetail(text, product, materialRatio) {
+function matchedKeywordDetail(text, product, materialRatio, ocrLines) {
   const applicableKeywords = (product.keywords || []).filter((kw) => keywordApplies(kw, materialRatio));
+  const variants = layoutTextVariants(ocrLines);
   return applicableKeywords
     .map((kw) => {
-      const { found, exact, wrong, reasons, actual, differences } = classifyKeywordMatch(text, keywordText(kw));
+      const { found, exact, wrong, reasons, actual, differences } = classifyKeywordMatch(text, keywordText(kw), variants);
       const expanded = exact && shouldCheckUncoveredAffix(kw) ? findUncoveredAffix(text, keywordText(kw), applicableKeywords) : null;
       return {
         text: keywordText(kw),
@@ -252,10 +290,15 @@ function extractPriceCandidates(text) {
  * 串词都更需要"零容忍"，因为写错价、写低价直接导致过投诉。没配置 price 的产品
  * 不做这项校验（历史数据/还没配置的产品不应该被误判）。
  */
-function checkPrice(text, product) {
+function checkPrice(text, product, ocrLines) {
   if (product.price == null) return null;
   const candidates = extractPriceCandidates(text);
   if (candidates.has(product.price)) return null;
+  // 主价格常被识别为独立数字框，¥ 符号或“到手价”标签则落在相邻框；在版面 OCR
+  // 输出顺序错乱时，不能因此漏掉与词库预设价格完全相同的数字。
+  const expected = String(product.price);
+  const hasExpectedNumberBox = (ocrLines || []).some((line) => String(line?.text || '').replace(/[\s,]/g, '') === expected);
+  if (hasExpectedNumberBox) return null;
   return { expected: product.price, found: [...candidates] };
 }
 
@@ -427,8 +470,8 @@ function commonKeywordTexts(allProducts, threshold) {
  *
  * 三态严重程度是固定规则，不做成可配置项：串词/价格不对 > 缺词 > 通过。
  */
-function matchAgainstProduct(text, product, allProducts, materialRatio) {
-  const matchedKeywords = matchedKeywordDetail(text, product, materialRatio);
+function matchAgainstProduct(text, product, allProducts, materialRatio, ocrLines) {
+  const matchedKeywords = matchedKeywordDetail(text, product, materialRatio, ocrLines);
   const missingKeywords = matchedKeywords.filter((kw) => kw.status === 'missing').map((kw) => kw.text);
   const wrongKeywords = matchedKeywords
     .filter((kw) => kw.status === 'wrong')
@@ -464,7 +507,7 @@ function matchAgainstProduct(text, product, allProducts, materialRatio) {
     });
   });
 
-  const priceIssue = checkPrice(text, product);
+  const priceIssue = checkPrice(text, product, ocrLines);
   const unregisteredKeywords = unregisteredOcrLines(text, allProducts);
 
   const status = (extraKeywords.length > 0 || priceIssue) ? 'error' : (missingKeywords.length > 0 || wrongKeywords.length > 0 || expandedKeywords.length > 0) ? 'warn' : 'pass';
@@ -476,5 +519,5 @@ module.exports = {
   normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, hasStrongOcrProductEvidence, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
   extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates, unregisteredOcrLines,
-  classifyKeywordMatch, findOneCharMistake, findUncoveredAffix, matchedKeywordDetail
+  classifyKeywordMatch, findOneCharMistake, findUncoveredAffix, layoutTextVariants, matchedKeywordDetail
 };

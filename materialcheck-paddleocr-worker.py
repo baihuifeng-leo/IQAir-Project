@@ -7,7 +7,7 @@
 协议：
   stdin  每行一个 JSON：{"id": <请求编号>, "path": "<图片绝对路径>"}
   stdout 每行一个 JSON：
-    成功 {"id": <编号>, "ok": true, "lines": [{"text": "...", "score": 0.95}, ...]}
+    成功 {"id": <编号>, "ok": true, "lines": [{"text": "...", "score": 0.95, "box": [x1,y1,x2,y2]}, ...]}
     失败 {"id": <编号>, "ok": false, "error": "..."}
   启动完成（模型加载好，可以开始收请求）打一行 {"ready": true}
 
@@ -53,8 +53,16 @@ def main():
             for res in results:
                 texts = res.get('rec_texts', [])
                 scores = res.get('rec_scores', [])
-                for text, score in zip(texts, scores):
-                    out_lines.append({'text': text, 'score': round(float(score), 4)})
+                boxes = res.get('rec_boxes', [])
+                for index, (text, score) in enumerate(zip(texts, scores)):
+                    line = {'text': text, 'score': round(float(score), 4)}
+                    if index < len(boxes):
+                        box = boxes[index]
+                        if hasattr(box, 'tolist'):
+                            box = box.tolist()
+                        if len(box) >= 4:
+                            line['box'] = [round(float(value), 2) for value in box[:4]]
+                    out_lines.append(line)
             print(json.dumps({'id': req_id, 'ok': True, 'lines': out_lines}), flush=True)
         except Exception as e:
             print(json.dumps({'id': req_id, 'ok': False, 'error': str(e)}), flush=True)

@@ -87,7 +87,7 @@ class PaddleOcrWorker {
 let sharedWorker = null;
 
 /**
- * 识别图片文字，返回 { text, confidence }：
+ * 识别图片文字，返回 { text, confidence, lines }：
  * text 是过滤掉低置信度噪声行之后拼起来的文字，confidence 是保留下来那些行的
  * 平均置信度（一行都没保留就是 0）——调用方（materialcheck-store.js）拿这个
  * 整体置信度去判断要不要转人工核对，跟"文件名/OCR 都判断不出产品"走同一套
@@ -103,7 +103,7 @@ async function runOcr(imagePath, { worker } = {}) {
   const kept = lines.filter((l) => l.score >= PER_LINE_MIN_CONFIDENCE);
   const text = kept.map((l) => l.text).join('\n');
   const confidence = kept.length ? kept.reduce((sum, l) => sum + l.score, 0) / kept.length : 0;
-  return { text, confidence };
+  return { text, confidence, lines: kept };
 }
 
 /**
