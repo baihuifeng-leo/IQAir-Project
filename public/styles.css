@@ -1914,11 +1914,11 @@ body.rpt-presenting .rpt-news-card.image-portrait .rpt-news-title { font-size: c
 body.rpt-presenting .rpt-news-title a { color: #e9eef8; }
 body.rpt-presenting .rpt-news-keypoint { display: block; margin: clamp(13px, 1.5vh, 22px) 0 0; color: #8fe8d6; font-size: clamp(16px, 1.12vw, 22px); font-weight: 700; line-height: 1.48; }
 body.rpt-presenting .rpt-news-keypoint::before { content: '核心判断'; display: block; margin-bottom: 5px; color: #7f91af; font: 700 clamp(10px, .65vw, 12px)/1 var(--f-mono); letter-spacing: .06em; }
-/* 放映以完整摘要完成叙事；三条细节要点在下方让位，避免摘要被三行省略。 */
+/* 放映以完整摘要完成叙事；三条彩色要点承接摘要下方空间，形成完整讲述节奏。 */
 body.rpt-presenting .rpt-news-summary { display: block; overflow: visible; margin: clamp(12px, 1.4vh, 20px) 0 0; color: #e0e9f8; font-size: clamp(15px, 1vw, 19px); line-height: 1.62; }
 body.rpt-presenting .rpt-news-card.image-wide .rpt-news-summary { font-size: clamp(16px, 1.1vw, 21px); }
 body.rpt-presenting .rpt-news-card.image-portrait .rpt-news-summary { font-size: clamp(16px, 1.06vw, 20px); }
-body.rpt-presenting .rpt-news-bullets { display: none; }
+body.rpt-presenting .rpt-news-bullets { display: grid; gap: clamp(7px, .9vh, 12px); margin-top: clamp(13px, 1.6vh, 22px); color: #e0e9f8; font-size: clamp(15px, .98vw, 19px); line-height: 1.46; }
 body.rpt-presenting .rpt-news-card.image-wide .rpt-news-bullets { font-size: clamp(16px, 1.06vw, 20px); }
 body.rpt-presenting .rpt-news-card.image-portrait .rpt-news-bullets { font-size: clamp(16px, 1.02vw, 20px); }
 body.rpt-presenting .rpt-news-bullets li { padding-left: 16px; }
