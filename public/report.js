@@ -30,7 +30,7 @@
    公共报告目前只是占位，入口先留着。
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
-  let A, sub = 'personal', data = null, news = null, selectedNewsIds = new Set(), newsPickerOpen = false, chart = null, ro = null;
+  let A, sub = 'personal', data = null, news = null, selectedNewsIds = new Set(), newsPickerOpen = false, chart = null, wmChart = null, ro = null;
   let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
   let page = 1, presenting = false, wmSelectedWeek = null, deleteSlideId = null;
   const FIXED_REPORT_PAGES = [
@@ -466,8 +466,31 @@ const Report = (() => {
     return `${curLabel} 全渠道流量及互动${trend}${extra}。`;
   }
 
+  function renderWeimengTrend(weeks) {
+    const host = A.$('#rpt-wm-trend');
+    if (!weeks.length) { host.hidden = true; return; }
+    host.hidden = false;
+    if (!wmChart) wmChart = echarts.init(host);
+    const ordered = [...weeks].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+    const tokens = getComputedStyle(document.documentElement);
+    const tk = (name, fallback) => (tokens.getPropertyValue(name) || fallback).trim();
+    const colors = [tk('--mint', '#4ee0c1'), tk('--blue', '#5b8cff'), tk('--warn', '#f4a63b')];
+    wmChart.setOption({
+      animationDuration: 420,
+      animationEasing: 'cubicOut',
+      color: colors,
+      title: { text: '三渠道流量趋势', subtext: '按每周浏览量自动汇总', left: 0, top: 0, textStyle: { color: tk('--text', '#e9eef8'), fontFamily: 'var(--f-display)', fontSize: 15, fontWeight: 700 }, subtextStyle: { color: tk('--dim', '#8da0bd'), fontSize: 11 } },
+      tooltip: { trigger: 'axis', backgroundColor: tk('--surface', '#101725') + 'f2', borderColor: tk('--line', '#1f2b42'), borderWidth: 1, textStyle: { color: tk('--text', '#e9eef8') }, formatter: (items) => `${ordered[items[0].dataIndex].weekStart}<br>${items.map((item) => `${item.marker}${item.seriesName}　${Math.round(item.value || 0).toLocaleString()}`).join('<br>')}` },
+      legend: { data: WM_CHANNELS.map(([, label]) => label), right: 0, top: 4, itemWidth: 10, itemHeight: 10, textStyle: { color: tk('--dim', '#8da0bd'), fontSize: 11 } },
+      grid: { left: 48, right: 18, top: 64, bottom: 31 },
+      xAxis: { type: 'category', boundaryGap: false, data: ordered.map((week) => quarterWeekLabel(week.weekStart)), axisLine: { lineStyle: { color: tk('--line', '#1f2b42') } }, axisTick: { show: false }, axisLabel: { color: tk('--dim', '#8da0bd'), fontSize: 11 } },
+      yAxis: { type: 'value', minInterval: 1, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: tk('--dim', '#8da0bd'), fontSize: 11 }, splitLine: { lineStyle: { color: tk('--line-soft', '#17203292') } } },
+      series: WM_CHANNELS.map(([key, label]) => ({ name: label, type: 'line', smooth: 0.24, symbol: 'circle', symbolSize: 6, lineStyle: { width: 2.5 }, data: ordered.map((week) => week.channels?.[key]?.pv || 0) }))
+    }, true);
+  }
+
   function renderWeimeng() {
-    const sub = A.$('#rpt-wm-sub'), metricsBox = A.$('#rpt-wm-metrics'), chBox = A.$('#rpt-wm-channels'), note = A.$('#rpt-wm-commentary');
+    const sub = A.$('#rpt-wm-sub'), metricsBox = A.$('#rpt-wm-metrics'), chBox = A.$('#rpt-wm-channels'), note = A.$('#rpt-wm-commentary'), trend = A.$('#rpt-wm-trend');
     const select = A.$('#rpt-wm-week-select');
     metricsBox.innerHTML = '';
     chBox.innerHTML = '';
@@ -476,9 +499,11 @@ const Report = (() => {
     if (!weeks.length) {
       select.innerHTML = '';
       sub.textContent = '还没有记录，点标题栏「记录 / 编辑某周数据」填一份。';
+      trend.hidden = true;
       note.hidden = true;
       return;
     }
+    renderWeimengTrend(weeks);
 
     const desc = [...weeks].sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
     if (!wmSelectedWeek || !weeks.some((w) => w.weekStart === wmSelectedWeek)) wmSelectedWeek = desc[0].weekStart;
@@ -729,6 +754,7 @@ const Report = (() => {
     A.$('#rpt-page-custom').hidden = !custom;
     if (custom) ReportSlides.mountPage(active.id); else ReportSlides.unmountPage();
     if (active?.id === 'business' && chart) requestAnimationFrame(() => chart.resize());
+    if (active?.id === 'weimeng' && wmChart) requestAnimationFrame(() => wmChart.resize());
     syncSlidePages();
   }
 
@@ -750,6 +776,7 @@ const Report = (() => {
       A.toast('这个浏览器不支持全屏 API，只切到放映排版——按 F11 可以手动全屏', 'bad');
     }
     if (chart) requestAnimationFrame(() => chart.resize());
+    if (wmChart) requestAnimationFrame(() => wmChart.resize());
   }
 
   function exitPresent() {
@@ -760,6 +787,7 @@ const Report = (() => {
     ReportSlides.setPresenting(false); syncSlidePages();
     if (document.fullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document).catch?.(() => {});
     if (chart) requestAnimationFrame(() => chart.resize());
+    if (wmChart) requestAnimationFrame(() => wmChart.resize());
   }
 
   function render() { renderTrend(); renderShopWeekCompare(); renderCompare(); renderWeimeng(); }
@@ -844,7 +872,7 @@ const Report = (() => {
     A.$('#wm-weekStart').onchange = (e) => { const m = isoWeekToMonday(e.target.value); if (m) loadWeekIntoForm(m); };
 
     // 主题切换时趋势图重读令牌重绘（图表画在 canvas 里，CSS 变量管不到它）
-    document.addEventListener('wb-themechange', () => { if (chart && data) renderTrend(); });
+    document.addEventListener('wb-themechange', () => { if (chart && data) renderTrend(); if (wmChart && data) renderWeimengTrend(data.weimeng || []); });
 
     A.$('#rpt-add-page').onclick = () => { const slide = ReportSlides.addPage(); normalisePageOrder(); data.pageOrder.push(slide.id); ReportSlides.savePageOrder(data.pageOrder); syncSlidePages(); switchPage(reportPages().findIndex((item) => item.id === slide.id) + 1); };
     A.$('#rpt-delete-page-close').onclick = closeDeleteSlide;

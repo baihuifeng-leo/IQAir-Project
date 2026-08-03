@@ -1793,6 +1793,7 @@ body.rpt-presenting .rs-viewport { border: 0; border-radius: 0; box-shadow: none
 .rpt-wm-stat-delta.down { color: var(--bad-text); }
 .rpt-wm-stat-delta.flat { color: var(--dim); }
 
+.rpt-wm-trend { height: 270px; margin-top: 22px; padding: 14px 16px 8px; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--overlay-faint); }
 .rpt-wm-channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; margin-top: 22px; }
 .rpt-wm-chgroup h3 { margin: 0 0 10px; font-size: 12.5px; font-weight: 700; color: var(--dim); letter-spacing: 0.3px; }
 .rpt-wm-chrow { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
@@ -2033,6 +2034,7 @@ body.rpt-presenting .rpt-wm-metrics > .rpt-wm-stat:nth-child(-n+2) .rpt-wm-stat-
 }
 body.rpt-presenting .rpt-wm-metrics > .rpt-wm-stat:nth-child(-n+2) b { color: var(--mint); font-size: clamp(46px, 4.6vw, 84px); }
 
+body.rpt-presenting .rpt-wm-trend { height: clamp(190px, 24vh, 300px); margin-top: clamp(18px, 2.4vh, 28px); padding: clamp(14px, 1.5vh, 20px) clamp(16px, 1.6vw, 24px) 8px; }
 body.rpt-presenting .rpt-wm-channels { gap: 32px; margin-top: 28px; }
 body.rpt-presenting .rpt-wm-chgroup h3 { font-size: clamp(14px, 0.95vw, 18px); margin-bottom: 10px; }
 body.rpt-presenting .rpt-wm-chrow { margin-bottom: 20px; }
