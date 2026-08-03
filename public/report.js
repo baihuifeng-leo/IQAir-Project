@@ -641,9 +641,17 @@ const Report = (() => {
   }
   async function refreshNews() {
     const btn = A.$('#rpt-news-refresh'); btn.disabled = true; btn.textContent = '收集中…';
-    try { await call('/api/reports/news/refresh', { method: 'POST' }); selectedNewsIds.clear(); await loadNews(); A.toast('已收集中文候选，请选择两条'); }
+    try { await call('/api/reports/news/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rotate: true }) }); selectedNewsIds.clear(); await loadNews(); A.toast('已换一批中文候选，请选择两条'); }
     catch (e) { A.toast(e.message, 'bad'); }
-    finally { btn.disabled = false; btn.textContent = '↻ 收集中文候选'; }
+    finally { btn.disabled = false; btn.textContent = '↻ 换一批'; }
+  }
+  async function importNewsUrl() {
+    const input = A.$('#rpt-news-url'); const url = input.value.trim();
+    if (!url) return A.toast('先粘贴原始新闻链接', 'bad');
+    const btn = A.$('#rpt-news-import-url'); btn.disabled = true; btn.textContent = '读取中…';
+    try { await call('/api/reports/news/import-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: news.weekStart, url }) }); input.value = ''; await loadNews(); A.toast('已加入候选，请勾选它'); }
+    catch (e) { A.toast(e.message, 'bad'); }
+    finally { btn.disabled = false; btn.textContent = '添加新闻链接'; }
   }
   async function saveNewsDraft() {
     try {
@@ -792,6 +800,7 @@ const Report = (() => {
     A.$('#rpt-news-refresh').hidden = !A.me.admin;
     A.$('#rpt-news-collect').onclick = refreshNews;
     A.$('#rpt-news-publish').onclick = saveNewsDraft;
+    A.$('#rpt-news-import-url').onclick = importNewsUrl;
     A.$('#rpt-exit-present').onclick = exitPresent;
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) exitPresent(); });
     document.addEventListener('keydown', (e) => {

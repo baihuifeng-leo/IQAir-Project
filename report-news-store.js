@@ -112,7 +112,7 @@ class ReportNewsStore {
   }
   async save(data) { await fsp.mkdir(this.dir, { recursive: true }); await fsp.writeFile(this.file, JSON.stringify(data, null, 1)); }
   async summary() { const data = await this.load(); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || data.weeks[Object.keys(data.weeks).sort().pop()] || null, candidates: data.candidates[key] || [], lastAttempt: data.lastAttempt || null }; }
-  async refresh() {
+  async refresh(options = {}) {
     const data = await this.load(); const weekStart = mondayOf();
     const results = await Promise.allSettled(FEEDS.map(async (feed) => parseFeed(await this.getText(feed.url), feed)));
     const candidates = results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
@@ -133,7 +133,8 @@ class ReportNewsStore {
     radar.push(...pick(focused, 2 - radar.length, used)); radar.forEach((x) => used.add(x.link));
     while (radar.length < 2) { const x = pick(ranked, 1, used)[0]; if (!x) break; radar.push(x); used.add(x.link); }
     if (global.length < 2 || radar.length < 2) throw new Error('本周可用新闻不足 4 条');
-    const cards = ranked.slice(0, 12).map((item) => ({ ...toCard(item), id: crypto.createHash('sha1').update(item.link).digest('hex').slice(0, 12), lane: item.lane }));
+    const start = options.rotate && ranked.length > 12 ? Math.floor(Math.random() * (ranked.length - 12 + 1)) : 0;
+    const cards = ranked.slice(start, start + 12).map((item) => ({ ...toCard(item), id: crypto.createHash('sha1').update(item.link).digest('hex').slice(0, 12), lane: item.lane }));
     if (cards.length < 2) throw new Error('本周中文 AI 候选不足两条');
     data.candidates[weekStart] = cards;
     data.lastAttempt = { at: new Date().toISOString(), ok: true, sourceCount: candidates.length };
@@ -149,6 +150,23 @@ class ReportNewsStore {
     data.weeks[weekStart] = news;
     for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
     await this.save(data); return news;
+  }
+  async importUrl(weekStartInput, rawUrl) {
+    const weekStart = mondayOf(weekStartInput); const url = String(rawUrl || '').trim();
+    if (!/^https:\/\//i.test(url)) throw new Error('只支持 https 新闻链接');
+    const host = new URL(url).hostname.toLowerCase();
+    if (host === 'localhost' || host === '[::1]' || host === '::1' || host === '0.0.0.0' || host.endsWith('.local') || /(^|\.)((127|10|0)\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) throw new Error('不能读取内网地址');
+    const html = await this.getText(url);
+    const meta = (name) => new RegExp(`<meta[^>]+(?:property|name)=["']${name}["'][^>]+content=["']([^"']+)`, 'i').exec(html)?.[1]
+      || new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${name}["']`, 'i').exec(html)?.[1] || '';
+    const title = clean(meta('og:title') || textOf(html, 'title'));
+    const description = clean(meta('description') || meta('og:description'));
+    if (!title || !/[\u4e00-\u9fff]/.test(title + description)) throw new Error('未读到可用的中文新闻内容');
+    const item = { title, description, link: url, source: host.replace(/^www\./, ''), publishedAt: new Date().toISOString(), lane: 'manual' };
+    const card = { ...toCard(item), id: crypto.createHash('sha1').update(url).digest('hex').slice(0, 12), lane: 'manual', imageUrl: /^https:\/\//i.test(meta('og:image')) ? meta('og:image').replace(/&amp;/g, '&') : null };
+    const data = await this.load(); const list = data.candidates[weekStart] || [];
+    data.candidates[weekStart] = [card, ...list.filter((x) => x.id !== card.id)].slice(0, 20);
+    await this.save(data); return card;
   }
   cleanCard(input) {
     const title = String(input?.title || '').trim().slice(0, 140);
@@ -177,7 +195,7 @@ class ReportNewsStore {
     for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
     await this.save(data); return news;
   }
-  async refreshSafely() { try { return await this.refresh(); } catch (e) { const data = await this.load(); data.lastAttempt = { at: new Date().toISOString(), ok: false, error: e.message }; await this.save(data); throw e; } }
+  async refreshSafely(options) { try { return await this.refresh(options); } catch (e) { const data = await this.load(); data.lastAttempt = { at: new Date().toISOString(), ok: false, error: e.message }; await this.save(data); throw e; } }
 }
 
 module.exports = { ReportNewsStore, parseFeed, mondayOf, shortSummary };

@@ -677,10 +677,20 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/reports/news/refresh' && req.method === 'POST') {
       if (!me.admin) return json(res, 403, { error: '只有管理员能刷新新闻' });
       let news;
-      try { news = await reportNews.refreshSafely(); }
+      const input = await body(req, 4096);
+      try { news = await reportNews.refreshSafely({ rotate: !!input.rotate }); }
       catch (e) { return json(res, 502, { error: `新闻抓取失败：${e.message}` }); }
       audit(me, 'reports.news.collect', { detail: [`手动收集 ${news.weekStart} AI 新闻候选`] });
       return json(res, 200, news);
+    }
+
+    if (p === '/api/reports/news/import-url' && req.method === 'POST') {
+      if (!me.admin) return json(res, 403, { error: '只有管理员能添加新闻链接' });
+      const input = await body(req, 8192);
+      let card; try { card = await reportNews.importUrl(input.weekStart, input.url); }
+      catch (e) { return json(res, 400, { error: `读取新闻失败：${e.message}` }); }
+      audit(me, 'reports.news.import-url', { detail: [`添加新闻候选：${card.title}`] });
+      return json(res, 200, card);
     }
 
     if (p === '/api/reports/news/draft/save' && req.method === 'POST') {
