@@ -820,9 +820,11 @@ const Report = (() => {
     A.$('#rpt-news-publish').onclick = saveNewsDraft;
     A.$('#rpt-news-import-url').onclick = importNewsUrl;
     A.$('#rpt-news-picker-close').onclick = closeNewsPicker;
+    A.$('#rpt-news-editor').addEventListener('click', (e) => { if (e.target.id === 'rpt-news-editor') closeNewsPicker(); });
     A.$('#rpt-exit-present').onclick = exitPresent;
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) exitPresent(); });
     document.addEventListener('keydown', (e) => {
+      if (newsPickerOpen && e.key === 'Escape') { e.preventDefault(); closeNewsPicker(); return; }
       if (!presenting) return;
       if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); switchPage(page + 1); }
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); switchPage(page - 1); }
