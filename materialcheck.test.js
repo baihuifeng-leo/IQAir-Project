@@ -894,6 +894,18 @@ async function run() {
     assert.strictEqual(store.pending.size, 0);
   });
 
+  await tAsync('detectFile 客户端取消后不写入检测历史或保留上传素材', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await store.saveProducts(PF, libId, [{ id: 'pa', name: 'GC-Multi', type: 'machine', keywords: ['GC-Multi'] }]);
+    await assert.rejects(() => store.detectFile({
+      buf: Buffer.from('cancelled-material'), ext: '.jpg', filename: 'GC-Multi.jpg', platform: PF, libraryId: libId,
+      isCancelled: () => true, ocr: stubOcr('GC-Multi', 0.95)
+    }), /已取消/);
+    assert.strictEqual(store.records.length, 0);
+    assert.deepStrictEqual(await fsp.readdir(store.uploadDir), []);
+  });
+
   await tAsync('detectFile 文件名和 OCR 都无法判定时返回待人工选择，不写入历史记录', async () => {
     const store = await freshStore();
     const libId = store.getLibrary(PF).id;

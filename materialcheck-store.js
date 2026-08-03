@@ -429,11 +429,18 @@ class MaterialCheckStore {
     }
   }
 
-  async detectFile({ buf, ext, filename, batchId, uploadedBy, platform, libraryId, ratio, requireDetectedRatio = false, ocr = runOcr }) {
+  async detectFile({ buf, ext, filename, batchId, uploadedBy, platform, libraryId, ratio, requireDetectedRatio = false, isCancelled = () => false, ocr = runOcr }) {
     this._assertPlatform(platform);
     const lib = this.getLibrary(platform, libraryId);
     if (!lib) throw new Error('这套词库不存在，可能已经被删除，刷新页面重新选一套');
     if (!lib.products.length) throw new Error('还没有配置任何产品的关键词，先去「关键词库」里加一个产品');
+
+    const cancelError = () => {
+      const error = new Error('本次检测已取消');
+      error.code = 'MATERIALCHECK_CANCELLED';
+      return error;
+    };
+    if (isCancelled()) throw cancelError();
 
     const claimedRatio = match.RATIOS.includes(ratio) ? ratio : null;
     const detectedRatio = classifyRatioFromSize(sniffImageSize(buf));
@@ -449,6 +456,12 @@ class MaterialCheckStore {
     const name = crypto.randomBytes(9).toString('hex') + ext;
     const imagePath = path.join(this.uploadDir, name);
     await fsp.writeFile(imagePath, buf);
+    const discardIfCancelled = async () => {
+      if (!isCancelled()) return;
+      await fsp.unlink(imagePath).catch(() => {});
+      throw cancelError();
+    };
+    await discardIfCancelled();
     const url = '/uploads/materialcheck/' + name;
     const ratioMismatch = ratioMismatchWarning(claimedRatio, buf);
 
@@ -458,6 +471,7 @@ class MaterialCheckStore {
       ocrText = result.text;
       ocrConfidence = result.confidence;
     } catch (e) {
+      await discardIfCancelled();
       const record = {
         id: 'mc_' + crypto.randomBytes(6).toString('hex'), batchId, timestamp: new Date().toISOString(), uploadedBy, platform, libraryId: lib.id,
         filename, imagePath: url, productId: null, productName: null, matchMethod: null, ratio: effectiveRatio,
@@ -466,6 +480,7 @@ class MaterialCheckStore {
       await this.append(record);
       return record;
     }
+    await discardIfCancelled();
 
     const lowConfidence = ocrConfidence < OVERALL_MIN_CONFIDENCE;
     const resolution = lowConfidence
@@ -473,6 +488,7 @@ class MaterialCheckStore {
       : match.resolveProductForUpload(filename, ocrText, lib.products);
 
     if (!resolution.product) {
+      await discardIfCancelled();
       this._cleanupPending();
       const pendingId = 'mcp_' + crypto.randomBytes(6).toString('hex');
       this.pending.set(pendingId, {
@@ -486,6 +502,8 @@ class MaterialCheckStore {
       resolution.method === 'filename' ? match.crossCheckWarning(resolution.product, ocrText, lib.products) : null,
       ratioMismatch
     );
+
+    await discardIfCancelled();
 
     return this._finish({
       platform, libraryId: lib.id, product: resolution.product, allProducts: lib.products, method: resolution.method,

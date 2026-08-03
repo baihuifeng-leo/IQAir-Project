@@ -767,11 +767,20 @@ const server = http.createServer(async (req, res) => {
       const batchId = url.searchParams.get('batchId') || ('b_' + crypto.randomBytes(6).toString('hex'));
       // 检测台的统一上传入口不再由前端声明比例，服务端按图片真实尺寸自动识别。
       const ratio = url.searchParams.get('ratio') || undefined;
+      let requestCancelled = false;
+      req.once('aborted', () => { requestCancelled = true; });
       const buf = await readBinary(req, MAX_IMAGE);
       if (!buf.length) return json(res, 400, { error: '收到的是空文件' });
       let result;
-      try { result = await materialcheck.detectFile({ buf, ext, filename, batchId, uploadedBy: me.name, platform, libraryId, ratio, requireDetectedRatio: !ratio }); }
-      catch (e) { return json(res, 400, { error: e.message }); }
+      try {
+        result = await materialcheck.detectFile({
+          buf, ext, filename, batchId, uploadedBy: me.name, platform, libraryId, ratio,
+          requireDetectedRatio: !ratio, isCancelled: () => requestCancelled
+        });
+      } catch (e) {
+        if (e.code === 'MATERIALCHECK_CANCELLED') return;
+        return json(res, 400, { error: e.message });
+      }
       if (!result.needsManualPick) {
         const label = { pass: '通过', warn: '提醒', error: '报错', ocr_failed: '识别失败' }[result.status] || result.status;
         audit(me, 'materialcheck.detect', { detail: [`${filename} · ${result.productName || ''} · ${label}`] });
