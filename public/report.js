@@ -611,6 +611,7 @@ const Report = (() => {
       const article = document.createElement('article'); article.className = 'rpt-news-card ' + (card.layout || 'text-focus');
       const visual = document.createElement('div'); visual.className = 'rpt-news-visual';
       if (card.imageUrl) {
+        try { visual.style.setProperty('--rpt-news-image', `url(${JSON.stringify(new URL(card.imageUrl, window.location.href).href)})`); } catch { /* 图片地址不合法时保留无图视觉底板 */ }
         const imageLink = document.createElement('a'); imageLink.className = 'rpt-news-image-link'; imageLink.href = card.url || '#'; imageLink.target = '_blank'; imageLink.rel = 'noreferrer'; imageLink.title = '打开新闻原文';
         const img = document.createElement('img'); img.src = card.imageUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onerror = () => imageLink.remove(); imageLink.appendChild(img); visual.appendChild(imageLink);
       }

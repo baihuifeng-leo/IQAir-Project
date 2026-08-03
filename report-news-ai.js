@@ -30,9 +30,9 @@ function validate(result, expectedIds) {
   const cards = result.cards.map((item) => ({
     id: clean(item?.id, 80),
     title: clean(item?.title, 42),
-    summary: clean(item?.summary, 240),
-    keyPoint: clean(item?.keyPoint, 88),
-    presenterText: clean(item?.presenterText, 110),
+    summary: clean(item?.summary, 320),
+    keyPoint: clean(item?.keyPoint, 110),
+    presenterText: clean(item?.presenterText, 150),
     bullets: Array.isArray(item?.bullets) ? item.bullets.map((x) => clean(x, 44)).filter(Boolean).slice(0, 3) : [],
     layout: item?.layout === 'image-focus' ? 'image-focus' : 'text-focus'
   }));
@@ -55,7 +55,7 @@ class ReportNewsAi {
     if (!Array.isArray(cards) || cards.length !== 2) throw new Error('AI 生成需要两条新闻');
     const articles = cards.map((card) => ({ id: card.id, source: card.source, originalTitle: card.title, article: clean(card.articleText, MAX_ARTICLE_TEXT), hasImage: Boolean(card.imageUrl), imageUrl: card.imageUrl || null }));
     if (articles.some((x) => x.article.length < 80)) throw new Error('无法读取足够的新闻正文，不能进行 AI 整理');
-    const prompt = `你是中国电商团队的周报编辑。只能依据下面两篇原文，不得补充、猜测或编造事实。为每篇新闻生成适合管理层汇报的中文内容。\n\n返回严格 JSON：{"cards":[{"id":"原 id","title":"<=42字的中文标题","summary":"120-220字、说明发生了什么及其意义","keyPoint":"<=88字的一句话结论","presenterText":"<=110字的放映讲稿，口语、只保留决策相关信息","bullets":["<=44字要点1","<=44字要点2","<=44字要点3"],"layout":"image-focus 或 text-focus"}]}。若有配图且图可作为事件视觉焦点用 image-focus，否则 text-focus。\n\n原文：${JSON.stringify(articles)}`;
+    const prompt = `你是中国电商团队的周报编辑。只能依据下面两篇原文，不得补充、猜测或编造事实。为每篇新闻生成适合管理层汇报、可投放到 16:9 放映页的中文内容。\n\n返回严格 JSON：{"cards":[{"id":"原 id","title":"<=42字的中文标题","summary":"180-300字，按发生了什么→为何重要→业务应关注什么的顺序写成可直接放映的正文","keyPoint":"<=110字的一句话结论，作为标题下的副标题","presenterText":"<=150字的口语讲稿，补充摘要中最重要的决策语境","bullets":["<=44字事实要点","<=44字影响要点","<=44字后续关注"],"layout":"image-focus 或 text-focus"}]}。若有配图且图可作为事件视觉焦点用 image-focus，否则 text-focus。\n\n原文：${JSON.stringify(articles)}`;
     const system = '你是严谨的中文新闻编辑。输出仅包含合法 JSON。';
     const payload = {
       model: this.model,
