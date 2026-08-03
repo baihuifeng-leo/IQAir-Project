@@ -520,10 +520,11 @@ function matchAgainstProduct(text, product, allProducts, materialRatio, ocrLines
   // OCR 已经命中本产品的完整型号时，其中的品牌/系列短词也会自然出现在文字里。
   // 如果别的产品恰好把该短词单独维护为关键词，不能把同一段完整型号反过来判为串词。
   // 只用“本产品实际命中的词”做覆盖判断，避免未出现在素材里的长词掩盖真正的串词。
-  const matchedMyKeywordTexts = (product.keywords || [])
-    .filter((kw) => keywordApplies(kw, materialRatio))
-    .filter((kw) => findKeywordHits(text, [kw]).length > 0)
-    .map((kw) => normalize(keywordText(kw)));
+  // 以关键词明细的真实命中结果为准，而不是再次只从原始 OCR 串里找连续文本：
+  // 赠品文案会被价格标签切开，已由版面坐标合并命中时，仍应覆盖其内部的短词。
+  const matchedMyKeywordTexts = matchedKeywords
+    .filter((kw) => !['missing', 'wrong'].includes(kw.status))
+    .map((kw) => normalize(kw.text));
   const commonTexts = commonKeywordTexts(allProducts, CROSS_CHECK_COMMON_THRESHOLD);
   const extraKeywords = [];
   const seen = new Set();
