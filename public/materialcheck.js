@@ -1557,8 +1557,12 @@ const MaterialCheck = (() => {
             </div>
           </section>
           <span class="mc-lib-spacer"></span>
-          <button type="button" class="mc-library-tool-card" id="mc-lib-op-bulk-keywords"><b>相同词批量管理</b><span>按产品类型统一修改、分类或删除</span></button>
-          <div class="mc-library-tool-card mc-autobuild-dropzone" id="mc-autobuild-dropzone" tabindex="0" role="button" aria-label="批量上传素材自动识别关键词"><b>批量识别素材</b><span>点击选择或拖入图片 · 自动判断 1:1 / 3:4</span></div>
+          <button type="button" class="mc-library-tool-button mc-library-tool-bulk" id="mc-lib-op-bulk-keywords">
+            <span class="mc-library-tool-icon" aria-hidden="true">⌘</span><span class="mc-library-tool-copy"><b>相同词批量管理</b><small>统一修改、分类或删除</small></span><span class="mc-library-tool-arrow" aria-hidden="true">→</span>
+          </button>
+          <div class="mc-library-tool-button mc-library-tool-autobuild mc-autobuild-dropzone" id="mc-autobuild-dropzone" tabindex="0" role="button" aria-label="批量上传素材自动识别关键词">
+            <span class="mc-library-tool-icon" aria-hidden="true">↑</span><span class="mc-library-tool-copy"><b>批量识别素材</b><small>选择或拖入图片 · 自动识别比例</small></span><span class="mc-library-tool-arrow" aria-hidden="true">→</span>
+          </div>
           <input type="file" id="mc-autobuild-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
           <button class="mc-btn mc-btn-primary" id="mc-lib-save">保存关键词库</button>
         </div>

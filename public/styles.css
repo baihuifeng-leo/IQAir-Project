@@ -2040,10 +2040,16 @@ body.rpt-presenting .rpt-wm-note {
 
 .mc-lib-actionbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 10px; }
 .mc-lib-ops { display: flex; flex-wrap: wrap; gap: 8px; }
-.mc-library-tool-card { min-width: 230px; display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px dashed var(--line-soft); border-radius: 10px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
-.mc-library-tool-card span { font-size: 11.5px; color: var(--dim); }
-.mc-library-tool-card:hover, .mc-library-tool-card:focus-visible, .mc-autobuild-dropzone.drop-hot { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface)); outline: none; }
-.mc-autobuild-dropzone.drop-hot { transform: translateY(-1px); }
+.mc-library-tool-button { min-width: 238px; min-height: 50px; display: inline-flex; align-items: center; gap: 9px; padding: 7px 10px 7px 8px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; box-shadow: 0 3px 10px color-mix(in srgb, var(--bg) 38%, transparent); transition: border-color var(--fast), background var(--fast), box-shadow var(--fast), transform var(--fast); }
+.mc-library-tool-icon { width: 32px; height: 32px; display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 8px; background: var(--mint-dim); color: var(--mint); font: 700 18px/1 var(--f-display); }
+.mc-library-tool-copy { min-width: 0; display: grid; gap: 1px; }
+.mc-library-tool-copy b { font-size: 12.5px; line-height: 1.25; }
+.mc-library-tool-copy small { color: var(--dim); font-size: 11px; line-height: 1.35; white-space: nowrap; }
+.mc-library-tool-arrow { margin-left: auto; color: var(--dimmer); font-size: 16px; line-height: 1; transition: color var(--fast), transform var(--fast); }
+.mc-library-tool-autobuild .mc-library-tool-icon { background: color-mix(in srgb, var(--blue) 17%, transparent); color: var(--blue); }
+.mc-library-tool-button:hover, .mc-library-tool-button:focus-visible, .mc-autobuild-dropzone.drop-hot { border-color: var(--mint); background: color-mix(in srgb, var(--mint) 8%, var(--surface-2)); box-shadow: 0 7px 16px color-mix(in srgb, var(--bg) 48%, transparent); outline: none; transform: translateY(-1px); }
+.mc-library-tool-autobuild:hover, .mc-library-tool-autobuild:focus-visible, .mc-autobuild-dropzone.drop-hot { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 9%, var(--surface-2)); }
+.mc-library-tool-button:hover .mc-library-tool-arrow, .mc-library-tool-button:focus-visible .mc-library-tool-arrow { color: var(--text); transform: translateX(2px); }
 .mc-lib-name-row { display: flex; gap: 8px; align-items: center; }
 .mc-lib-name-row[hidden] { display: none; } /* author 规则的 display:flex 优先级跟 UA 的 [hidden] 打平，后者会被覆盖——显式钉住 */
 .mc-lib-name-row input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); min-width: 200px; }
