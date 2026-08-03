@@ -12,7 +12,7 @@ assert.equal(rows[0].title, 'AI 助力中国电商');
 assert.equal(rows[0].source, '示例媒体');
 assert.equal(shortSummary(rows[0]), '电商平台发布人工智能新能力。');
 assert.equal(mondayOf(new Date('2026-08-03T12:00:00+08:00')), '2026-08-03');
-const chinaz = parseChinazAi('<a href="/2026/0803/1768722.shtml" class="home-product_link"><h3>AI 模型在电商运营中的新进展</h3></a><a href="/feed/0803/123.shtml" class="home-product_link"><h3>推广：AI 服务</h3></a>');
+const chinaz = parseChinazAi('<a href="/2026/0803/1768722.shtml" class="home-product_link"><h3>AI 模型在电商运营中的新进展</h3></a><a href="/feed/0803/123.shtml" class="home-product_link"><h3>推广：AI 服务</h3></a><a href="/feed/0803/124.shtml" class="home-product_link"><h3>站长团购GEO优化系统</h3></a>');
 assert.equal(chinaz.length, 1);
 assert.equal(chinaz[0].source, '站长之家 AI 新闻');
 
@@ -39,6 +39,14 @@ assert.equal(chinaz[0].source, '站长之家 AI 新闻');
   const imported = await importedStore.importUrl('2026-08-03', 'https://example.com/news');
   assert.equal(imported.title, '中文 AI 电商新闻');
   assert.equal((await importedStore.summary()).candidates.length, 1);
+  const refreshDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-refresh-'));
+  const refreshedStore = new ReportNewsStore(refreshDir, async (url) => url === 'https://www.chinaz.com/ai/'
+    ? '<a href="/2026/0803/1768722.shtml" class="home-product_link"><h3>AI 模型在电商运营中的新进展</h3></a><a href="/2026/0803/1768723.shtml" class="home-product_link"><h3>中文 AI 热点新闻发布</h3></a><a href="/2026/0803/1768724.shtml" class="home-product_link"><h3>国产大模型能力持续升级</h3></a><a href="/2026/0803/1768725.shtml" class="home-product_link"><h3>人工智能产业迎来新进展</h3></a>'
+    : xml);
+  const refreshed = await refreshedStore.refresh();
+  assert.equal(refreshed.candidates[0].source, '站长之家 AI 新闻');
+  assert.equal(refreshed.candidates[0].tags[0], '站长之家优选');
+  fs.rmSync(refreshDir, { recursive: true, force: true });
   fs.rmSync(importDir, { recursive: true, force: true });
   await assert.rejects(() => store.saveDraft({ weekStart: '2026-08-03', pages: { global: [card(1), card(2)], radar: [{ ...card(3), title: 'English news', summary: 'English only' }, card(4)] } }), /中文/);
   fs.rmSync(dir, { recursive: true, force: true });

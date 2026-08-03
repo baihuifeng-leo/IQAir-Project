@@ -57,7 +57,7 @@ function parseChinazAi(html) {
   for (const match of links) {
     const href = new URL(match[1], CHINAZ_AI_URL); const title = clean(/<h3[^>]*>([\s\S]*?)<\/h3>/i.exec(match[2])?.[1] || '');
     if (href.hostname !== 'www.chinaz.com' || !title || title.length < 8 || !/[\u4e00-\u9fff]/.test(title) || seen.has(href.href)) continue;
-    if (/推广|广告|GEO(?:入场|服务|营销)|培训课程|招商加盟/.test(title)) continue;
+    if (/推广|广告|GEO|培训课程|招商加盟/.test(title)) continue;
     seen.add(href.href);
     rows.push({ lane: 'chinaz', title, link: href.href, source: '站长之家 AI 新闻', description: title, publishedAt: new Date().toISOString() });
     if (rows.length >= MAX_ITEMS_PER_FEED) break;
@@ -151,7 +151,7 @@ class ReportNewsStore {
     ]);
     const candidates = results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
     const seen = new Set();
-    const unique = candidates.filter((x) => { const key = x.title.toLowerCase().replace(/\W/g, ''); if (!/[\u4e00-\u9fff]/.test(x.title + x.description) || !key || seen.has(key)) return false; seen.add(key); return true; });
+    const unique = candidates.filter((x) => { const key = x.title.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''); if (!/[\u4e00-\u9fff]/.test(x.title + x.description) || !key || seen.has(key)) return false; seen.add(key); return true; });
     const ranked = unique.sort((a, b) => score(b) - score(a));
     const focused = ranked.filter((x) => x.lane !== 'global' || countHits((x.title + x.description).toLowerCase(), COMMERCE_WORDS) + countHits((x.title + x.description).toLowerCase(), AIR_WORDS));
     const pick = (pool, count, used) => pool.filter((x) => !used.has(x.link)).slice(0, count);
