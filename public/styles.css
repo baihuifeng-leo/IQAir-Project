@@ -1609,12 +1609,15 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 }
 .rpt-page-switch button.on { background: var(--mint-dim); color: var(--mint); }
 .rpt-page-switch button:not(.on):hover { color: var(--text); }
-.rpt-page-switch #rpt-custom-tabs { display: contents; }
+.rpt-page-switch #rpt-report-tabs { display: contents; }
 .rpt-page-switch .rpt-add-page { border: 1px dashed var(--line); color: var(--mint); }
 .rpt-page-switch .rpt-add-page:hover { border-color: var(--mint); background: var(--mint-dim); }
-.rpt-page-switch .rpt-custom-tab { display: inline-flex; align-items: center; gap: 5px; }
-.rpt-page-switch .rpt-custom-tab .kill { opacity: .7; width: 16px; height: 16px; font-size: 11px; }
-.rpt-page-switch .rpt-custom-tab.on .kill { color: var(--mint); }
+.rpt-page-switch .rpt-page-tab { display: inline-flex; align-items: center; gap: 5px; border-radius: 8px; cursor: grab; }
+.rpt-page-switch .rpt-page-tab:focus-within { outline: 1px solid var(--mint); outline-offset: 2px; }
+.rpt-page-switch .rpt-page-tab.dragging { opacity: .42; cursor: grabbing; }
+.rpt-page-switch .rpt-page-tab.drop-target { background: var(--mint-dim); }
+.rpt-page-switch .rpt-page-tab .kill { opacity: .7; width: 16px; height: 16px; font-size: 11px; }
+.rpt-page-switch .rpt-page-tab.on .kill { color: var(--mint); }
 .rpt-delete-page-sheet { width: min(390px, 100%); }
 .rpt-delete-page-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
 
@@ -1669,6 +1672,8 @@ body.readonly .rpt-news-editor .kill { display: grid !important; }
 /* ── 个人报告自定义页：固定 16:9 逻辑画布，按容器等比缩放 ── */
 .rpt-page-custom { min-height: min(720px, 64vw); }
 .rs-shell { display: flex; flex-direction: column; gap: 12px; height: 100%; }
+.rs-shell:fullscreen, .rs-shell:-webkit-full-screen { box-sizing: border-box; width: 100%; height: 100%; padding: clamp(14px, 2vw, 30px); background: var(--bg); }
+.rs-shell:fullscreen .rs-viewport, .rs-shell:-webkit-full-screen .rs-viewport { flex: 1; min-height: 0; aspect-ratio: auto; }
 .rs-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 9px; border: 1px solid var(--line); border-radius: 11px; background: var(--overlay-weak); }
 .rs-toolbar-btn { padding: 6px 10px; font-size: 12px; }
 .rs-toolbar-btn.on { background: var(--mint-dim); color: var(--mint); border-color: var(--mint); }
@@ -1866,7 +1871,7 @@ body.rpt-presenting .rpt-page-switch {
   margin: 0 auto 10px; flex: 0 0 auto; padding: 4px;
 }
 body.rpt-presenting .rpt-page-switch button { padding: 6px 18px; font-size: 13px; }
-body.rpt-presenting .rpt-add-page, body.rpt-presenting .rpt-custom-tab .kill { display: none; }
+body.rpt-presenting .rpt-add-page, body.rpt-presenting .rpt-page-tab .kill { display: none; }
 
 body.rpt-presenting .rpt-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 body.rpt-presenting .rpt-sec-first { margin-top: 0; }

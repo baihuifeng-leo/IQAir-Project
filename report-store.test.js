@@ -27,6 +27,12 @@ async function run() {
     await s.slidesSave('u1', [{ id: 'a', elements: [] }]);
     assert.strictEqual((await s.summary('u1')).slides.length, 1);
   });
+  await t('页面顺序与自定义页一起保存，并在普通编辑保存时保留', async () => {
+    const s = await freshStore();
+    await s.slidesSave('u1', [{ id: 'a', elements: [] }], ['news', 'a', 'business', 'weimeng']);
+    await s.slidesSave('u1', [{ id: 'a', elements: [] }, { id: 'b', elements: [] }]);
+    assert.deepStrictEqual((await s.summary('u1')).pageOrder, ['news', 'a', 'business', 'weimeng']);
+  });
   await t('拒绝非数组和无 id 页面', async () => {
     const s = await freshStore();
     await assert.rejects(s.slidesSave('u1', {}), /数组/);

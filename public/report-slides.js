@@ -3,7 +3,7 @@ const ReportSlides = (() => {
   'use strict';
   const W = 1280, H = 720, DEFAULT_FONT_SIZE = 28;
   let A, pages = [], pageId = null, host, presenting = false, selectedId = null, editingId = null;
-  let saveTimer = null, saving = false, queued = false;
+  let saveTimer = null, saving = false, queued = false, pendingPageOrder = null;
 
   const currentPage = () => pages.find((p) => p.id === pageId) || null;
   const uid = (prefix) => A.uid(prefix);
@@ -21,7 +21,8 @@ const ReportSlides = (() => {
   async function flushSave() {
     if (saving) { queued = true; return; }
     saving = true;
-    try { await call('/api/reports/personal/slides/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slides: pages }) }); }
+    const pageOrder = pendingPageOrder; pendingPageOrder = null;
+    try { await call('/api/reports/personal/slides/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slides: pages, ...(pageOrder ? { pageOrder } : {}) }) }); }
     catch (e) { A.toast('自定义页保存失败：' + e.message, 'bad'); }
     finally { saving = false; if (queued) { queued = false; flushSave(); } }
   }
@@ -55,7 +56,8 @@ const ReportSlides = (() => {
   }
   function renderToolbar(page) {
     const bar = document.createElement('div'); bar.className = 'rs-toolbar'; const el = page.elements.find((x) => x.id === selectedId);
-    bar.append(mkBtn('新建文字', addTextElement), mkBtn('插入图片', insertImage));
+    const fullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+    bar.append(mkBtn(fullscreen ? '退出全屏编辑' : '全屏编辑', toggleEditFullscreen, fullscreen ? '退出全屏编辑' : '放大当前画布进行编辑'), mkBtn('新建文字', addTextElement), mkBtn('插入图片', insertImage));
     [['置顶', bringToFront], ['置底', sendToBack], ['删除', deleteSelected]].forEach(([l, fn]) => { const b = mkBtn(l, fn); b.disabled = !el; bar.appendChild(b); });
     if (el?.type === 'text') {
       const size = document.createElement('input'); size.type = 'number'; size.min = '10'; size.max = '160'; size.className = 'rs-toolbar-size'; size.value = el.fontSize || DEFAULT_FONT_SIZE;
@@ -130,7 +132,17 @@ const ReportSlides = (() => {
   function deleteSelected() { const page = currentPage(); if (!page || !selectedId) return; page.elements = page.elements.filter((el) => el.id !== selectedId); selectedId = null; scheduleSave(); render(); }
   function bringToFront() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el) return; el.z = nextZ(page); scheduleSave(); render(); }
   function sendToBack() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el) return; el.z = Math.min(...page.elements.map((x) => x.z || 0)) - 1; scheduleSave(); render(); }
+  function toggleEditFullscreen() {
+    const shell = host?.querySelector('.rs-shell'); if (!shell || presenting) return;
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    const enter = shell.requestFullscreen || shell.webkitRequestFullscreen;
+    if (document.fullscreenElement || document.webkitFullscreenElement) exit?.call(document);
+    else if (enter) enter.call(shell).catch?.(() => A.toast('浏览器拒绝了全屏编辑请求，可按 F11 手动放大', 'bad'));
+    else A.toast('这个浏览器不支持全屏编辑，可按 F11 手动放大', 'bad');
+  }
+  function onFullscreenChange() { if (host?.querySelector('.rs-shell') && !presenting) { updateToolbar(); requestAnimationFrame(scaleCanvas); } }
+  function savePageOrder(order) { pendingPageOrder = Array.isArray(order) ? order.slice() : null; scheduleSave(); }
   function setPresenting(value) { presenting = value; if (pageId) render(); }
-  function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); }
-  return { init, setPages, addPage, deletePage, mountPage, unmountPage, setPresenting, flushSave, pageCount: () => pages.length };
+  function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
+  return { init, setPages, addPage, deletePage, mountPage, unmountPage, setPresenting, savePageOrder, flushSave, pageCount: () => pages.length };
 })();

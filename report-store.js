@@ -90,6 +90,7 @@ function recordsFrom(buf, requiredCols) {
 const SLIDE_ELEMENT_TYPES = new Set(['text', 'image']);
 const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
 const MAX_SLIDE_TEXT_LEN = 4000;
+const MAX_PAGE_ORDER = 100;
 
 function sanitizeElement(el) {
   if (!el || typeof el !== 'object' || !SLIDE_ELEMENT_TYPES.has(el.type)) return null;
@@ -121,6 +122,12 @@ function sanitizeSlides(input) {
   });
 }
 
+function sanitizePageOrder(input) {
+  if (input === undefined) return undefined;
+  if (!Array.isArray(input)) throw new Error('pageOrder 必须是数组');
+  return [...new Set(input.map((id) => String(id || '').trim()).filter(Boolean))].slice(0, MAX_PAGE_ORDER);
+}
+
 class ReportStore {
   constructor(dir) { this.dir = dir; }
 
@@ -132,9 +139,10 @@ class ReportStore {
       return {
         daily: Array.isArray(s.daily) ? s.daily : [],
         weimeng: Array.isArray(s.weimeng) ? s.weimeng : [],
-        slides: Array.isArray(s.slides) ? s.slides : []
+        slides: Array.isArray(s.slides) ? s.slides : [],
+        pageOrder: Array.isArray(s.pageOrder) ? s.pageOrder : []
       };
-    } catch { return { daily: [], weimeng: [], slides: [] }; }
+    } catch { return { daily: [], weimeng: [], slides: [], pageOrder: [] }; }
   }
 
   async _save(userId, data) {
@@ -187,12 +195,14 @@ class ReportStore {
     return { entry, isNew, total: data.weimeng.length };
   }
 
-  async slidesSave(userId, input) {
+  async slidesSave(userId, input, inputPageOrder) {
     const slides = sanitizeSlides(input);
+    const pageOrder = sanitizePageOrder(inputPageOrder);
     const data = await this._load(userId);
     data.slides = slides;
+    if (pageOrder !== undefined) data.pageOrder = pageOrder;
     await this._save(userId, data);
-    return { total: slides.length };
+    return { total: slides.length, pageOrder: data.pageOrder };
   }
 }
 

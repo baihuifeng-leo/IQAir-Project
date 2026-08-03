@@ -33,6 +33,11 @@ const Report = (() => {
   let A, sub = 'personal', data = null, news = null, selectedNewsIds = new Set(), newsPickerOpen = false, chart = null, ro = null;
   let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
   let page = 1, presenting = false, wmSelectedWeek = null, deleteSlideId = null;
+  const FIXED_REPORT_PAGES = [
+    { id: 'business', label: '生意参谋', selector: '#rpt-page-1' },
+    { id: 'weimeng', label: '微盟数据', selector: '#rpt-page-2' },
+    { id: 'news', label: 'AI 新闻速览', selector: '#rpt-page-3' }
+  ];
 
   const METRIC_FIELDS = [
     ['pageviews', '浏览量', 'sum', 'count'],
@@ -580,15 +585,42 @@ const Report = (() => {
   }
 
   function slidePages() { return data?.slides || []; }
-  function totalPages() { return 3 + slidePages().length; }
+  function reportPages() {
+    const slides = slidePages(); const known = new Map(FIXED_REPORT_PAGES.map((item) => [item.id, item]));
+    slides.forEach((slide) => known.set(slide.id, { id: slide.id, label: '自定义页', slide }));
+    const ordered = []; const seen = new Set();
+    (data?.pageOrder || []).forEach((id) => { if (known.has(id) && !seen.has(id)) { ordered.push(known.get(id)); seen.add(id); } });
+    [...FIXED_REPORT_PAGES, ...slides.map((slide) => known.get(slide.id))].forEach((item) => { if (!seen.has(item.id)) { ordered.push(item); seen.add(item.id); } });
+    return ordered;
+  }
+  function totalPages() { return reportPages().length; }
+  function currentReportPage() { return reportPages()[page - 1] || reportPages()[0]; }
+  function normalisePageOrder() { if (data) data.pageOrder = reportPages().map((item) => item.id); }
+  function reorderReportPage(sourceId, targetId) {
+    if (!data || sourceId === targetId) return;
+    const activeId = currentReportPage()?.id;
+    normalisePageOrder();
+    const order = data.pageOrder; const source = order.indexOf(sourceId), target = order.indexOf(targetId);
+    if (source < 0 || target < 0) return;
+    order.splice(source, 1); order.splice(order.indexOf(targetId), 0, sourceId);
+    page = Math.max(1, reportPages().findIndex((item) => item.id === activeId) + 1);
+    ReportSlides.savePageOrder(data.pageOrder); syncSlidePages(); switchPage(page); A.toast('页面顺序已更新，放映模式会同步使用');
+  }
   function syncSlidePages() {
-    const tabs = A.$('#rpt-custom-tabs'); tabs.replaceChildren();
-    slidePages().forEach((slide, index) => {
-      const wrap = document.createElement('span'); wrap.className = 'rpt-custom-tab' + (page === index + 4 ? ' on' : '');
-      const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.page = String(index + 4); tab.textContent = `第 ${index + 4} 页 · 自定义页`; tab.classList.toggle('on', page === index + 4);
-      tab.onclick = () => switchPage(index + 4); wrap.appendChild(tab);
-      const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'kill'; kill.textContent = '✕'; kill.title = '删除此页';
-      kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(slide.id); }; wrap.appendChild(kill); tabs.appendChild(wrap);
+    const tabs = A.$('#rpt-report-tabs'); tabs.replaceChildren(); const pages = reportPages();
+    pages.forEach((item, index) => {
+      const wrap = document.createElement('span'); wrap.className = 'rpt-page-tab' + (page === index + 1 ? ' on' : ''); wrap.dataset.pageId = item.id; wrap.draggable = !presenting;
+      const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.page = String(index + 1); tab.textContent = `第 ${index + 1} 页 · ${item.label}`; tab.classList.toggle('on', page === index + 1); tab.onclick = () => switchPage(index + 1); wrap.appendChild(tab);
+      if (item.slide) { const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'kill'; kill.textContent = '✕'; kill.title = '删除此页'; kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(item.id); }; wrap.appendChild(kill); }
+      if (!presenting) {
+        wrap.title = '拖动以调整报告与放映顺序';
+        wrap.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); wrap.classList.add('dragging'); });
+        wrap.addEventListener('dragend', () => A.$$('.rpt-page-tab').forEach((node) => node.classList.remove('dragging', 'drop-target')));
+        wrap.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (e.dataTransfer.getData('text/plain') !== item.id) wrap.classList.add('drop-target'); });
+        wrap.addEventListener('dragleave', () => wrap.classList.remove('drop-target'));
+        wrap.addEventListener('drop', (e) => { e.preventDefault(); wrap.classList.remove('drop-target'); reorderReportPage(e.dataTransfer.getData('text/plain'), item.id); });
+      }
+      tabs.appendChild(wrap);
     });
     A.$('#rpt-add-page').hidden = presenting;
   }
@@ -597,9 +629,11 @@ const Report = (() => {
   function closeDeleteSlide() { deleteSlideId = null; A.$('#rpt-delete-page-mask').hidden = true; }
   function deleteSlide() {
     if (!deleteSlideId) return;
-    const index = slidePages().findIndex((slide) => slide.id === deleteSlideId);
+    const activeId = currentReportPage()?.id;
     ReportSlides.deletePage(deleteSlideId); closeDeleteSlide();
-    if (index >= 0 && page >= index + 4) page = Math.max(1, page - 1);
+    normalisePageOrder();
+    ReportSlides.savePageOrder(data.pageOrder);
+    page = Math.max(1, reportPages().findIndex((item) => item.id === activeId) + 1);
     syncSlidePages(); switchPage(Math.min(page, totalPages())); A.toast('已删除自定义页');
   }
 
@@ -689,14 +723,12 @@ const Report = (() => {
   /* ── 页面切换：前三页固定，自定义页接在后面 ── */
   function switchPage(n) {
     page = Math.max(1, Math.min(n, totalPages()));
-    A.$$('#rpt-page-switch button').forEach((b) => b.classList.toggle('on', Number(b.dataset.page) === n));
-    A.$('#rpt-page-1').hidden = page !== 1;
-    A.$('#rpt-page-2').hidden = page !== 2;
-    A.$('#rpt-page-3').hidden = page !== 3;
-    const custom = page >= 4;
+    const active = currentReportPage();
+    FIXED_REPORT_PAGES.forEach((item) => { A.$(item.selector).hidden = active?.id !== item.id; });
+    const custom = !!active?.slide;
     A.$('#rpt-page-custom').hidden = !custom;
-    if (custom) ReportSlides.mountPage(slidePages()[page - 4].id); else ReportSlides.unmountPage();
-    if (page === 1 && chart) requestAnimationFrame(() => chart.resize());
+    if (custom) ReportSlides.mountPage(active.id); else ReportSlides.unmountPage();
+    if (active?.id === 'business' && chart) requestAnimationFrame(() => chart.resize());
     syncSlidePages();
   }
 
@@ -778,6 +810,7 @@ const Report = (() => {
     try { data = await call('/api/reports/personal/summary'); }
     catch { data = null; }
     ReportSlides.setPages(data?.slides || []);
+    normalisePageOrder();
     await loadNews();
     if (page > totalPages()) page = totalPages();
     syncSlidePages();
@@ -813,8 +846,7 @@ const Report = (() => {
     // 主题切换时趋势图重读令牌重绘（图表画在 canvas 里，CSS 变量管不到它）
     document.addEventListener('wb-themechange', () => { if (chart && data) renderTrend(); });
 
-    A.$$('#rpt-page-switch button[data-page]').forEach((b) => (b.onclick = () => switchPage(Number(b.dataset.page))));
-    A.$('#rpt-add-page').onclick = () => { const slide = ReportSlides.addPage(); syncSlidePages(); switchPage(slidePages().findIndex((p) => p.id === slide.id) + 4); };
+    A.$('#rpt-add-page').onclick = () => { const slide = ReportSlides.addPage(); normalisePageOrder(); data.pageOrder.push(slide.id); ReportSlides.savePageOrder(data.pageOrder); syncSlidePages(); switchPage(reportPages().findIndex((item) => item.id === slide.id) + 1); };
     A.$('#rpt-delete-page-close').onclick = closeDeleteSlide;
     A.$('#rpt-delete-page-cancel').onclick = closeDeleteSlide;
     A.$('#rpt-delete-page-confirm').onclick = deleteSlide;

@@ -740,7 +740,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/reports/personal/slides/save' && req.method === 'POST') {
       const input = await body(req);
       let result;
-      try { result = await reports.slidesSave(me.id, input.slides); }
+      try { result = await reports.slidesSave(me.id, input.slides, input.pageOrder); }
       catch (e) { return json(res, 400, { error: e.message }); }
       audit(me, 'reports.slides.save', { detail: [`个人报告：自定义页已保存（共 ${result.total} 页）`] });
       return json(res, 200, result);
