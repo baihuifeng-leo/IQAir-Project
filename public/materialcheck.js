@@ -675,18 +675,23 @@ const MaterialCheck = (() => {
     const ratioEl = root.querySelector('[data-role="kw-ratio"]');
     const addBtn = root.querySelector('[data-role="kw-add"]');
 
-    // 显示顺序按分类顺序来（产品型号→产品利益点→…），跟添加先后无关；
-    // data-i 仍然指向 list 里的原始下标，删除/改分类操作按这个下标定位，不受显示顺序影响
+    // 显示顺序按分类顺序来（产品型号→产品利益点→…），跟添加先后无关。
+    // 每一类都输出一个固定槽位：全屏编辑时即使该产品某类暂无关键词，分类标题仍留在原位，
+    // 方便连续切换产品比较差异；收起卡片中则由 CSS 隐藏空槽位、保持紧凑概览。
+    // data-i 仍然指向 list 里的原始下标，删除/改分类操作按这个下标定位，不受显示顺序影响。
     const drawChips = (enterIndex) => {
-      const order = list.map((_, i) => i).sort((a, b) => CATEGORIES.indexOf(keywordCategory(list[a])) - CATEGORIES.indexOf(keywordCategory(list[b])));
-      chipsEl.innerHTML = order.map((i) => {
-        const k = list[i];
-        const cat = keywordCategory(k);
-        const ratio = keywordRatio(k);
-        const catOpts = CATEGORIES.map((c) => `<option value="${c}" ${c === cat ? 'selected' : ''}>${c}</option>`).join('');
-        const ratioOpts = RATIO_OPTIONS.map((r) => `<option value="${r}" ${r === ratio ? 'selected' : ''}>${RATIO_LABEL[r]}</option>`).join('');
-        return `<span class="mc-chip${i === enterIndex ? ' mc-chip-enter' : ''}" data-i="${i}" data-cat="${escapeHtml(cat)}"><span class="mc-chip-text" data-i="${i}" title="点击编辑文字">${escapeHtml(keywordText(k))}</span><select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><select class="mc-ratio-badge-select ${RATIO_CLASS[ratio]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的适用比例">${ratioOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
-      }).join('') || '<span class="mc-chip-empty">还没有关键词</span>';
+      chipsEl.innerHTML = CATEGORIES.map((category) => {
+        const indexes = list.map((_, i) => i).filter((i) => keywordCategory(list[i]) === category);
+        const chips = indexes.map((i) => {
+          const k = list[i];
+          const cat = keywordCategory(k);
+          const ratio = keywordRatio(k);
+          const catOpts = CATEGORIES.map((c) => `<option value="${c}" ${c === cat ? 'selected' : ''}>${c}</option>`).join('');
+          const ratioOpts = RATIO_OPTIONS.map((r) => `<option value="${r}" ${r === ratio ? 'selected' : ''}>${RATIO_LABEL[r]}</option>`).join('');
+          return `<span class="mc-chip${i === enterIndex ? ' mc-chip-enter' : ''}" data-i="${i}" data-cat="${escapeHtml(cat)}"><span class="mc-chip-text" data-i="${i}" title="点击编辑文字">${escapeHtml(keywordText(k))}</span><select class="mc-cat-badge-select ${CAT_CLASS[cat]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的分类">${catOpts}</select><select class="mc-ratio-badge-select ${RATIO_CLASS[ratio]}" data-i="${i}" aria-label="「${escapeHtml(keywordText(k))}」的适用比例">${ratioOpts}</select><button type="button" class="mc-chip-del" data-i="${i}" aria-label="删除关键词「${escapeHtml(keywordText(k))}」">×</button></span>`;
+        }).join('');
+        return `<section class="mc-chip-category${indexes.length ? '' : ' is-empty'}" data-cat="${escapeHtml(category)}"><h4>${escapeHtml(category)}<span>${indexes.length}</span></h4><div class="mc-chip-category-items">${chips || '<span class="mc-chip-empty">暂无关键词</span>'}</div></section>`;
+      }).join('');
       if (enterIndex != null) {
         const enterEl = chipsEl.querySelector(`.mc-chip[data-i="${enterIndex}"]`);
         // 双 rAF：先让浏览器把"刚进场"的初始态（缩小/透明）画上一帧，下一帧再摘掉类触发过渡，
@@ -1391,9 +1396,24 @@ const MaterialCheck = (() => {
       locations.filter(({ product }) => (product.type || '') === type).forEach(({ product }) => unique.set(product.id, product));
       return { label, cls, products: [...unique.values()] };
     }).filter((group) => group.products.length);
+    const allProductGroups = BULK_PRODUCT_TYPES.map(([type, label, cls]) => ({
+      label,
+      cls,
+      products: products.filter((product) => (product.type || '') === type)
+    })).filter((group) => group.products.length);
     el.innerHTML = `
       <section class="mc-bulk-page" aria-label="相同词批量管理">
-        <header class="mc-bulk-page-head"><div><button type="button" class="mc-bulk-back" data-role="bulk-back">← 返回词库</button><h2>相同词批量管理</h2><p>只显示当前词库中出现于两个及以上产品的完全相同关键词。修改、改分类或删除会自动同步到全部覆盖产品。</p></div><span class="mc-bulk-page-count">${groups.length} 组相同词</span></header>
+        <header class="mc-bulk-page-head"><div><button type="button" class="mc-bulk-back" data-role="bulk-back">← 返回词库</button><h2>相同词批量管理</h2><p>可批量新增同一个关键词到多个产品；已有相同词不会重复写入。下方仅显示当前词库中出现于两个及以上产品的完全相同关键词，可统一修改、改分类或删除。</p></div><span class="mc-bulk-page-count">${groups.length} 组相同词</span></header>
+        <section class="mc-bulk-add" aria-labelledby="mc-bulk-add-title">
+          <div class="mc-bulk-add-head"><div><h3 id="mc-bulk-add-title">批量增加词</h3><p>选择需要写入的产品；保存后会自动同步到当前词库。</p></div><span class="mc-bulk-add-selection" data-role="bulk-add-selection">尚未选择产品</span></div>
+          <div class="mc-bulk-add-fields">
+            <label class="mc-bulk-add-keyword">关键词<input data-role="bulk-add-text" placeholder="输入要增加的关键词…" maxlength="200" aria-label="要批量增加的关键词"></label>
+            <label>关键词分类<select data-role="bulk-add-category" aria-label="新增关键词分类">${CATEGORIES.map((category) => `<option value="${escapeHtml(category)}" ${category === '其它' ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}</select></label>
+            <label>适用素材<select data-role="bulk-add-ratio" aria-label="新增关键词适用素材比例">${RATIO_OPTIONS.map((ratio) => `<option value="${ratio}">${RATIO_LABEL[ratio]}</option>`).join('')}</select></label>
+            <button type="button" class="mc-btn mc-btn-primary" data-role="bulk-add-submit">增加到已选产品</button>
+          </div>
+          <div class="mc-bulk-add-products">${allProductGroups.map((type) => `<details class="mc-bulk-product-type" open><summary><span class="mc-bulk-type-dot ${type.cls}"></span>${type.label}<small>${type.products.length}</small><button type="button" class="mc-bulk-type-toggle" data-role="bulk-add-toggle-type">全选</button></summary><div class="mc-bulk-add-product-list">${type.products.map((product) => `<label class="mc-bulk-add-product"><input type="checkbox" value="${escapeHtml(product.id)}" data-role="bulk-add-product"><span>${escapeHtml(product.name)}</span></label>`).join('')}</div></details>`).join('')}</div>
+        </section>
         <div class="mc-bulk-keyword-grid">${groups.length ? groups.map((group, groupIndex) => {
           const productCount = new Set(group.locations.map(({ product }) => product.id)).size;
           return `<article class="mc-bulk-keyword-card" data-group-index="${groupIndex}">
@@ -1404,6 +1424,45 @@ const MaterialCheck = (() => {
         }).join('') : '<p class="rv-empty">当前词库没有出现两次以上的完全相同关键词。</p>'}</div>
       </section>`;
 
+    const addText = el.querySelector('[data-role="bulk-add-text"]');
+    const addSelection = el.querySelector('[data-role="bulk-add-selection"]');
+    const selectedAddProducts = () => [...el.querySelectorAll('[data-role="bulk-add-product"]:checked')]
+      .map((input) => products.find((product) => product.id === input.value))
+      .filter(Boolean);
+    const refreshAddSelection = () => {
+      const selected = selectedAddProducts();
+      addSelection.textContent = selected.length ? `已选 ${selected.length} 个产品` : '尚未选择产品';
+    };
+    el.querySelectorAll('[data-role="bulk-add-product"]').forEach((input) => { input.onchange = refreshAddSelection; });
+    el.querySelectorAll('[data-role="bulk-add-toggle-type"]').forEach((button) => {
+      button.onclick = (event) => {
+        event.preventDefault();
+        const inputs = [...button.closest('details').querySelectorAll('[data-role="bulk-add-product"]')];
+        const shouldSelect = inputs.some((input) => !input.checked);
+        inputs.forEach((input) => { input.checked = shouldSelect; });
+        button.textContent = shouldSelect ? '全不选' : '全选';
+        refreshAddSelection();
+      };
+    });
+    el.querySelector('[data-role="bulk-add-submit"]').onclick = () => {
+      const text = addText.value.trim();
+      const selected = selectedAddProducts();
+      if (!text) { addText.focus(); A.toast('请先输入要增加的关键词', 'bad'); return; }
+      if (!selected.length) { A.toast('请至少选择一个产品', 'bad'); return; }
+      const category = el.querySelector('[data-role="bulk-add-category"]').value;
+      const ratio = el.querySelector('[data-role="bulk-add-ratio"]').value;
+      let added = 0;
+      let skipped = 0;
+      selected.forEach((product) => {
+        if ((product.keywords || []).some((keyword) => keywordText(keyword) === text)) { skipped += 1; return; }
+        product.keywords = [...(product.keywords || []), { text, category, ratio }];
+        added += 1;
+      });
+      if (!added) { A.toast(`所选 ${skipped} 个产品均已有「${text}」`, 'bad'); return; }
+      scheduleAutoSave();
+      renderBulkKeywordView(el);
+      A.toast(`已增加「${text}」到 ${added} 个产品${skipped ? `；${skipped} 个已有相同词已跳过` : ''}，正在自动同步…`);
+    };
     el.querySelectorAll('[data-role="bulk-keyword-input"]').forEach((input) => {
       const group = groups[Number(input.closest('[data-group-index]').dataset.groupIndex)];
       const applyText = () => {
