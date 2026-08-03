@@ -5,7 +5,7 @@ const MaterialCheck = (() => {
   let products = [];
   let libraryViewMode = 'products'; // products | bulk：批量管理属于关键词库内部页面
 
-  const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '价格', '其它'];
+  const CATEGORIES = ['产品型号', '产品利益点', '日常销售利益点', '大促销售权益', '附加权益', '国补', '其它'];
   // 同一个产品的 1:1 和 3:4 素材文案有重叠也有差异（3:4 通常比 1:1 多一段满赠/权益说明），
   // 关键词加一个"适用比例"属性：通用（both，默认）/仅1:1/仅3:4——检测页判定缺词时
   // 只按上传素材实际的比例去要求对应子集，不再一刀切要求全部词都出现在两种比例里。
@@ -652,7 +652,7 @@ const MaterialCheck = (() => {
   const CAT_CLASS = {
     '产品型号': 'mc-cat-model', '产品利益点': 'mc-cat-benefit', '日常销售利益点': 'mc-cat-daily',
     '大促销售权益': 'mc-cat-promo', '附加权益': 'mc-cat-extra', '国补': 'mc-cat-subsidy',
-    '价格': 'mc-cat-price', '其它': 'mc-cat-other'
+    '其它': 'mc-cat-other'
   };
   // 产品按类型分区展示：每个分区里先放该类型下自定义的共享分组，再放该类型下的产品卡片
   const TYPE_SECTIONS = [

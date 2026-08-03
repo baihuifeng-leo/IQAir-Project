@@ -480,11 +480,11 @@ async function run() {
     assert.deepStrictEqual(M.findKeywordHits(ocrText, ['CCM颗粒物>1,000,000 mg']), ['CCM颗粒物>1,000,000 mg']);
   });
 
-  t('keywordText/keywordCategory 兼容纯字符串和 {text,category} 对象两种关键词写法', () => {
+  t('keywordText/keywordCategory 兼容纯字符串和 {text,category} 对象；旧版价格分类回退为其它', () => {
     assert.strictEqual(M.keywordText('纯字符串词'), '纯字符串词');
     assert.strictEqual(M.keywordText({ text: '对象词', category: '价格' }), '对象词');
     assert.strictEqual(M.keywordCategory('纯字符串词'), '其它');
-    assert.strictEqual(M.keywordCategory({ text: '对象词', category: '价格' }), '价格');
+    assert.strictEqual(M.keywordCategory({ text: '对象词', category: '价格' }), '其它');
     assert.strictEqual(M.keywordCategory({ text: '脏数据', category: '不存在的分类' }), '其它');
   });
 
