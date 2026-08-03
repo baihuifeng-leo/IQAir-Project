@@ -266,7 +266,7 @@ function scheduleNightly() {
   console.log(`[backup] 下次自动备份：${next.toLocaleString('zh-CN')}`);
 }
 
-/** 每周一 07:05（服务器本地时区）发布 AI 新闻页；重启后也会补抓本周。 */
+/** 每周一 07:05（服务器本地时区）收集 AI 新闻候选；发布始终由编辑确认。 */
 function scheduleWeeklyNews() {
   const now = new Date();
   const next = new Date(now);
@@ -277,12 +277,12 @@ function scheduleWeeklyNews() {
   setTimeout(async () => {
     try {
       const news = await reportNews.refreshSafely();
-      console.log(`[report-news] 已发布 ${news.weekStart} AI 新闻`);
-      await audit(null, 'reports.news.auto', { detail: [`发布 ${news.weekStart} AI 新闻页`] });
+      console.log(`[report-news] 已收集 ${news.weekStart} AI 新闻草稿`);
+      await audit(null, 'reports.news.collect.auto', { detail: [`收集 ${news.weekStart} AI 新闻候选`] });
     } catch (e) { console.error('[report-news]', e.message); }
     scheduleWeeklyNews();
   }, next - now).unref?.();
-  console.log(`[report-news] 下次自动发布：${next.toLocaleString('zh-CN')}`);
+  console.log(`[report-news] 下次自动收集：${next.toLocaleString('zh-CN')}`);
 }
 
 function readBody(req, limit = MAX_BODY) {
@@ -679,7 +679,23 @@ const server = http.createServer(async (req, res) => {
       let news;
       try { news = await reportNews.refreshSafely(); }
       catch (e) { return json(res, 502, { error: `新闻抓取失败：${e.message}` }); }
-      audit(me, 'reports.news.refresh', { detail: [`手动发布 ${news.weekStart} AI 新闻页`] });
+      audit(me, 'reports.news.collect', { detail: [`手动收集 ${news.weekStart} AI 新闻候选`] });
+      return json(res, 200, news);
+    }
+
+    if (p === '/api/reports/news/draft/save' && req.method === 'POST') {
+      if (!me.admin) return json(res, 403, { error: '只有管理员能编辑发布稿' });
+      let draft; try { draft = await reportNews.saveDraft(await body(req, 65536)); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'reports.news.draft.save', { detail: [`保存 ${draft.weekStart} AI 新闻发布稿`] });
+      return json(res, 200, draft);
+    }
+
+    if (p === '/api/reports/news/publish' && req.method === 'POST') {
+      if (!me.admin) return json(res, 403, { error: '只有管理员能发布新闻' });
+      let news; try { news = await reportNews.publish((await body(req, 4096)).weekStart); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'reports.news.publish', { detail: [`发布 ${news.weekStart} AI 新闻全屏稿`] });
       return json(res, 200, news);
     }
 
@@ -913,9 +929,9 @@ const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UP
   await materialcheckOcr.checkAvailable();
   scheduleNightly();
   scheduleWeeklyNews();
-  reportNews.summary().then(({ weekStart, news }) => {
-    if (!news || news.weekStart !== weekStart) return reportNews.refreshSafely()
-      .then((published) => console.log(`[report-news] 启动补发布：${published.weekStart}`))
+  reportNews.summary().then(({ weekStart, draft }) => {
+    if (!draft || draft.weekStart !== weekStart) return reportNews.refreshSafely()
+      .then((collected) => console.log(`[report-news] 启动补收集：${collected.weekStart}`))
       .catch((e) => console.error('[report-news] 启动抓取失败：' + e.message));
   });
   server.listen(PORT, '0.0.0.0', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));

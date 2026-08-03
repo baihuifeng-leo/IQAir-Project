@@ -103,15 +103,21 @@ async function withArticleImage(item, getText) {
 
 class ReportNewsStore {
   constructor(dir, getText = requestText) { this.dir = dir; this.file = path.join(dir, 'weekly-ai-news.json'); this.getText = getText; }
-  async load() { try { return JSON.parse(await fsp.readFile(this.file, 'utf8')); } catch { return { weeks: {}, lastAttempt: null }; } }
+  async load() {
+    try {
+      const data = JSON.parse(await fsp.readFile(this.file, 'utf8'));
+      return { weeks: data.weeks || {}, drafts: data.drafts || {}, lastAttempt: data.lastAttempt || null };
+    } catch { return { weeks: {}, drafts: {}, lastAttempt: null }; }
+  }
   async save(data) { await fsp.mkdir(this.dir, { recursive: true }); await fsp.writeFile(this.file, JSON.stringify(data, null, 1)); }
-  async summary() { const data = await this.load(); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || data.weeks[Object.keys(data.weeks).sort().pop()] || null, lastAttempt: data.lastAttempt || null }; }
+  async summary() { const data = await this.load(); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || data.weeks[Object.keys(data.weeks).sort().pop()] || null, draft: data.drafts[key] || null, lastAttempt: data.lastAttempt || null }; }
   async refresh() {
     const data = await this.load(); const weekStart = mondayOf();
+    if (data.drafts[weekStart]) return data.drafts[weekStart]; // 不覆盖编辑已经确认过的草稿
     const results = await Promise.allSettled(FEEDS.map(async (feed) => parseFeed(await this.getText(feed.url), feed)));
     const candidates = results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
     const seen = new Set();
-    const unique = candidates.filter((x) => { const key = x.title.toLowerCase().replace(/\W/g, ''); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+    const unique = candidates.filter((x) => { const key = x.title.toLowerCase().replace(/\W/g, ''); if (!/[\u4e00-\u9fff]/.test(x.title + x.description) || !key || seen.has(key)) return false; seen.add(key); return true; });
     const ranked = unique.sort((a, b) => score(b) - score(a));
     const focused = ranked.filter((x) => x.lane !== 'global' || countHits((x.title + x.description).toLowerCase(), COMMERCE_WORDS) + countHits((x.title + x.description).toLowerCase(), AIR_WORDS));
     const pick = (pool, count, used) => pool.filter((x) => !used.has(x.link)).slice(0, count);
@@ -127,13 +133,39 @@ class ReportNewsStore {
     radar.push(...pick(focused, 2 - radar.length, used)); radar.forEach((x) => used.add(x.link));
     while (radar.length < 2) { const x = pick(ranked, 1, used)[0]; if (!x) break; radar.push(x); used.add(x.link); }
     if (global.length < 2 || radar.length < 2) throw new Error('本周可用新闻不足 4 条');
-    const cards = await Promise.all([...global, ...radar].map((item) => withArticleImage(item, this.getText)));
-    const news = { weekStart, publishedAt: new Date().toISOString(), pages: { global: cards.slice(0, 2), radar: cards.slice(2) }, sourceCount: candidates.length };
-    data.weeks[weekStart] = news;
-    for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
+    const cards = [...global, ...radar].map(toCard); // 外部候选图不进入成稿，封面由编辑上传到本地。
+    const draft = { weekStart, updatedAt: new Date().toISOString(), pages: { global: cards.slice(0, 2), radar: cards.slice(2) }, sourceCount: candidates.length };
+    data.drafts[weekStart] = draft;
     data.lastAttempt = { at: new Date().toISOString(), ok: true, sourceCount: candidates.length };
     await this.save(data);
-    return news;
+    return draft;
+  }
+  cleanCard(input) {
+    const title = String(input?.title || '').trim().slice(0, 140);
+    const summary = String(input?.summary || '').trim().slice(0, 500);
+    const source = String(input?.source || '').trim().slice(0, 80);
+    const sourceUrl = String(input?.url || '').trim();
+    const imageUrl = String(input?.imageUrl || '');
+    if (!title || !summary || !source) throw new Error('每条新闻都需填写中文标题、摘要和来源');
+    if (!/[\u4e00-\u9fff]/.test(title + summary)) throw new Error('发布稿只接受中文标题和摘要');
+    if (sourceUrl && !/^https?:\/\//.test(sourceUrl)) throw new Error('原始来源链接不合法');
+    if (imageUrl && !imageUrl.startsWith('/uploads/')) throw new Error('封面必须上传到工作台');
+    return { title, summary, source, url: sourceUrl, imageUrl: imageUrl || null, publishedAt: input?.publishedAt || null, tags: Array.isArray(input?.tags) ? input.tags.map((x) => String(x).slice(0, 30)).slice(0, 3) : [] };
+  }
+  async saveDraft(input) {
+    const weekStart = mondayOf(input?.weekStart);
+    const pages = input?.pages || {};
+    const draft = { weekStart, updatedAt: new Date().toISOString(), pages: { global: (pages.global || []).map((x) => this.cleanCard(x)), radar: (pages.radar || []).map((x) => this.cleanCard(x)) }, sourceCount: 0 };
+    if (draft.pages.global.length !== 2 || draft.pages.radar.length !== 2) throw new Error('第 3、4 页各需两条新闻');
+    const data = await this.load(); data.drafts[weekStart] = draft; await this.save(data); return draft;
+  }
+  async publish(weekStartInput) {
+    const weekStart = mondayOf(weekStartInput); const data = await this.load(); const draft = data.drafts[weekStart];
+    if (!draft) throw new Error('先保存本周发布稿');
+    const news = { ...draft, publishedAt: new Date().toISOString() };
+    data.weeks[weekStart] = news;
+    for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
+    await this.save(data); return news;
   }
   async refreshSafely() { try { return await this.refresh(); } catch (e) { const data = await this.load(); data.lastAttempt = { at: new Date().toISOString(), ok: false, error: e.message }; await this.save(data); throw e; } }
 }

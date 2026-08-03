@@ -30,7 +30,7 @@
    公共报告目前只是占位，入口先留着。
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
-  let A, sub = 'personal', data = null, news = null, chart = null, ro = null;
+  let A, sub = 'personal', data = null, news = null, newsDraft = null, chart = null, ro = null;
   let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
   let page = 1, presenting = false, wmSelectedWeek = null, deleteSlideId = null;
 
@@ -614,7 +614,7 @@ const Report = (() => {
       const num = document.createElement('span'); num.className = 'rpt-news-number'; num.textContent = String(i + 1).padStart(2, '0'); visual.appendChild(num);
       const body = document.createElement('div'); body.className = 'rpt-news-body';
       const tags = document.createElement('p'); tags.className = 'rpt-news-tags'; tags.textContent = card.tags.join(' · ');
-      const title = document.createElement('a'); title.className = 'rpt-news-title'; title.href = card.url; title.target = '_blank'; title.rel = 'noopener noreferrer'; title.textContent = card.title;
+      const title = document.createElement('h3'); title.className = 'rpt-news-title'; title.textContent = card.title;
       const summary = document.createElement('p'); summary.className = 'rpt-news-summary'; summary.textContent = card.summary;
       const meta = document.createElement('p'); meta.className = 'rpt-news-meta'; meta.textContent = `${card.source} · ${dateLabel(card.publishedAt)}`;
       body.append(tags, title, summary, meta); article.append(visual, body); host.appendChild(article);
@@ -627,14 +627,39 @@ const Report = (() => {
     A.$('#rpt-news-radar-sub').textContent = published ? '优先中国电商与空气净化相关动态；未命中时补充高相关 AI 应用新闻。' : '优先中国电商与空气净化相关动态。';
     renderNewsCards('#rpt-news-global', published?.pages?.global);
     renderNewsCards('#rpt-news-radar', published?.pages?.radar);
+    renderNewsDraft();
+  }
+  function renderNewsDraft() {
+    const editor = A.$('#rpt-news-editor'); editor.hidden = !A.me.admin;
+    if (!A.me.admin) return;
+    const host = A.$('#rpt-news-draft-fields'); host.replaceChildren();
+    const draft = newsDraft || (newsDraft = { weekStart: news?.weekStart || todayStr(), pages: { global: [{}, {}], radar: [{}, {}] } });
+    const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    ['global', 'radar'].forEach((lane) => (draft.pages[lane] || []).forEach((card, index) => {
+      const box = document.createElement('article'); box.className = 'rpt-news-draft-card';
+      const laneName = lane === 'global' ? '第 3 页 · 全球 AI 热点' : '第 4 页 · AI 应用雷达';
+      box.innerHTML = `<p class="rpt-news-tags">${laneName} · ${index + 1}</p><label>中文标题<input data-key="title" value="${esc(card.title)}"></label><label>中文摘要<textarea data-key="summary"></textarea></label><label>来源名称<input data-key="source" value="${esc(card.source)}"></label><label>原始来源（仅留档，不在发布页展示）<input data-key="url" value="${esc(card.url)}"></label><div class="rpt-news-cover"><span>${card.imageUrl ? '已上传本地封面' : '尚未上传封面'}</span><button type="button" class="ghost">上传封面</button></div>`;
+      box.querySelector('textarea').value = card.summary || '';
+      box.querySelectorAll('[data-key]').forEach((input) => input.oninput = () => { card[input.dataset.key] = input.value; });
+      box.querySelector('button').onclick = async () => { try { const url = await A.uploadImage(); if (url) { card.imageUrl = url; renderNewsDraft(); } } catch (e) { A.toast(e.message, 'bad'); } };
+      host.appendChild(box);
+    }));
   }
   async function refreshNews() {
-    const btn = A.$('#rpt-news-refresh'); btn.disabled = true; btn.textContent = '抓取中…';
-    try { await call('/api/reports/news/refresh', { method: 'POST' }); await loadNews(); A.toast('本周新闻已发布'); }
+    const btn = A.$('#rpt-news-refresh'); btn.disabled = true; btn.textContent = '收集中…';
+    try { await call('/api/reports/news/refresh', { method: 'POST' }); await loadNews(); A.toast('已收集候选，请编辑后发布'); }
     catch (e) { A.toast(e.message, 'bad'); }
-    finally { btn.disabled = false; btn.textContent = '↻ 刷新本周新闻'; }
+    finally { btn.disabled = false; btn.textContent = '↻ 收集中文候选'; }
   }
-  async function loadNews() { try { news = await call('/api/reports/news/summary'); } catch { news = null; } renderNews(); }
+  async function saveNewsDraft(publish) {
+    try {
+      const draft = await call('/api/reports/news/draft/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newsDraft) });
+      newsDraft = draft;
+      if (publish) await call('/api/reports/news/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: draft.weekStart }) });
+      await loadNews(); A.toast(publish ? '已发布，全屏第 3、4 页已更新' : '发布稿已保存');
+    } catch (e) { A.toast(e.message, 'bad'); }
+  }
+  async function loadNews() { try { news = await call('/api/reports/news/summary'); newsDraft = news.draft; } catch { news = null; newsDraft = null; } renderNews(); }
 
   /* ── 页面切换：前四页固定，自定义页接在后面 ── */
   function switchPage(n) {
@@ -773,6 +798,9 @@ const Report = (() => {
     A.$('#rpt-present-btn').onclick = togglePresent;
     A.$('#rpt-news-refresh').onclick = refreshNews;
     A.$('#rpt-news-refresh').hidden = !A.me.admin;
+    A.$('#rpt-news-collect').onclick = refreshNews;
+    A.$('#rpt-news-save').onclick = () => saveNewsDraft(false);
+    A.$('#rpt-news-publish').onclick = () => saveNewsDraft(true);
     A.$('#rpt-exit-present').onclick = exitPresent;
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) exitPresent(); });
     document.addEventListener('keydown', (e) => {
