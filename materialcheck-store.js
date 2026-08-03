@@ -414,11 +414,11 @@ class MaterialCheckStore {
     if (status) rows = rows.filter((r) => r.status === status);
     if (uploadedBy) rows = rows.filter((r) => r.uploadedBy === uploadedBy);
     return rows.slice(-limit).reverse().map((record) => {
-      if (Array.isArray(record.unregisteredKeywords) && Array.isArray(record.wrongKeywords) && Array.isArray(record.expandedKeywords)) return record;
       const lib = this.getLibrary(record.platform, record.libraryId);
       const product = lib && lib.products.find((p) => p.id === record.productId);
-      // 旧记录没有逐词新字段时，用当前词库即时补算，保证历史详情也能辨认后来加入的“错词”规则。
-      return product ? { ...record, ...match.matchAgainstProduct(record.ocrText, product, lib.products, record.ratio) } : record;
+      // 历史详情始终按当前规则即时补算：既能让刚更新的词库立刻反映到旧记录，也能让
+      // 尚未存有 OCR 坐标的旧记录走兼容匹配，避免前端长期展示旧判定。
+      return product ? { ...record, ...match.matchAgainstProduct(record.ocrText, product, lib.products, record.ratio, record.ocrLines) } : record;
     });
   }
 

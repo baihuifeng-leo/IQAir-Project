@@ -89,7 +89,34 @@ function oneEditDifferences(expected, actual) {
  *  NORMALIZE_STEPS 反推出来的，跟真实匹配逻辑必然一致）；两种都没命中=红色缺词。
  *  做法：依次去掉每一条规则重新跑一遍归一化，如果去掉后就不命中了，说明这条
  *  规则是必需的，记进 reasons。 */
-function classifyKeywordMatch(text, keywordRaw, layoutVariants = []) {
+function findKeywordAcrossCoveredInterruption(text, keywordRaw, coveredKeywords) {
+  const source = normalize(text);
+  const expected = normalize(keywordRaw);
+  if (expected.length < 4 || !source) return false;
+  const known = [...new Set((coveredKeywords || []).map(normalize)
+    .filter((word) => word.length >= 2 && word !== expected))];
+
+  // 只接受“前后各至少两个字”都已出现，且中间完整地由本产品已配置词组成的情况。
+  // 这是给没有坐标的旧历史记录的兼容路径，不能当成宽松的任意跳词匹配。
+  for (let split = 2; split <= expected.length - 2; split++) {
+    const head = expected.slice(0, split);
+    const tail = expected.slice(split);
+    let headAt = source.indexOf(head);
+    while (headAt !== -1) {
+      let tailAt = source.indexOf(tail, headAt + head.length);
+      while (tailAt !== -1 && tailAt - (headAt + head.length) <= 100) {
+        let gap = source.slice(headAt + head.length, tailAt);
+        known.forEach((word) => { gap = gap.split(word).join(''); });
+        if (!gap) return true;
+        tailAt = source.indexOf(tail, tailAt + 1);
+      }
+      headAt = source.indexOf(head, headAt + 1);
+    }
+  }
+  return false;
+}
+
+function classifyKeywordMatch(text, keywordRaw, layoutVariants = [], coveredKeywords = []) {
   const rawText = String(text || '');
   const rawKeyword = String(keywordRaw || '');
   if (rawText.includes(rawKeyword)) return { found: true, exact: true, reasons: [] };
@@ -101,6 +128,9 @@ function classifyKeywordMatch(text, keywordRaw, layoutVariants = []) {
     // 原字，只是不能再称为“原始 OCR 字符串连续命中”。
     if (layoutVariants.some((variant) => normalize(variant).includes(normalize(rawKeyword)))) {
       return { found: true, exact: false, wrong: false, reasons: ['按素材版面合并'] };
+    }
+    if (findKeywordAcrossCoveredInterruption(rawText, rawKeyword, coveredKeywords)) {
+      return { found: true, exact: false, wrong: false, reasons: ['已配置文案穿插忽略'] };
     }
     const mistake = findOneCharMistake(rawText, rawKeyword);
     return mistake
@@ -189,9 +219,10 @@ function shouldCheckUncoveredAffix(keyword) {
 function matchedKeywordDetail(text, product, materialRatio, ocrLines) {
   const applicableKeywords = (product.keywords || []).filter((kw) => keywordApplies(kw, materialRatio));
   const variants = layoutTextVariants(ocrLines);
+  const knownTexts = applicableKeywords.map(keywordText);
   return applicableKeywords
     .map((kw) => {
-      const { found, exact, wrong, reasons, actual, differences } = classifyKeywordMatch(text, keywordText(kw), variants);
+      const { found, exact, wrong, reasons, actual, differences } = classifyKeywordMatch(text, keywordText(kw), variants, knownTexts);
       const expanded = exact && shouldCheckUncoveredAffix(kw) ? findUncoveredAffix(text, keywordText(kw), applicableKeywords) : null;
       return {
         text: keywordText(kw),
@@ -298,7 +329,8 @@ function checkPrice(text, product, ocrLines) {
   // 输出顺序错乱时，不能因此漏掉与词库预设价格完全相同的数字。
   const expected = String(product.price);
   const hasExpectedNumberBox = (ocrLines || []).some((line) => String(line?.text || '').replace(/[\s,]/g, '') === expected);
-  if (hasExpectedNumberBox) return null;
+  const hasExpectedNumberLine = String(text || '').split(/\r?\n/).some((line) => line.replace(/[\s,]/g, '') === expected);
+  if (hasExpectedNumberBox || hasExpectedNumberLine) return null;
   return { expected: product.price, found: [...candidates] };
 }
 
@@ -519,5 +551,5 @@ module.exports = {
   normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, hasStrongOcrProductEvidence, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
   extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates, unregisteredOcrLines,
-  classifyKeywordMatch, findOneCharMistake, findUncoveredAffix, layoutTextVariants, matchedKeywordDetail
+  classifyKeywordMatch, findOneCharMistake, findUncoveredAffix, findKeywordAcrossCoveredInterruption, layoutTextVariants, matchedKeywordDetail
 };
