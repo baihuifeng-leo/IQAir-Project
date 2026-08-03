@@ -612,8 +612,9 @@ const Report = (() => {
       const visual = document.createElement('div'); visual.className = 'rpt-news-visual';
       if (card.imageUrl) {
         try { visual.style.setProperty('--rpt-news-image', `url(${JSON.stringify(new URL(card.imageUrl, window.location.href).href)})`); } catch { /* 图片地址不合法时保留无图视觉底板 */ }
-        const imageLink = document.createElement('a'); imageLink.className = 'rpt-news-image-link'; imageLink.href = card.url || '#'; imageLink.target = '_blank'; imageLink.rel = 'noreferrer'; imageLink.title = '打开新闻原文';
-        const img = document.createElement('img'); img.src = card.imageUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onerror = () => imageLink.remove(); imageLink.appendChild(img); visual.appendChild(imageLink);
+        const imageLink = document.createElement('button'); imageLink.type = 'button'; imageLink.className = 'rpt-news-image-link'; imageLink.title = '点击查看原图'; imageLink.setAttribute('aria-label', `查看 ${card.title} 原图`);
+        const img = document.createElement('img'); img.src = card.imageUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onerror = () => imageLink.remove(); imageLink.appendChild(img);
+        imageLink.onclick = () => A.lightbox(card.imageUrl, `${card.source} · 原图`); visual.appendChild(imageLink);
       }
       const num = document.createElement('span'); num.className = 'rpt-news-number'; num.textContent = String(i + 1).padStart(2, '0'); visual.appendChild(num);
       const body = document.createElement('div'); body.className = 'rpt-news-body';

@@ -11,4 +11,8 @@ assert.doesNotMatch(css, /\.rpt-news-card\s*\{[^}]*min-height:\s*400px/);
 assert.match(css, /\.rpt-news-editor-actions\s*\{[^}]*flex-wrap:\s*nowrap/);
 assert.match(js, /#rpt-news-editor'\)\.addEventListener\('click'/);
 assert.match(js, /newsPickerOpen && e\.key === 'Escape'/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-page\s*\{[^}]*overflow:\s*hidden/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-body\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/);
+assert.match(js, /A\.lightbox\(card\.imageUrl/);
+assert.doesNotMatch(js, /imageLink\.href\s*=\s*card\.url/);
 console.log('✓ report-news picker remains closeable and compact');
