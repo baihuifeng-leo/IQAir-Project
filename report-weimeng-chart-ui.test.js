@@ -6,6 +6,7 @@ const js = fs.readFileSync('public/report.js', 'utf8');
 const css = fs.readFileSync('public/styles.css', 'utf8');
 
 assert.match(html, /id="rpt-wm-trend"/);
+assert.ok(html.indexOf('id="rpt-wm-trend"') < html.indexOf('id="rpt-wm-metrics"'));
 assert.match(js, /function renderWeimengTrend\(weeks\)/);
 assert.match(js, /name: label/);
 assert.match(js, /channels\?\.?\[key\]\?\.pv/);
@@ -15,5 +16,6 @@ assert.match(js, /areaStyle:/);
 assert.match(css, /\.rpt-wm-trend\s*\{/);
 assert.match(css, /body\.rpt-presenting \.rpt-wm-trend\s*\{/);
 assert.match(css, /\.rpt-wm-metrics\s*\{[^}]*grid-template-columns:\s*repeat\(4,/);
-assert.match(css, /body\.rpt-presenting \.rpt-wm-metrics\s*\{[^}]*grid-template-columns:\s*repeat\(8,/);
+assert.match(css, /body\.rpt-presenting \.rpt-wm-metrics\s*\{[^}]*grid-template-columns:\s*repeat\(4,/);
+assert.match(css, /body\.rpt-presenting \.rpt-wm-metrics > \.rpt-wm-stat:nth-child\(-n\+2\)/);
 console.log('✓ weimeng channel traffic trend is wired into the report');
