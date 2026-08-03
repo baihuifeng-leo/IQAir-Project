@@ -610,17 +610,23 @@ const Report = (() => {
     cards.forEach((card, i) => {
       const article = document.createElement('article'); article.className = 'rpt-news-card ' + (card.layout || 'text-focus');
       const visual = document.createElement('div'); visual.className = 'rpt-news-visual';
-      if (card.imageUrl) { const img = document.createElement('img'); img.src = card.imageUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onerror = () => img.remove(); visual.appendChild(img); }
+      if (card.imageUrl) {
+        const imageLink = document.createElement('a'); imageLink.className = 'rpt-news-image-link'; imageLink.href = card.url || '#'; imageLink.target = '_blank'; imageLink.rel = 'noreferrer'; imageLink.title = '打开新闻原文';
+        const img = document.createElement('img'); img.src = card.imageUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onerror = () => imageLink.remove(); imageLink.appendChild(img); visual.appendChild(imageLink);
+      }
       const num = document.createElement('span'); num.className = 'rpt-news-number'; num.textContent = String(i + 1).padStart(2, '0'); visual.appendChild(num);
       const body = document.createElement('div'); body.className = 'rpt-news-body';
-      const tags = document.createElement('p'); tags.className = 'rpt-news-tags'; tags.textContent = card.tags.join(' · ');
-      const title = document.createElement('h3'); title.className = 'rpt-news-title'; title.textContent = card.title;
+      const tags = document.createElement('p'); tags.className = 'rpt-news-tags'; tags.textContent = (card.tags || []).join(' · ') || 'AI 新闻';
+      const title = document.createElement('h3'); title.className = 'rpt-news-title';
+      const titleLink = document.createElement('a'); titleLink.href = card.url || '#'; titleLink.target = '_blank'; titleLink.rel = 'noreferrer'; titleLink.textContent = card.title; titleLink.title = '打开新闻原文'; title.appendChild(titleLink);
       const summary = document.createElement('p'); summary.className = 'rpt-news-summary'; summary.textContent = card.summary;
       const keyPoint = document.createElement('p'); keyPoint.className = 'rpt-news-keypoint'; keyPoint.textContent = card.keyPoint || card.summary;
       const bullets = document.createElement('ul'); bullets.className = 'rpt-news-bullets';
       (card.bullets || []).forEach((point) => { const li = document.createElement('li'); li.textContent = point; bullets.appendChild(li); });
       const presenter = document.createElement('p'); presenter.className = 'rpt-news-presenter'; presenter.textContent = card.presenterText || card.keyPoint || card.summary;
-      const meta = document.createElement('p'); meta.className = 'rpt-news-meta'; meta.textContent = `${card.source} · ${dateLabel(card.publishedAt)}`;
+      const meta = document.createElement('p'); meta.className = 'rpt-news-meta';
+      const sourceLink = document.createElement('a'); sourceLink.href = card.url || '#'; sourceLink.target = '_blank'; sourceLink.rel = 'noreferrer'; sourceLink.textContent = `${card.source} · 原文`; sourceLink.title = '打开新闻原文';
+      meta.append(sourceLink, document.createTextNode(` · ${dateLabel(card.publishedAt)}`));
       body.append(tags, title, summary, bullets, keyPoint, presenter, meta); article.append(visual, body); host.appendChild(article);
     });
   }

@@ -1618,25 +1618,32 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-delete-page-sheet { width: min(390px, 100%); }
 .rpt-delete-page-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
 
-/* ── 第 3、4 页：每周 AI 新闻 ─────────────────────────── */
+/* ── 第 3 页：两条新闻组成一张演示页 ──────────────────── */
 .rpt-news-head { align-items: center; }
-.rpt-news-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 22px; }
-.rpt-news-card { min-height: 360px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 12px 30px #0000000c; }
+.rpt-news-slide-title { display: none; }
+.rpt-news-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 22px; }
+.rpt-news-card { display: grid; grid-template-rows: minmax(148px, 36%) 1fr; min-height: 400px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 14px 32px #00000012; }
 .rpt-news-card.image-focus { border-color: color-mix(in srgb, var(--mint) 32%, var(--line)); }
-.rpt-news-visual { height: 142px; position: relative; overflow: hidden; background: radial-gradient(circle at 78% 25%, color-mix(in srgb, var(--mint) 56%, transparent), transparent 28%), linear-gradient(125deg, var(--surface-2), color-mix(in srgb, var(--blue) 30%, var(--surface))); }
-.rpt-news-visual::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #0000 42%, #0004); pointer-events: none; }
-.rpt-news-visual img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.rpt-news-number { position: absolute; right: 15px; bottom: 10px; z-index: 1; color: #fff; font: 700 36px/1 var(--f-mono); letter-spacing: -.06em; text-shadow: 0 2px 12px #0009; }
-.rpt-news-body { padding: 16px 18px 17px; }
+.rpt-news-visual { position: relative; min-height: 0; overflow: hidden; background: radial-gradient(circle at 78% 25%, color-mix(in srgb, var(--mint) 56%, transparent), transparent 28%), linear-gradient(125deg, var(--surface-2), color-mix(in srgb, var(--blue) 30%, var(--surface))); }
+.rpt-news-visual::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #0000 40%, #000a); pointer-events: none; }
+.rpt-news-image-link { display: block; width: 100%; height: 100%; }
+.rpt-news-visual img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform var(--slow); }
+.rpt-news-card:hover .rpt-news-visual img { transform: scale(1.035); }
+.rpt-news-number { position: absolute; right: 17px; bottom: 13px; z-index: 1; color: #fff; font: 700 36px/1 var(--f-mono); letter-spacing: -.04em; text-shadow: 0 2px 12px #0009; }
+.rpt-news-body { display: flex; flex-direction: column; min-width: 0; padding: 17px 20px 18px; }
 .rpt-news-tags, .rpt-news-meta { margin: 0; color: var(--dim); font-size: 12px; }
 .rpt-news-tags { color: var(--mint); font-weight: 700; letter-spacing: .03em; }
-.rpt-news-title { display: -webkit-box; overflow: hidden; margin-top: 8px; color: var(--text); font-size: 18px; line-height: 1.4; font-weight: 750; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.rpt-news-title:hover { color: var(--mint); }
-.rpt-news-summary { display: -webkit-box; overflow: hidden; margin: 9px 0 13px; color: var(--text-2); line-height: 1.6; font-size: 13.5px; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
-.rpt-news-bullets { margin: 10px 0 0; padding-left: 18px; color: var(--text-2); font-size: 12.5px; line-height: 1.55; }
-.rpt-news-bullets li + li { margin-top: 3px; }
-.rpt-news-keypoint { display: none; margin: 10px 0; padding-left: 11px; border-left: 3px solid var(--mint); color: var(--text); font-weight: 650; line-height: 1.5; }
+.rpt-news-title { display: -webkit-box; overflow: hidden; margin: 8px 0 0; font-family: var(--f-display); font-size: 19px; line-height: 1.36; font-weight: 750; letter-spacing: -.015em; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.rpt-news-title a { color: var(--text); text-decoration: none; transition: color var(--fast); }
+.rpt-news-title a:hover, .rpt-news-meta a:hover { color: var(--mint); }
+.rpt-news-summary { display: -webkit-box; overflow: hidden; margin: 10px 0 13px; color: var(--text-2); line-height: 1.64; font-size: 13.5px; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.rpt-news-bullets { display: grid; gap: 5px; margin: 0; padding: 0; color: var(--text-2); font-size: 12.5px; line-height: 1.5; list-style: none; }
+.rpt-news-bullets li { position: relative; padding-left: 13px; }
+.rpt-news-bullets li::before { content: ''; position: absolute; top: .57em; left: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--mint); }
+.rpt-news-keypoint { margin: 13px 0 0; color: var(--text); font-weight: 700; line-height: 1.5; }
 .rpt-news-presenter { display: none; margin: 12px 0 0; color: var(--text); font-weight: 650; line-height: 1.55; }
+.rpt-news-meta { margin-top: auto; padding-top: 13px; border-top: 1px solid var(--line-soft); }
+.rpt-news-meta a { color: var(--dim); text-decoration: none; transition: color var(--fast); }
 .rpt-news-empty { grid-column: 1 / -1; padding: 42px; border: 1px dashed var(--line); border-radius: 12px; color: var(--dim); text-align: center; }
 .rpt-news-editor { position: fixed; z-index: 50; inset: 0; overflow: auto; box-sizing: border-box; padding: clamp(22px, 4vw, 64px); background: color-mix(in srgb, var(--surface) 94%, #000); }
 .rpt-news-editor > .rpt-sec-head, .rpt-news-editor > .rpt-news-import, .rpt-news-editor > .rpt-news-draft-fields { width: min(1180px, 100%); margin-left: auto; margin-right: auto; }
@@ -1874,17 +1881,30 @@ body.rpt-presenting .rpt-wm-weekbar { display: none; }
    反算的——系数 ≈ max ÷ 19（留一点余量），保证在这个宽度下稳定封顶在
    max 值，不是早早封顶在偏小的 max 上、大屏上还有一大截没用满。 */
 body.rpt-presenting .rpt-page h2 { font-size: clamp(20px, 1.6vw, 30px); }
-body.rpt-presenting .rpt-news-grid { flex: 1; align-content: center; gap: clamp(18px, 2vw, 38px); margin-top: 16px; }
+/* 新闻页在放映时不是“两个加大的卡片”，而是一页双栏演示稿：先看视觉与
+   标题，再读一句结论和三条展开。保留原文入口，让会中追问可以直接跳转。 */
+body.rpt-presenting .rpt-news-page > .rv-sec { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 body.rpt-presenting .rpt-news-head { display: none; }
-body.rpt-presenting .rpt-news-card { min-height: 0; }
-body.rpt-presenting .rpt-news-visual { height: min(23vh, 250px); }
-body.rpt-presenting .rpt-news-title { font-size: clamp(19px, 1.45vw, 28px); }
-body.rpt-presenting .rpt-news-summary { font-size: clamp(13px, .9vw, 17px); }
-body.rpt-presenting .rpt-news-summary,
-body.rpt-presenting .rpt-news-meta,
-body.rpt-presenting .rpt-news-bullets { display: none; }
-body.rpt-presenting .rpt-news-keypoint { display: block; font-size: clamp(15px, 1.05vw, 21px); }
-body.rpt-presenting .rpt-news-presenter { display: block; font-size: clamp(15px, 1vw, 20px); }
+body.rpt-presenting .rpt-news-slide-title { display: flex; align-items: baseline; gap: 14px; flex: 0 0 auto; margin: clamp(8px, 1.5vh, 18px) 0 clamp(10px, 2vh, 22px); }
+body.rpt-presenting .rpt-news-slide-title span { color: #4ee0c1; font: 700 clamp(10px, .65vw, 13px)/1 var(--f-mono); letter-spacing: .08em; }
+body.rpt-presenting .rpt-news-slide-title strong { color: #e9eef8; font: 750 clamp(25px, 2.1vw, 40px)/1.1 var(--f-display); letter-spacing: -.025em; }
+body.rpt-presenting .rpt-news-grid { flex: 1; min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(20px, 2.6vw, 52px); margin: 0; }
+body.rpt-presenting .rpt-news-card { grid-template-rows: minmax(190px, 46%) 1fr; min-height: 0; border-color: #26334a; border-radius: 14px; background: #101725; box-shadow: none; }
+body.rpt-presenting .rpt-news-card.image-focus { border-color: #2e746b; }
+body.rpt-presenting .rpt-news-number { right: 20px; bottom: 15px; font-size: clamp(36px, 3vw, 58px); }
+body.rpt-presenting .rpt-news-body { padding: clamp(18px, 1.7vw, 32px); }
+body.rpt-presenting .rpt-news-tags { color: #4ee0c1; font-size: clamp(11px, .75vw, 14px); }
+body.rpt-presenting .rpt-news-title { margin-top: 10px; font-size: clamp(22px, 1.7vw, 33px); line-height: 1.26; -webkit-line-clamp: 3; }
+body.rpt-presenting .rpt-news-title a { color: #e9eef8; }
+body.rpt-presenting .rpt-news-summary { display: none; }
+body.rpt-presenting .rpt-news-keypoint { display: block; margin: clamp(12px, 1.4vh, 20px) 0 0; color: #b8c8e4; font-size: clamp(15px, 1.03vw, 20px); font-weight: 650; line-height: 1.52; }
+body.rpt-presenting .rpt-news-bullets { display: grid; gap: clamp(7px, .9vh, 12px); margin-top: clamp(13px, 1.6vh, 22px); color: #e0e9f8; font-size: clamp(14px, .92vw, 18px); line-height: 1.46; }
+body.rpt-presenting .rpt-news-bullets li { padding-left: 16px; }
+body.rpt-presenting .rpt-news-bullets li::before { top: .52em; width: 6px; height: 6px; background: #4ee0c1; }
+body.rpt-presenting .rpt-news-presenter { display: none; }
+body.rpt-presenting .rpt-news-meta { display: block; padding-top: clamp(10px, 1.2vh, 16px); border-color: #26334a; color: #93a4c2; font-size: clamp(11px, .7vw, 13px); }
+body.rpt-presenting .rpt-news-meta a { color: #a6b7d4; }
+body.rpt-presenting .rpt-news-meta a:hover { color: #4ee0c1; }
 body.rpt-presenting .rv-sub,
 body.rpt-presenting .rail-hint { font-size: clamp(13px, 0.85vw, 16px); margin: 4px 0 0; line-height: 1.4; }
 body.rpt-presenting .rpt-scope-badge { font-size: clamp(12px, 0.75vw, 14px); padding: 4px 13px; }
@@ -2629,6 +2649,9 @@ body.rpt-presenting .rpt-wm-note {
   .rpt-page-switch { width: 100%; }
   .rpt-page-switch button { flex: 1; }
   .rpt-news-grid { grid-template-columns: 1fr; }
+  body.rpt-presenting .rpt-news-slide-title { margin-left: 2px; }
+  body.rpt-presenting .rpt-news-grid { grid-template-columns: 1fr; overflow-y: auto; padding-bottom: 14px; }
+  body.rpt-presenting .rpt-news-card { min-height: 560px; }
   .rpt-news-draft-fields { grid-template-columns: 1fr; }
   .rpt-news-import { flex-direction: column; }
   .p3d-head-controls { flex-direction: column; align-items: stretch; width: 100%; }

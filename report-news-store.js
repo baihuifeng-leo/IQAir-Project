@@ -116,21 +116,35 @@ function articleText(html) {
     || /<(?:article|main)[^>]*>([\s\S]*?)<\/(?:article|main)>/i.exec(html)?.[1] || html;
   return clean(section).replace(/(责任编辑|相关阅读|本文来自).*/s, '').slice(0, 5000);
 }
-function briefFrom(text, fallback) {
-  const sentences = String(text || '').split(/(?<=[。！？])/).map((x) => x.trim()).filter((x) => x.length >= 18 && /[\u4e00-\u9fff]/.test(x));
-  const picked = sentences.slice(0, 3).join('');
-  const summary = picked || fallback;
-  return { summary: summary.slice(0, 240), keyPoint: (sentences[0] || fallback).slice(0, 86) };
+function imageAttr(tag, names) {
+  for (const name of names) {
+    const quoted = new RegExp(`\\b${name}\\s*=\\s*["']([^"']+)["']`, 'i').exec(tag);
+    const bare = new RegExp(`\\b${name}\\s*=\\s*([^\\s>]+)`, 'i').exec(tag);
+    const value = quoted?.[1] || bare?.[1];
+    if (value && !/^data:/i.test(value)) return value.replace(/&amp;/g, '&');
+  }
+  return '';
 }
-
-async function withArticleImage(item, getText) {
-  try {
-    const html = await getText(item.link);
-    const meta = /<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/i.exec(html)
-      || /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i.exec(html);
-    const imageUrl = meta && /^https:\/\//i.test(meta[1]) ? meta[1].replace(/&amp;/g, '&') : null;
-    return { ...toCard(item), imageUrl };
-  } catch { return toCard(item); }
+function articleImage(html, pageUrl) {
+  // OG 图经常只是站点封面。优先正文中尺寸足够、且不是 logo/广告/二维码的图片，
+  // 让新闻页的视觉真正来自报道内容；没有可用正文图时才回退到 OG 图。
+  const section = /<[^>]+id=["']article-content["'][^>]*>([\s\S]*?)<\/[^^>]+>/i.exec(html)?.[1]
+    || /<(?:article|main)[^>]*>([\s\S]*?)<\/(?:article|main)>/i.exec(html)?.[1] || html;
+  const images = [];
+  for (const match of section.matchAll(/<img\b[^>]*>/gi)) {
+    const tag = match[0]; const raw = imageAttr(tag, ['data-original', 'data-src', 'data-lazy-src', 'src']);
+    if (!raw) continue;
+    let url; try { url = new URL(raw, pageUrl).toString(); } catch { continue; }
+    if (!/^https?:\/\//i.test(url) || /(?:logo|icon|avatar|qrcode|qr-code|advert|ad[_-]|banner)/i.test(tag + ' ' + url)) continue;
+    const width = Number(imageAttr(tag, ['data-width', 'width'])) || 0;
+    const height = Number(imageAttr(tag, ['data-height', 'height'])) || 0;
+    const score = (width >= 300 ? 4 : 0) + (height >= 180 ? 3 : 0) + (width && height && width / height > 1.2 && width / height < 2.5 ? 2 : 0);
+    images.push({ url, score });
+  }
+  images.sort((a, b) => b.score - a.score);
+  if (images[0]) return images[0].url;
+  const og = metaValue(html, 'og:image') || metaValue(html, 'twitter:image');
+  try { return og ? new URL(og.replace(/&amp;/g, '&'), pageUrl).toString() : null; } catch { return null; }
 }
 
 class ReportNewsStore {
@@ -184,8 +198,7 @@ class ReportNewsStore {
     const sourceCards = await Promise.all(picked.map(async ({ id, lane, ...card }) => {
       const html = await this.getText(card.url);
       const body = articleText(html);
-      const image = metaValue(html, 'og:image');
-      return { id, ...card, articleText: body, imageUrl: /^https:\/\//i.test(image) ? image.replace(/&amp;/g, '&') : card.imageUrl };
+      return { id, ...card, articleText: body, imageUrl: articleImage(html, card.url) || card.imageUrl };
     }));
     const generated = await this.ai.generate(sourceCards);
     const cards = generated.map((draft) => {
@@ -242,4 +255,4 @@ class ReportNewsStore {
   async refreshSafely(options) { try { return await this.refresh(options); } catch (e) { const data = await this.load(); data.lastAttempt = { at: new Date().toISOString(), ok: false, error: e.message }; await this.save(data); throw e; } }
 }
 
-module.exports = { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary };
+module.exports = { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary, articleImage };

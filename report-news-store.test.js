@@ -3,7 +3,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary } = require('./report-news-store.js');
+const { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary, articleImage } = require('./report-news-store.js');
 const { ReportNewsAi } = require('./report-news-ai.js');
 
 const xml = `<?xml version="1.0"?><rss><channel><item><title><![CDATA[AI 助力中国电商]]></title><link>https://example.com/a</link><description><![CDATA[来源 - 电商平台发布人工智能新能力。]]></description><pubDate>Mon, 03 Aug 2026 00:00:00 GMT</pubDate><source>示例媒体</source></item></channel></rss>`;
@@ -16,6 +16,7 @@ assert.equal(mondayOf(new Date('2026-08-03T12:00:00+08:00')), '2026-08-03');
 const chinaz = parseChinazAi('<a href="/2026/0803/1768722.shtml" class="home-product_link"><h3>AI 模型在电商运营中的新进展</h3></a><a href="/feed/0803/123.shtml" class="home-product_link"><h3>推广：AI 服务</h3></a><a href="/feed/0803/124.shtml" class="home-product_link"><h3>站长团购GEO优化系统</h3></a>');
 assert.equal(chinaz.length, 1);
 assert.equal(chinaz[0].source, '站长之家 AI 新闻');
+assert.equal(articleImage('<article><img class="article-photo" data-src="/images/report.jpg" width="900" height="506"><img src="/logo.png"></article><meta property="og:image" content="https://example.com/cover.jpg">', 'https://example.com/news'), 'https://example.com/images/report.jpg');
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-'));
