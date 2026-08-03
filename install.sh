@@ -69,7 +69,7 @@ fi
 info "部署代码到 $APP_DIR"
 mkdir -p "$APP_DIR"
 rm -rf "$APP_DIR/public"
-for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js preview3d-store.js report-store.js report-news-store.js materialcheck-ocr.js materialcheck-match.js materialcheck-store.js materialcheck-paddleocr-worker.py; do
+for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js preview3d-store.js report-store.js report-news-store.js report-news-ai.js materialcheck-ocr.js materialcheck-match.js materialcheck-store.js materialcheck-paddleocr-worker.py; do
   [[ -f "$SRC_DIR/$f" ]] || die "源码目录里缺少 $f"
   install -m 0644 "$SRC_DIR/$f" "$APP_DIR/"
 done
@@ -99,6 +99,11 @@ if [[ -f /etc/systemd/system/workbench.service ]]; then
 else
   info "注册 systemd 服务"
   install -m 0644 "$SRC_DIR/workbench.service" /etc/systemd/system/workbench.service
+fi
+if [[ ! -f /etc/workbench/ai.env ]]; then
+  install -d -m 0750 /etc/workbench
+  install -m 0600 "$SRC_DIR/workbench-ai.env.example" /etc/workbench/ai.env
+  warn "已创建 /etc/workbench/ai.env 模板；填写 AI_API_KEY 与 AI_MODEL 后重启服务即可启用 AI 新闻生成"
 fi
 
 systemctl daemon-reload

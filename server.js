@@ -13,6 +13,7 @@ const { ReviewStore } = require('./reviews-store.js');
 const { Preview3DStore } = require('./preview3d-store.js');
 const { ReportStore } = require('./report-store.js');
 const { ReportNewsStore } = require('./report-news-store.js');
+const { ReportNewsAi } = require('./report-news-ai.js');
 const { MaterialCheckStore, PLATFORMS: MATERIALCHECK_PLATFORMS } = require('./materialcheck-store.js');
 const materialcheckOcr = require('./materialcheck-ocr.js');
 const { pipeline } = require('stream/promises');
@@ -933,7 +934,7 @@ const server = http.createServer(async (req, res) => {
 const reviews = new ReviewStore(REVIEWS_DIR);
 const preview3d = new Preview3DStore(PRODUCTS3D_DIR);
 const reports = new ReportStore(REPORTS_DIR);
-const reportNews = new ReportNewsStore(REPORT_NEWS_DIR);
+const reportNews = new ReportNewsStore(REPORT_NEWS_DIR, undefined, new ReportNewsAi());
 const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UPLOAD_DIR);
 
 (async () => {

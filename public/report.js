@@ -608,7 +608,7 @@ const Report = (() => {
     const host = A.$(target); host.replaceChildren();
     if (!cards?.length) { host.innerHTML = '<p class="rpt-news-empty">本周新闻还未发布。系统会自动重试；管理员也可以手动刷新。</p>'; return; }
     cards.forEach((card, i) => {
-      const article = document.createElement('article'); article.className = 'rpt-news-card ' + (card.layout || 'airy');
+      const article = document.createElement('article'); article.className = 'rpt-news-card ' + (card.layout || 'text-focus');
       const visual = document.createElement('div'); visual.className = 'rpt-news-visual';
       if (card.imageUrl) { const img = document.createElement('img'); img.src = card.imageUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onerror = () => img.remove(); visual.appendChild(img); }
       const num = document.createElement('span'); num.className = 'rpt-news-number'; num.textContent = String(i + 1).padStart(2, '0'); visual.appendChild(num);
@@ -617,8 +617,11 @@ const Report = (() => {
       const title = document.createElement('h3'); title.className = 'rpt-news-title'; title.textContent = card.title;
       const summary = document.createElement('p'); summary.className = 'rpt-news-summary'; summary.textContent = card.summary;
       const keyPoint = document.createElement('p'); keyPoint.className = 'rpt-news-keypoint'; keyPoint.textContent = card.keyPoint || card.summary;
+      const bullets = document.createElement('ul'); bullets.className = 'rpt-news-bullets';
+      (card.bullets || []).forEach((point) => { const li = document.createElement('li'); li.textContent = point; bullets.appendChild(li); });
+      const presenter = document.createElement('p'); presenter.className = 'rpt-news-presenter'; presenter.textContent = card.presenterText || card.keyPoint || card.summary;
       const meta = document.createElement('p'); meta.className = 'rpt-news-meta'; meta.textContent = `${card.source} · ${dateLabel(card.publishedAt)}`;
-      body.append(tags, title, summary, keyPoint, meta); article.append(visual, body); host.appendChild(article);
+      body.append(tags, title, summary, bullets, keyPoint, presenter, meta); article.append(visual, body); host.appendChild(article);
     });
   }
   function renderNews() {
@@ -658,11 +661,14 @@ const Report = (() => {
     finally { btn.disabled = false; btn.textContent = '添加新闻链接'; }
   }
   async function saveNewsDraft() {
+    const btn = A.$('#rpt-news-publish');
     try {
       if (selectedNewsIds.size !== 2) return A.toast('请选择两条新闻', 'bad');
+      btn.disabled = true; btn.textContent = 'AI 正在整理与排版…';
       await call('/api/reports/news/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: news.weekStart, ids: [...selectedNewsIds] }) });
-      await loadNews(); closeNewsPicker(); A.toast('新闻页已生成，放映模式已同步');
+      await loadNews(); closeNewsPicker(); A.toast('AI 新闻页已生成，放映模式已同步');
     } catch (e) { A.toast(e.message, 'bad'); }
+    finally { btn.disabled = false; btn.textContent = '确认两条并生成'; }
   }
   async function loadNews() { try { news = await call('/api/reports/news/summary'); } catch { news = null; } renderNews(); }
 

@@ -22,6 +22,9 @@ Environment=TZ=Asia/Shanghai
 Environment=ADMIN_USER=admin
 Environment=ADMIN_PIN=123456
 Environment=SESSION_DAYS=30
+# 可选的 OpenAI Chat Completions 兼容服务配置。该文件只应由 root 读取，
+# 不进入代码仓库；未配置时 AI 新闻生成功能会明确提示缺少配置。
+EnvironmentFile=-/etc/workbench/ai.env
 
 Restart=always
 RestartSec=3

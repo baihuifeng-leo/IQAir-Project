@@ -134,7 +134,7 @@ async function withArticleImage(item, getText) {
 }
 
 class ReportNewsStore {
-  constructor(dir, getText = requestText) { this.dir = dir; this.file = path.join(dir, 'weekly-ai-news.json'); this.getText = getText; }
+  constructor(dir, getText = requestText, ai = null) { this.dir = dir; this.file = path.join(dir, 'weekly-ai-news.json'); this.getText = getText; this.ai = ai; }
   async load() {
     try {
       const data = JSON.parse(await fsp.readFile(this.file, 'utf8'));
@@ -180,15 +180,18 @@ class ReportNewsStore {
     const candidates = data.candidates[weekStart] || [];
     const picked = Array.isArray(ids) ? ids.map((id) => candidates.find((x) => x.id === id)).filter(Boolean) : [];
     if (picked.length !== 2 || new Set(picked.map((x) => x.id)).size !== 2) throw new Error('请选择两条不同的候选新闻');
-    const cards = await Promise.all(picked.map(async ({ id, lane, ...card }) => {
-      try {
-        const html = await this.getText(card.url);
-        const body = articleText(html);
-        const { summary, keyPoint } = briefFrom(body, card.summary);
-        const image = metaValue(html, 'og:image');
-        return { ...card, summary, keyPoint, imageUrl: /^https:\/\//i.test(image) ? image.replace(/&amp;/g, '&') : card.imageUrl, layout: summary.length > 145 ? 'dense' : 'airy' };
-      } catch { return { ...card, keyPoint: card.summary.slice(0, 86), layout: 'airy' }; }
+    if (!this.ai?.configured()) throw new Error('AI 新闻生成未配置：请设置 AI_API_KEY 和 AI_MODEL');
+    const sourceCards = await Promise.all(picked.map(async ({ id, lane, ...card }) => {
+      const html = await this.getText(card.url);
+      const body = articleText(html);
+      const image = metaValue(html, 'og:image');
+      return { id, ...card, articleText: body, imageUrl: /^https:\/\//i.test(image) ? image.replace(/&amp;/g, '&') : card.imageUrl };
     }));
+    const generated = await this.ai.generate(sourceCards);
+    const cards = generated.map((draft) => {
+      const source = sourceCards.find((card) => card.id === draft.id);
+      return { ...source, ...draft, aiGenerated: true, articleText: undefined };
+    });
     const news = { weekStart, publishedAt: new Date().toISOString(), pages: { global: cards }, sourceCount: candidates.length };
     data.weeks[weekStart] = news;
     for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
