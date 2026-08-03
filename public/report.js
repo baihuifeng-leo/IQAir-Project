@@ -30,7 +30,7 @@
    公共报告目前只是占位，入口先留着。
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
-  let A, sub = 'personal', data = null, news = null, newsDraft = null, chart = null, ro = null;
+  let A, sub = 'personal', data = null, news = null, selectedNewsIds = new Set(), chart = null, ro = null;
   let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
   let page = 1, presenting = false, wmSelectedWeek = null, deleteSlideId = null;
 
@@ -580,13 +580,13 @@ const Report = (() => {
   }
 
   function slidePages() { return data?.slides || []; }
-  function totalPages() { return 4 + slidePages().length; }
+  function totalPages() { return 3 + slidePages().length; }
   function syncSlidePages() {
     const tabs = A.$('#rpt-custom-tabs'); tabs.replaceChildren();
     slidePages().forEach((slide, index) => {
-      const wrap = document.createElement('span'); wrap.className = 'rpt-custom-tab' + (page === index + 5 ? ' on' : '');
-      const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.page = String(index + 5); tab.textContent = `第 ${index + 5} 页 · 自定义页`; tab.classList.toggle('on', page === index + 5);
-      tab.onclick = () => switchPage(index + 5); wrap.appendChild(tab);
+      const wrap = document.createElement('span'); wrap.className = 'rpt-custom-tab' + (page === index + 4 ? ' on' : '');
+      const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.page = String(index + 4); tab.textContent = `第 ${index + 4} 页 · 自定义页`; tab.classList.toggle('on', page === index + 4);
+      tab.onclick = () => switchPage(index + 4); wrap.appendChild(tab);
       const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'kill'; kill.textContent = '✕'; kill.title = '删除此页';
       kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(slide.id); }; wrap.appendChild(kill); tabs.appendChild(wrap);
     });
@@ -599,7 +599,7 @@ const Report = (() => {
     if (!deleteSlideId) return;
     const index = slidePages().findIndex((slide) => slide.id === deleteSlideId);
     ReportSlides.deletePage(deleteSlideId); closeDeleteSlide();
-    if (index >= 0 && page >= index + 5) page = Math.max(1, page - 1);
+    if (index >= 0 && page >= index + 4) page = Math.max(1, page - 1);
     syncSlidePages(); switchPage(Math.min(page, totalPages())); A.toast('已删除自定义页');
   }
 
@@ -624,54 +624,46 @@ const Report = (() => {
     const published = news?.news;
     const sub = published ? `第 ${published.weekStart} 周发布 · ${published.sourceCount} 条候选新闻中筛选` : '本周新闻尚未发布';
     A.$('#rpt-news-global-sub').textContent = sub;
-    A.$('#rpt-news-radar-sub').textContent = published ? '优先中国电商与空气净化相关动态；未命中时补充高相关 AI 应用新闻。' : '优先中国电商与空气净化相关动态。';
     renderNewsCards('#rpt-news-global', published?.pages?.global);
-    renderNewsCards('#rpt-news-radar', published?.pages?.radar);
     renderNewsDraft();
   }
   function renderNewsDraft() {
     const editor = A.$('#rpt-news-editor'); editor.hidden = !A.me.admin;
     if (!A.me.admin) return;
     const host = A.$('#rpt-news-draft-fields'); host.replaceChildren();
-    const draft = newsDraft || (newsDraft = { weekStart: news?.weekStart || todayStr(), pages: { global: [{}, {}], radar: [{}, {}] } });
-    const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    ['global', 'radar'].forEach((lane) => (draft.pages[lane] || []).forEach((card, index) => {
+    (news?.candidates || []).forEach((card) => {
       const box = document.createElement('article'); box.className = 'rpt-news-draft-card';
-      const laneName = lane === 'global' ? '第 3 页 · 全球 AI 热点' : '第 4 页 · AI 应用雷达';
-      box.innerHTML = `<p class="rpt-news-tags">${laneName} · ${index + 1}</p><label>中文标题<input data-key="title" value="${esc(card.title)}"></label><label>中文摘要<textarea data-key="summary"></textarea></label><label>来源名称<input data-key="source" value="${esc(card.source)}"></label><label>原始来源（仅留档，不在发布页展示）<input data-key="url" value="${esc(card.url)}"></label><div class="rpt-news-cover"><span>${card.imageUrl ? '已上传本地封面' : '尚未上传封面'}</span><button type="button" class="ghost">上传封面</button></div>`;
-      box.querySelector('textarea').value = card.summary || '';
-      box.querySelectorAll('[data-key]').forEach((input) => input.oninput = () => { card[input.dataset.key] = input.value; });
-      box.querySelector('button').onclick = async () => { try { const url = await A.uploadImage(); if (url) { card.imageUrl = url; renderNewsDraft(); } } catch (e) { A.toast(e.message, 'bad'); } };
+      const chosen = selectedNewsIds.has(card.id);
+      box.innerHTML = `<label class="rpt-news-pick"><input type="checkbox" ${chosen ? 'checked' : ''}> 选择此新闻</label><p class="rpt-news-tags">${card.tags.join(' · ')}</p><h3>${card.title}</h3><p>${card.summary}</p><small>${card.source} · ${dateLabel(card.publishedAt)}</small>`;
+      box.querySelector('input').onchange = (e) => { if (e.target.checked) { if (selectedNewsIds.size >= 2) { e.target.checked = false; return A.toast('一次只能选择两条新闻', 'bad'); } selectedNewsIds.add(card.id); } else selectedNewsIds.delete(card.id); };
       host.appendChild(box);
-    }));
+    });
   }
   async function refreshNews() {
     const btn = A.$('#rpt-news-refresh'); btn.disabled = true; btn.textContent = '收集中…';
-    try { await call('/api/reports/news/refresh', { method: 'POST' }); await loadNews(); A.toast('已收集候选，请编辑后发布'); }
+    try { await call('/api/reports/news/refresh', { method: 'POST' }); selectedNewsIds.clear(); await loadNews(); A.toast('已收集中文候选，请选择两条'); }
     catch (e) { A.toast(e.message, 'bad'); }
     finally { btn.disabled = false; btn.textContent = '↻ 收集中文候选'; }
   }
-  async function saveNewsDraft(publish) {
+  async function saveNewsDraft() {
     try {
-      const draft = await call('/api/reports/news/draft/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newsDraft) });
-      newsDraft = draft;
-      if (publish) await call('/api/reports/news/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: draft.weekStart }) });
-      await loadNews(); A.toast(publish ? '已发布，全屏第 3、4 页已更新' : '发布稿已保存');
+      if (selectedNewsIds.size !== 2) return A.toast('请选择两条新闻', 'bad');
+      await call('/api/reports/news/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: news.weekStart, ids: [...selectedNewsIds] }) });
+      await loadNews(); A.toast('新闻页已生成，放映模式已同步');
     } catch (e) { A.toast(e.message, 'bad'); }
   }
-  async function loadNews() { try { news = await call('/api/reports/news/summary'); newsDraft = news.draft; } catch { news = null; newsDraft = null; } renderNews(); }
+  async function loadNews() { try { news = await call('/api/reports/news/summary'); } catch { news = null; } renderNews(); }
 
-  /* ── 页面切换：前四页固定，自定义页接在后面 ── */
+  /* ── 页面切换：前三页固定，自定义页接在后面 ── */
   function switchPage(n) {
     page = Math.max(1, Math.min(n, totalPages()));
     A.$$('#rpt-page-switch button').forEach((b) => b.classList.toggle('on', Number(b.dataset.page) === n));
     A.$('#rpt-page-1').hidden = page !== 1;
     A.$('#rpt-page-2').hidden = page !== 2;
     A.$('#rpt-page-3').hidden = page !== 3;
-    A.$('#rpt-page-4').hidden = page !== 4;
-    const custom = page >= 5;
+    const custom = page >= 4;
     A.$('#rpt-page-custom').hidden = !custom;
-    if (custom) ReportSlides.mountPage(slidePages()[page - 5].id); else ReportSlides.unmountPage();
+    if (custom) ReportSlides.mountPage(slidePages()[page - 4].id); else ReportSlides.unmountPage();
     if (page === 1 && chart) requestAnimationFrame(() => chart.resize());
     syncSlidePages();
   }
@@ -790,7 +782,7 @@ const Report = (() => {
     document.addEventListener('wb-themechange', () => { if (chart && data) renderTrend(); });
 
     A.$$('#rpt-page-switch button[data-page]').forEach((b) => (b.onclick = () => switchPage(Number(b.dataset.page))));
-    A.$('#rpt-add-page').onclick = () => { const slide = ReportSlides.addPage(); syncSlidePages(); switchPage(slidePages().findIndex((p) => p.id === slide.id) + 5); };
+    A.$('#rpt-add-page').onclick = () => { const slide = ReportSlides.addPage(); syncSlidePages(); switchPage(slidePages().findIndex((p) => p.id === slide.id) + 4); };
     A.$('#rpt-delete-page-close').onclick = closeDeleteSlide;
     A.$('#rpt-delete-page-cancel').onclick = closeDeleteSlide;
     A.$('#rpt-delete-page-confirm').onclick = deleteSlide;
@@ -799,8 +791,7 @@ const Report = (() => {
     A.$('#rpt-news-refresh').onclick = refreshNews;
     A.$('#rpt-news-refresh').hidden = !A.me.admin;
     A.$('#rpt-news-collect').onclick = refreshNews;
-    A.$('#rpt-news-save').onclick = () => saveNewsDraft(false);
-    A.$('#rpt-news-publish').onclick = () => saveNewsDraft(true);
+    A.$('#rpt-news-publish').onclick = saveNewsDraft;
     A.$('#rpt-exit-present').onclick = exitPresent;
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) exitPresent(); });
     document.addEventListener('keydown', (e) => {

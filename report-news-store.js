@@ -11,6 +11,7 @@ const fsp = fs.promises;
 const path = require('path');
 const http = require('http');
 const https = require('https');
+const crypto = require('crypto');
 
 const WEEK_MS = 7 * 86400000;
 const MAX_ITEMS_PER_FEED = 12;
@@ -106,14 +107,13 @@ class ReportNewsStore {
   async load() {
     try {
       const data = JSON.parse(await fsp.readFile(this.file, 'utf8'));
-      return { weeks: data.weeks || {}, drafts: data.drafts || {}, lastAttempt: data.lastAttempt || null };
-    } catch { return { weeks: {}, drafts: {}, lastAttempt: null }; }
+      return { weeks: data.weeks || {}, drafts: data.drafts || {}, candidates: data.candidates || {}, lastAttempt: data.lastAttempt || null };
+    } catch { return { weeks: {}, drafts: {}, candidates: {}, lastAttempt: null }; }
   }
   async save(data) { await fsp.mkdir(this.dir, { recursive: true }); await fsp.writeFile(this.file, JSON.stringify(data, null, 1)); }
-  async summary() { const data = await this.load(); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || data.weeks[Object.keys(data.weeks).sort().pop()] || null, draft: data.drafts[key] || null, lastAttempt: data.lastAttempt || null }; }
+  async summary() { const data = await this.load(); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || data.weeks[Object.keys(data.weeks).sort().pop()] || null, candidates: data.candidates[key] || [], lastAttempt: data.lastAttempt || null }; }
   async refresh() {
     const data = await this.load(); const weekStart = mondayOf();
-    if (data.drafts[weekStart]) return data.drafts[weekStart]; // 不覆盖编辑已经确认过的草稿
     const results = await Promise.allSettled(FEEDS.map(async (feed) => parseFeed(await this.getText(feed.url), feed)));
     const candidates = results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
     const seen = new Set();
@@ -133,12 +133,22 @@ class ReportNewsStore {
     radar.push(...pick(focused, 2 - radar.length, used)); radar.forEach((x) => used.add(x.link));
     while (radar.length < 2) { const x = pick(ranked, 1, used)[0]; if (!x) break; radar.push(x); used.add(x.link); }
     if (global.length < 2 || radar.length < 2) throw new Error('本周可用新闻不足 4 条');
-    const cards = [...global, ...radar].map(toCard); // 外部候选图不进入成稿，封面由编辑上传到本地。
-    const draft = { weekStart, updatedAt: new Date().toISOString(), pages: { global: cards.slice(0, 2), radar: cards.slice(2) }, sourceCount: candidates.length };
-    data.drafts[weekStart] = draft;
+    const cards = ranked.slice(0, 12).map((item) => ({ ...toCard(item), id: crypto.createHash('sha1').update(item.link).digest('hex').slice(0, 12), lane: item.lane }));
+    if (cards.length < 2) throw new Error('本周中文 AI 候选不足两条');
+    data.candidates[weekStart] = cards;
     data.lastAttempt = { at: new Date().toISOString(), ok: true, sourceCount: candidates.length };
     await this.save(data);
-    return draft;
+    return { weekStart, candidates: cards, sourceCount: candidates.length };
+  }
+  async generate(weekStartInput, ids) {
+    const weekStart = mondayOf(weekStartInput); const data = await this.load();
+    const candidates = data.candidates[weekStart] || [];
+    const picked = Array.isArray(ids) ? ids.map((id) => candidates.find((x) => x.id === id)).filter(Boolean) : [];
+    if (picked.length !== 2 || new Set(picked.map((x) => x.id)).size !== 2) throw new Error('请选择两条不同的候选新闻');
+    const news = { weekStart, publishedAt: new Date().toISOString(), pages: { global: picked.map(({ id, lane, ...card }) => card) }, sourceCount: candidates.length };
+    data.weeks[weekStart] = news;
+    for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
+    await this.save(data); return news;
   }
   cleanCard(input) {
     const title = String(input?.title || '').trim().slice(0, 140);

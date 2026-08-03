@@ -243,7 +243,7 @@
               <p class="rail-hint">第 1 页导入的一份 Excel 里同时含「天猫旗舰店整体」和「首页」两种口径，表头需含：统计时段、浏览量（店铺）、访客数（店铺）、浏览量（首页）、访客数（首页）、点击次数、点击人数、点击率、跳失率、平均停留时长(秒)、引导下单金额、引导下单买家数、引导下单转化率、引导支付金额、引导支付买家数、引导支付转化率、引导商品详情次数、引导商品详情人数、引导加购人数、引导加购件数。目前只统计 IQAir天猫旗舰店。</p>
               <p class="rail-hint">按日期增量合并——已经有的日期用新数据覆盖，其余日期不受影响，所以每周传同一份表格、时间窗口有重叠也没关系，只会追加新内容。目前只支持 .xlsx——如果导出的是老版 .xls，先用 Excel/WPS 另存为 .xlsx 再传。也可以直接把文件拖进下方看板区域。</p>
               <p class="rail-hint">第 2 页微盟数据（公众号/小程序/APP）后台没有导出功能，按周手动填。可以补填任意一周，环比默认跟该周的上一个自然周对比，不用自己算涨跌；再次填同一周是编辑更新，不是重复记录。</p>
-              <p class="rail-hint">第 3、4 页的 AI 新闻会先自动收集中文候选，管理员核对标题、摘要、来源和本地封面后才发布。全屏模式只展示冻结后的本地化版式；原始链接仅作内部留档。</p>
+              <p class="rail-hint">第 3 页会收集中文 AI 候选；管理员选择两条后，系统生成一张本地化汇报页并同步放映模式。原始链接仅作内部留档，不在发布页展示。</p>
               <p class="rail-hint">公共报告还在开发中，敬请期待。</p>
             </div>
           </div>
@@ -254,8 +254,7 @@
         <div class="rpt-page-switch" id="rpt-page-switch">
           <button data-page="1" class="on">第 1 页 · 生意参谋</button>
           <button data-page="2">第 2 页 · 微盟数据</button>
-          <button data-page="3">第 3 页 · 全球 AI 热点</button>
-          <button data-page="4">第 4 页 · AI 应用雷达</button>
+          <button data-page="3">第 3 页 · AI 新闻速览</button>
           <span id="rpt-custom-tabs"></span>
           <button class="rpt-add-page" id="rpt-add-page" type="button">＋ 新建页面</button>
         </div>
@@ -320,21 +319,14 @@
         <div class="rpt-page rpt-news-page" id="rpt-page-3" hidden>
           <section class="rv-sec rpt-sec-first">
             <div class="rpt-sec-head rpt-news-head">
-              <div><h2>全球 AI 热点</h2><p class="rv-sub" id="rpt-news-global-sub">每周自动发布 · 正在读取新闻…</p></div>
+              <div><h2>AI 新闻速览</h2><p class="rv-sub" id="rpt-news-global-sub">选择两条新闻后生成适合汇报的本地化版式。</p></div>
               <button class="ghost" id="rpt-news-refresh" hidden>↻ 收集中文候选</button>
             </div>
             <div class="rpt-news-grid" id="rpt-news-global"></div>
             <section class="rpt-news-editor" id="rpt-news-editor" hidden>
-              <div class="rpt-sec-head"><div><h2>本周发布稿</h2><p class="rv-sub">候选仅供编辑参考；请改写中文标题与摘要，上传本地封面后再发布。</p></div><div class="rpt-news-editor-actions"><button class="ghost" id="rpt-news-collect">↻ 收集中文候选</button><button class="ghost" id="rpt-news-save">保存发布稿</button><button class="solid" id="rpt-news-publish">发布到全屏页</button></div></div>
+              <div class="rpt-sec-head"><div><h2>本周中文 AI 候选</h2><p class="rv-sub">勾选两条最值得讲的新闻，系统会生成摘要和汇报版式。</p></div><div class="rpt-news-editor-actions"><button class="ghost" id="rpt-news-collect">↻ 收集中文候选</button><button class="solid" id="rpt-news-publish">确认两条并生成</button></div></div>
               <div id="rpt-news-draft-fields" class="rpt-news-draft-fields"></div>
             </section>
-          </section>
-        </div>
-
-        <div class="rpt-page rpt-news-page" id="rpt-page-4" hidden>
-          <section class="rv-sec rpt-sec-first">
-            <div class="rpt-sec-head"><div><h2>AI 应用雷达</h2><p class="rv-sub" id="rpt-news-radar-sub">优先中国电商与空气净化相关动态。</p></div></div>
-            <div class="rpt-news-grid" id="rpt-news-radar"></div>
           </section>
         </div>
 

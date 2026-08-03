@@ -691,6 +691,15 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, draft);
     }
 
+    if (p === '/api/reports/news/generate' && req.method === 'POST') {
+      if (!me.admin) return json(res, 403, { error: '只有管理员能生成新闻页' });
+      const input = await body(req, 4096);
+      let news; try { news = await reportNews.generate(input.weekStart, input.ids); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'reports.news.generate', { detail: [`生成 ${news.weekStart} 两条 AI 新闻全屏稿`] });
+      return json(res, 200, news);
+    }
+
     if (p === '/api/reports/news/publish' && req.method === 'POST') {
       if (!me.admin) return json(res, 403, { error: '只有管理员能发布新闻' });
       let news; try { news = await reportNews.publish((await body(req, 4096)).weekStart); }
@@ -929,8 +938,8 @@ const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UP
   await materialcheckOcr.checkAvailable();
   scheduleNightly();
   scheduleWeeklyNews();
-  reportNews.summary().then(({ weekStart, draft }) => {
-    if (!draft || draft.weekStart !== weekStart) return reportNews.refreshSafely()
+  reportNews.summary().then(({ weekStart, candidates }) => {
+    if (!candidates?.length) return reportNews.refreshSafely()
       .then((collected) => console.log(`[report-news] 启动补收集：${collected.weekStart}`))
       .catch((e) => console.error('[report-news] 启动抓取失败：' + e.message));
   });

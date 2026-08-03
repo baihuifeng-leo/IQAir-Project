@@ -23,6 +23,14 @@ assert.equal(mondayOf(new Date('2026-08-03T12:00:00+08:00')), '2026-08-03');
   assert.ok(published.publishedAt);
   const summary = await store.summary();
   assert.equal(summary.news.pages.radar[1].title, '中文 AI 新闻 4');
+  const data = await store.load();
+  data.candidates['2026-08-03'] = [
+    { id: 'a', ...card(5), tags: ['电商相关'] }, { id: 'b', ...card(6), tags: ['空气品质相关'] }
+  ];
+  await store.save(data);
+  const generated = await store.generate('2026-08-03', ['a', 'b']);
+  assert.equal(generated.pages.global.length, 2);
+  assert.equal(generated.pages.global[0].title, '中文 AI 新闻 5');
   await assert.rejects(() => store.saveDraft({ weekStart: '2026-08-03', pages: { global: [card(1), card(2)], radar: [{ ...card(3), title: 'English news', summary: 'English only' }, card(4)] } }), /中文/);
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('✓ report-news draft save and publish');
