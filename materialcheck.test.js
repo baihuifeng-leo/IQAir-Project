@@ -549,6 +549,14 @@ async function run() {
     assert.strictEqual(result.priceIssue, null);
   });
 
+  t('matchAgainstProduct 旧记录没有坐标时，仅跳过中间已配置文案，不把到手价误判缺词', () => {
+    const p = { id: 'p1', name: 'GCX Series XE', price: 28188, keywords: ['预估补贴到手价', '入会有礼'] };
+    const result = M.matchAgainstProduct('预估补贴\n入会有礼\n到手价\n28188', p, [p], '1:1');
+    assert.deepStrictEqual(result.missingKeywords, []);
+    assert.strictEqual(result.priceIssue, null);
+    assert.deepStrictEqual(result.matchedKeywords.find((kw) => kw.text === '预估补贴到手价').reasons, ['已配置文案穿插忽略']);
+  });
+
   t('checkPrice 没配置 price 的产品不校验；价格对上/图里没价格/价格对不上分别处理', () => {
     const noPrice = { id: 'p1', name: 'X', price: null };
     assert.strictEqual(M.checkPrice('随便什么文字￥299', noPrice), null);
