@@ -20,4 +20,9 @@ assert.match(js, /classifyNewsImage\(article, img\)/);
 assert.match(css, /body\.rpt-presenting \.rpt-news-card\.image-portrait\s*\{[^}]*grid-template-columns:/);
 assert.match(css, /body\.rpt-presenting \.rpt-news-card\.image-portrait\s*\{[^}]*grid-template-rows:\s*1fr/);
 assert.match(css, /body\.rpt-presenting \.rpt-news-meta\s*\{[^}]*margin-top:\s*clamp\(12px,\s*1\.5vh,\s*22px\)/);
+// 两则新闻共享同一张演示页高度；横图正文应在剩余空间中居中且使用更大的汇报字号。
+assert.match(css, /body\.rpt-presenting \.rpt-news-grid\s*\{[^}]*align-items:\s*stretch/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-grid > \.rpt-news-card\s*\{[^}]*height:\s*100%/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-card\.image-wide \.rpt-news-body\s*\{[^}]*justify-content:\s*center/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-card\.image-portrait \.rpt-news-summary\s*\{[^}]*font-size:/);
 console.log('✓ report-news picker remains closeable and compact');
