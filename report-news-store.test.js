@@ -26,32 +26,32 @@ assert.equal(articleImage('<article><img class="article-photo" data-src="/images
   };
   const store = new ReportNewsStore(dir, async () => '<article>这是足够长的中文新闻正文，用于验证 AI 新闻摘要生成流程。事件发生后，行业参与者公布了新的能力和应用计划，并说明了对业务运营的影响。团队正在持续跟进后续进展和市场反馈。</article>', fakeAi);
   const card = (n) => ({ title: `中文 AI 新闻 ${n}`, summary: `这是第 ${n} 条经过编辑确认的中文摘要。`, source: '示例媒体', url: 'https://example.com/a', imageUrl: '/uploads/cover.jpg' });
-  const draft = await store.saveDraft({ weekStart: '2026-08-03', pages: { global: [card(1), card(2)], radar: [card(3), card(4)] } });
+  const draft = await store.saveDraft('u_owner', { weekStart: '2026-08-03', pages: { global: [card(1), card(2)], radar: [card(3), card(4)] } });
   assert.equal(draft.pages.global.length, 2);
-  const published = await store.publish('2026-08-03');
+  const published = await store.publish('u_owner', '2026-08-03');
   assert.ok(published.publishedAt);
-  const summary = await store.summary();
+  const summary = await store.summary('u_owner');
   assert.equal(summary.news.pages.radar[1].title, '中文 AI 新闻 4');
-  const data = await store.load();
+  const data = await store.load('u_owner');
   data.candidates['2026-08-03'] = [
     { id: 'a', ...card(5), tags: ['电商相关'] }, { id: 'b', ...card(6), tags: ['空气品质相关'] }
   ];
-  await store.save(data);
-  const generated = await store.generate('2026-08-03', ['a', 'b']);
+  await store.save('u_owner', data);
+  const generated = await store.generate('u_owner', '2026-08-03', ['a', 'b']);
   assert.equal(generated.pages.global.length, 2);
   assert.equal(generated.pages.global[0].title, 'AI 标题 1');
   assert.equal(generated.pages.global[0].bullets.length, 3);
   assert.equal(generated.pages.global[0].aiGenerated, true);
   const importDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-import-'));
   const importedStore = new ReportNewsStore(importDir, async () => '<html><head><meta property="og:title" content="中文 AI 电商新闻"><meta name="description" content="这是可用于汇报的中文新闻摘要。"><meta property="og:image" content="https://example.com/cover.jpg"></head></html>');
-  const imported = await importedStore.importUrl('2026-08-03', 'https://example.com/news');
+  const imported = await importedStore.importUrl('u_owner', '2026-08-03', 'https://example.com/news');
   assert.equal(imported.title, '中文 AI 电商新闻');
-  assert.equal((await importedStore.summary()).candidates.length, 1);
+  assert.equal((await importedStore.summary('u_owner')).candidates.length, 1);
   const refreshDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-refresh-'));
   const refreshedStore = new ReportNewsStore(refreshDir, async (url) => url === 'https://www.chinaz.com/ai/'
     ? '<a href="/2026/0803/1768722.shtml" class="home-product_link"><h3>AI 模型在电商运营中的新进展</h3></a><a href="/2026/0803/1768723.shtml" class="home-product_link"><h3>中文 AI 热点新闻发布</h3></a><a href="/2026/0803/1768724.shtml" class="home-product_link"><h3>国产大模型能力持续升级</h3></a><a href="/2026/0803/1768725.shtml" class="home-product_link"><h3>人工智能产业迎来新进展</h3></a>'
     : xml);
-  const refreshed = await refreshedStore.refresh();
+  const refreshed = await refreshedStore.refresh('u_owner');
   assert.equal(refreshed.candidates[0].source, '站长之家 AI 新闻');
   assert.equal(refreshed.candidates[0].tags[0], '站长之家优选');
   fs.rmSync(refreshDir, { recursive: true, force: true });
@@ -88,7 +88,8 @@ assert.equal(articleImage('<article><img class="article-photo" data-src="/images
   assert.equal(anthropicPayload.thinking.type, 'disabled');
   assert.equal(anthropicPayload.response_format, undefined);
   fs.rmSync(importDir, { recursive: true, force: true });
-  await assert.rejects(() => store.saveDraft({ weekStart: '2026-08-03', pages: { global: [card(1), card(2)], radar: [{ ...card(3), title: 'English news', summary: 'English only' }, card(4)] } }), /中文/);
+  await assert.rejects(() => store.saveDraft('u_owner', { weekStart: '2026-08-03', pages: { global: [card(1), card(2)], radar: [{ ...card(3), title: 'English news', summary: 'English only' }, card(4)] } }), /中文/);
+  assert.equal((await store.summary('u_other')).news, null, '其他账户不能读取本账户发布的新闻');
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('✓ report-news draft save and publish');
 })().catch((e) => { console.error(e); process.exitCode = 1; });

@@ -32,7 +32,7 @@
 const Report = (() => {
   let A, sub = 'personal', data = null, news = null, selectedNewsIds = new Set(), newsPickerOpen = false, chart = null, wmChart = null, ro = null;
   let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
-  let page = 1, presenting = false, wmSelectedWeek = null, deleteSlideId = null;
+  let page = 1, presenting = false, wmSelectedWeek = null, deleteSlideId = null, renameSlideId = null;
   const FIXED_REPORT_PAGES = [
     { id: 'business', label: '生意参谋', selector: '#rpt-page-1' },
     { id: 'weimeng', label: '微盟数据', selector: '#rpt-page-2' },
@@ -617,7 +617,7 @@ const Report = (() => {
   function slidePages() { return data?.slides || []; }
   function reportPages() {
     const slides = slidePages(); const known = new Map(FIXED_REPORT_PAGES.map((item) => [item.id, item]));
-    slides.forEach((slide) => known.set(slide.id, { id: slide.id, label: '自定义页', slide }));
+    slides.forEach((slide) => known.set(slide.id, { id: slide.id, label: slide.name || '自定义页', slide }));
     const ordered = []; const seen = new Set();
     (data?.pageOrder || []).forEach((id) => { if (known.has(id) && !seen.has(id)) { ordered.push(known.get(id)); seen.add(id); } });
     [...FIXED_REPORT_PAGES, ...slides.map((slide) => known.get(slide.id))].forEach((item) => { if (!seen.has(item.id)) { ordered.push(item); seen.add(item.id); } });
@@ -641,7 +641,10 @@ const Report = (() => {
     pages.forEach((item, index) => {
       const wrap = document.createElement('span'); wrap.className = 'rpt-page-tab' + (page === index + 1 ? ' on' : ''); wrap.dataset.pageId = item.id; wrap.draggable = !presenting;
       const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.page = String(index + 1); tab.textContent = `第 ${index + 1} 页 · ${item.label}`; tab.classList.toggle('on', page === index + 1); tab.onclick = () => switchPage(index + 1); wrap.appendChild(tab);
-      if (item.slide) { const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'kill'; kill.textContent = '✕'; kill.title = '删除此页'; kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(item.id); }; wrap.appendChild(kill); }
+      if (item.slide) {
+        const rename = document.createElement('button'); rename.type = 'button'; rename.className = 'rename'; rename.textContent = '✎'; rename.title = '重命名此页'; rename.setAttribute('aria-label', '重命名此页'); rename.onclick = (e) => { e.stopPropagation(); openRenameSlide(item.id); }; wrap.appendChild(rename);
+        const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'kill'; kill.textContent = '✕'; kill.title = '删除此页'; kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(item.id); }; wrap.appendChild(kill);
+      }
       if (!presenting) {
         wrap.title = '拖动以调整报告与放映顺序';
         wrap.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); wrap.classList.add('dragging'); });
@@ -657,6 +660,18 @@ const Report = (() => {
 
   function openDeleteSlide(id) { deleteSlideId = id; A.$('#rpt-delete-page-mask').hidden = false; }
   function closeDeleteSlide() { deleteSlideId = null; A.$('#rpt-delete-page-mask').hidden = true; }
+  function openRenameSlide(id) {
+    const slide = slidePages().find((item) => item.id === id); if (!slide) return;
+    renameSlideId = id; const input = A.$('#rpt-rename-page-input'); input.value = slide.name || ''; A.$('#rpt-rename-page-mask').hidden = false;
+    requestAnimationFrame(() => { input.focus(); input.select(); });
+  }
+  function closeRenameSlide() { renameSlideId = null; A.$('#rpt-rename-page-mask').hidden = true; }
+  function renameSlide() {
+    if (!renameSlideId) return;
+    const name = A.$('#rpt-rename-page-input').value.trim();
+    if (!name) return A.toast('请输入页面名称', 'bad');
+    ReportSlides.renamePage(renameSlideId, name); closeRenameSlide(); syncSlidePages(); A.toast('自定义页已重命名');
+  }
   function deleteSlide() {
     if (!deleteSlideId) return;
     const activeId = currentReportPage()?.id;
@@ -675,7 +690,7 @@ const Report = (() => {
   }
   function renderNewsCards(target, cards) {
     const host = A.$(target); host.replaceChildren();
-    if (!cards?.length) { host.innerHTML = '<p class="rpt-news-empty">本周新闻还未发布。系统会自动重试；管理员也可以手动刷新。</p>'; return; }
+    if (!cards?.length) { host.innerHTML = '<p class="rpt-news-empty">本周新闻还未发布。可从“选择两条新闻”中收集候选并生成。</p>'; return; }
     cards.forEach((card, i) => {
       const article = document.createElement('article'); article.className = 'rpt-news-card ' + (card.layout || 'text-focus');
       const visual = document.createElement('div'); visual.className = 'rpt-news-visual';
@@ -710,8 +725,7 @@ const Report = (() => {
     renderNewsDraft();
   }
   function renderNewsDraft() {
-    const editor = A.$('#rpt-news-editor'); editor.hidden = !A.me.admin || !newsPickerOpen;
-    if (!A.me.admin) return;
+    const editor = A.$('#rpt-news-editor'); editor.hidden = !newsPickerOpen;
     const host = A.$('#rpt-news-draft-fields'); host.replaceChildren();
     const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     (news?.candidates || []).forEach((card) => {
@@ -884,9 +898,14 @@ const Report = (() => {
     A.$('#rpt-delete-page-cancel').onclick = closeDeleteSlide;
     A.$('#rpt-delete-page-confirm').onclick = deleteSlide;
     A.$('#rpt-delete-page-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-delete-page-mask') closeDeleteSlide(); });
+    A.$('#rpt-rename-page-close').onclick = closeRenameSlide;
+    A.$('#rpt-rename-page-cancel').onclick = closeRenameSlide;
+    A.$('#rpt-rename-page-confirm').onclick = renameSlide;
+    A.$('#rpt-rename-page-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') renameSlide(); });
+    A.$('#rpt-rename-page-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-rename-page-mask') closeRenameSlide(); });
     A.$('#rpt-present-btn').onclick = togglePresent;
     A.$('#rpt-news-open-picker').onclick = openNewsPicker;
-    A.$('#rpt-news-open-picker').hidden = !A.me.admin;
+    A.$('#rpt-news-open-picker').hidden = false;
     A.$('#rpt-news-collect').onclick = refreshNews;
     A.$('#rpt-news-publish').onclick = saveNewsDraft;
     A.$('#rpt-news-import-url').onclick = importNewsUrl;

@@ -91,6 +91,7 @@ const SLIDE_ELEMENT_TYPES = new Set(['text', 'image']);
 const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
 const MAX_SLIDE_TEXT_LEN = 4000;
 const MAX_PAGE_ORDER = 100;
+const MAX_SLIDE_NAME_LEN = 40;
 
 function sanitizeElement(el) {
   if (!el || typeof el !== 'object' || !SLIDE_ELEMENT_TYPES.has(el.type)) return null;
@@ -118,7 +119,7 @@ function sanitizeSlides(input) {
     if (!id) throw new Error('页面缺少 id');
     const elements = Array.isArray(page && page.elements)
       ? page.elements.map(sanitizeElement).filter(Boolean) : [];
-    return { id, elements };
+    return { id, name: String((page && page.name) || '').trim().slice(0, MAX_SLIDE_NAME_LEN), elements };
   });
 }
 

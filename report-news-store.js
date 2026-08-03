@@ -148,17 +148,22 @@ function articleImage(html, pageUrl) {
 }
 
 class ReportNewsStore {
-  constructor(dir, getText = requestText, ai = null) { this.dir = dir; this.file = path.join(dir, 'weekly-ai-news.json'); this.getText = getText; this.ai = ai; }
-  async load() {
+  constructor(dir, getText = requestText, ai = null) { this.dir = dir; this.getText = getText; this.ai = ai; }
+  file(userId) {
+    const id = String(userId || '').trim();
+    if (!/^u_[a-z0-9]+$/i.test(id)) throw new Error('用户标识不合法');
+    return path.join(this.dir, id + '.json');
+  }
+  async load(userId) {
     try {
-      const data = JSON.parse(await fsp.readFile(this.file, 'utf8'));
+      const data = JSON.parse(await fsp.readFile(this.file(userId), 'utf8'));
       return { weeks: data.weeks || {}, drafts: data.drafts || {}, candidates: data.candidates || {}, lastAttempt: data.lastAttempt || null };
     } catch { return { weeks: {}, drafts: {}, candidates: {}, lastAttempt: null }; }
   }
-  async save(data) { await fsp.mkdir(this.dir, { recursive: true }); await fsp.writeFile(this.file, JSON.stringify(data, null, 1)); }
-  async summary() { const data = await this.load(); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || data.weeks[Object.keys(data.weeks).sort().pop()] || null, candidates: data.candidates[key] || [], lastAttempt: data.lastAttempt || null }; }
-  async refresh(options = {}) {
-    const data = await this.load(); const weekStart = mondayOf();
+  async save(userId, data) { await fsp.mkdir(this.dir, { recursive: true }); await fsp.writeFile(this.file(userId), JSON.stringify(data, null, 1)); }
+  async summary(userId) { const data = await this.load(userId); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || data.weeks[Object.keys(data.weeks).sort().pop()] || null, candidates: data.candidates[key] || [], lastAttempt: data.lastAttempt || null }; }
+  async refresh(userId, options = {}) {
+    const data = await this.load(userId); const weekStart = mondayOf();
     const results = await Promise.allSettled([
       (async () => parseChinazAi(await this.getText(CHINAZ_AI_URL)))(),
       ...FEEDS.map(async (feed) => parseFeed(await this.getText(feed.url), feed))
@@ -186,11 +191,11 @@ class ReportNewsStore {
     if (cards.length < 2) throw new Error('本周中文 AI 候选不足两条');
     data.candidates[weekStart] = cards;
     data.lastAttempt = { at: new Date().toISOString(), ok: true, sourceCount: candidates.length };
-    await this.save(data);
+    await this.save(userId, data);
     return { weekStart, candidates: cards, sourceCount: candidates.length };
   }
-  async generate(weekStartInput, ids) {
-    const weekStart = mondayOf(weekStartInput); const data = await this.load();
+  async generate(userId, weekStartInput, ids) {
+    const weekStart = mondayOf(weekStartInput); const data = await this.load(userId);
     const candidates = data.candidates[weekStart] || [];
     const picked = Array.isArray(ids) ? ids.map((id) => candidates.find((x) => x.id === id)).filter(Boolean) : [];
     if (picked.length !== 2 || new Set(picked.map((x) => x.id)).size !== 2) throw new Error('请选择两条不同的候选新闻');
@@ -208,9 +213,9 @@ class ReportNewsStore {
     const news = { weekStart, publishedAt: new Date().toISOString(), pages: { global: cards }, sourceCount: candidates.length };
     data.weeks[weekStart] = news;
     for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
-    await this.save(data); return news;
+    await this.save(userId, data); return news;
   }
-  async importUrl(weekStartInput, rawUrl) {
+  async importUrl(userId, weekStartInput, rawUrl) {
     const weekStart = mondayOf(weekStartInput); const url = String(rawUrl || '').trim();
     if (!/^https:\/\//i.test(url)) throw new Error('只支持 https 新闻链接');
     const host = new URL(url).hostname.toLowerCase();
@@ -221,9 +226,9 @@ class ReportNewsStore {
     if (!title || !/[\u4e00-\u9fff]/.test(title + description)) throw new Error('未读到可用的中文新闻内容');
     const item = { title, description, link: url, source: host.replace(/^www\./, ''), publishedAt: new Date().toISOString(), lane: 'manual' };
     const card = { ...toCard(item), id: crypto.createHash('sha1').update(url).digest('hex').slice(0, 12), lane: 'manual', imageUrl: /^https:\/\//i.test(metaValue(html, 'og:image')) ? metaValue(html, 'og:image').replace(/&amp;/g, '&') : null };
-    const data = await this.load(); const list = data.candidates[weekStart] || [];
+    const data = await this.load(userId); const list = data.candidates[weekStart] || [];
     data.candidates[weekStart] = [card, ...list.filter((x) => x.id !== card.id)].slice(0, 20);
-    await this.save(data); return card;
+    await this.save(userId, data); return card;
   }
   cleanCard(input) {
     const title = String(input?.title || '').trim().slice(0, 140);
@@ -237,22 +242,22 @@ class ReportNewsStore {
     if (imageUrl && !imageUrl.startsWith('/uploads/')) throw new Error('封面必须上传到工作台');
     return { title, summary, source, url: sourceUrl, imageUrl: imageUrl || null, publishedAt: input?.publishedAt || null, tags: Array.isArray(input?.tags) ? input.tags.map((x) => String(x).slice(0, 30)).slice(0, 3) : [] };
   }
-  async saveDraft(input) {
+  async saveDraft(userId, input) {
     const weekStart = mondayOf(input?.weekStart);
     const pages = input?.pages || {};
     const draft = { weekStart, updatedAt: new Date().toISOString(), pages: { global: (pages.global || []).map((x) => this.cleanCard(x)), radar: (pages.radar || []).map((x) => this.cleanCard(x)) }, sourceCount: 0 };
     if (draft.pages.global.length !== 2 || draft.pages.radar.length !== 2) throw new Error('第 3、4 页各需两条新闻');
-    const data = await this.load(); data.drafts[weekStart] = draft; await this.save(data); return draft;
+    const data = await this.load(userId); data.drafts[weekStart] = draft; await this.save(userId, data); return draft;
   }
-  async publish(weekStartInput) {
-    const weekStart = mondayOf(weekStartInput); const data = await this.load(); const draft = data.drafts[weekStart];
+  async publish(userId, weekStartInput) {
+    const weekStart = mondayOf(weekStartInput); const data = await this.load(userId); const draft = data.drafts[weekStart];
     if (!draft) throw new Error('先保存本周发布稿');
     const news = { ...draft, publishedAt: new Date().toISOString() };
     data.weeks[weekStart] = news;
     for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
-    await this.save(data); return news;
+    await this.save(userId, data); return news;
   }
-  async refreshSafely(options) { try { return await this.refresh(options); } catch (e) { const data = await this.load(); data.lastAttempt = { at: new Date().toISOString(), ok: false, error: e.message }; await this.save(data); throw e; } }
+  async refreshSafely(userId, options) { try { return await this.refresh(userId, options); } catch (e) { const data = await this.load(userId); data.lastAttempt = { at: new Date().toISOString(), ok: false, error: e.message }; await this.save(userId, data); throw e; } }
 }
 
 module.exports = { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary, articleImage };

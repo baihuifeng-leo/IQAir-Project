@@ -344,6 +344,16 @@
     <div id="rpt-news-draft-fields" class="rpt-news-draft-fields"></div>
   </section>
 
+  <div class="sheet-mask" id="rpt-rename-page-mask" hidden>
+    <section class="sheet rpt-delete-page-sheet" role="dialog" aria-modal="true" aria-labelledby="rpt-rename-page-title">
+      <button class="kill" id="rpt-rename-page-close" type="button" aria-label="关闭">✕</button>
+      <h2 id="rpt-rename-page-title">重命名自定义页</h2>
+      <p>名称会同步显示在编辑页签与放映顺序中。</p>
+      <input id="rpt-rename-page-input" type="text" maxlength="40" placeholder="例如：本周重点项目">
+      <div class="rpt-delete-page-actions"><button class="ghost" id="rpt-rename-page-cancel" type="button">取消</button><button class="solid" id="rpt-rename-page-confirm" type="button">保存名称</button></div>
+    </section>
+  </div>
+
   <!-- ══════════════ 视图六：素材质检 ══════════════ -->
   <section class="view view-mc" id="view-materialcheck" data-view="materialcheck" data-theme-ready="true" hidden>
     <div class="canvas rv-canvas">

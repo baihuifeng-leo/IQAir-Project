@@ -277,9 +277,10 @@ function scheduleWeeklyNews() {
   if (next <= now) next.setDate(next.getDate() + 7);
   setTimeout(async () => {
     try {
-      const news = await reportNews.refreshSafely();
-      console.log(`[report-news] 已收集 ${news.weekStart} AI 新闻草稿`);
-      await audit(null, 'reports.news.collect.auto', { detail: [`收集 ${news.weekStart} AI 新闻候选`] });
+      const results = await Promise.allSettled(users.map((user) => reportNews.refreshSafely(user.id)));
+      const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+      console.log(`[report-news] 已为 ${succeeded}/${users.length} 个账户收集 AI 新闻候选`);
+      await audit(null, 'reports.news.collect.auto', { detail: [`为 ${succeeded} 个账户收集 AI 新闻候选`] });
     } catch (e) { console.error('[report-news]', e.message); }
     scheduleWeeklyNews();
   }, next - now).unref?.();
@@ -673,47 +674,42 @@ const server = http.createServer(async (req, res) => {
     /* ── 报告管理 · 个人报告 ─────────────────────────────── */
     if (p === '/api/reports/personal/summary') return json(res, 200, await reports.summary(me.id));
 
-    if (p === '/api/reports/news/summary') return json(res, 200, await reportNews.summary());
+    if (p === '/api/reports/news/summary') return json(res, 200, await reportNews.summary(me.id));
 
     if (p === '/api/reports/news/refresh' && req.method === 'POST') {
-      if (!me.admin) return json(res, 403, { error: '只有管理员能刷新新闻' });
       let news;
       const input = await body(req, 4096);
-      try { news = await reportNews.refreshSafely({ rotate: !!input.rotate }); }
+      try { news = await reportNews.refreshSafely(me.id, { rotate: !!input.rotate }); }
       catch (e) { return json(res, 502, { error: `新闻抓取失败：${e.message}` }); }
       audit(me, 'reports.news.collect', { detail: [`手动收集 ${news.weekStart} AI 新闻候选`] });
       return json(res, 200, news);
     }
 
     if (p === '/api/reports/news/import-url' && req.method === 'POST') {
-      if (!me.admin) return json(res, 403, { error: '只有管理员能添加新闻链接' });
       const input = await body(req, 8192);
-      let card; try { card = await reportNews.importUrl(input.weekStart, input.url); }
+      let card; try { card = await reportNews.importUrl(me.id, input.weekStart, input.url); }
       catch (e) { return json(res, 400, { error: `读取新闻失败：${e.message}` }); }
       audit(me, 'reports.news.import-url', { detail: [`添加新闻候选：${card.title}`] });
       return json(res, 200, card);
     }
 
     if (p === '/api/reports/news/draft/save' && req.method === 'POST') {
-      if (!me.admin) return json(res, 403, { error: '只有管理员能编辑发布稿' });
-      let draft; try { draft = await reportNews.saveDraft(await body(req, 65536)); }
+      let draft; try { draft = await reportNews.saveDraft(me.id, await body(req, 65536)); }
       catch (e) { return json(res, 400, { error: e.message }); }
       audit(me, 'reports.news.draft.save', { detail: [`保存 ${draft.weekStart} AI 新闻发布稿`] });
       return json(res, 200, draft);
     }
 
     if (p === '/api/reports/news/generate' && req.method === 'POST') {
-      if (!me.admin) return json(res, 403, { error: '只有管理员能生成新闻页' });
       const input = await body(req, 4096);
-      let news; try { news = await reportNews.generate(input.weekStart, input.ids); }
+      let news; try { news = await reportNews.generate(me.id, input.weekStart, input.ids); }
       catch (e) { return json(res, 400, { error: e.message }); }
       audit(me, 'reports.news.generate', { detail: [`生成 ${news.weekStart} 两条 AI 新闻全屏稿`] });
       return json(res, 200, news);
     }
 
     if (p === '/api/reports/news/publish' && req.method === 'POST') {
-      if (!me.admin) return json(res, 403, { error: '只有管理员能发布新闻' });
-      let news; try { news = await reportNews.publish((await body(req, 4096)).weekStart); }
+      let news; try { news = await reportNews.publish(me.id, (await body(req, 4096)).weekStart); }
       catch (e) { return json(res, 400, { error: e.message }); }
       audit(me, 'reports.news.publish', { detail: [`发布 ${news.weekStart} AI 新闻全屏稿`] });
       return json(res, 200, news);
@@ -949,10 +945,12 @@ const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UP
   await materialcheckOcr.checkAvailable();
   scheduleNightly();
   scheduleWeeklyNews();
-  reportNews.summary().then(({ weekStart, candidates }) => {
-    if (!candidates?.length) return reportNews.refreshSafely()
-      .then((collected) => console.log(`[report-news] 启动补收集：${collected.weekStart}`))
-      .catch((e) => console.error('[report-news] 启动抓取失败：' + e.message));
-  });
+  Promise.all(users.map(async (user) => {
+    const { weekStart, candidates } = await reportNews.summary(user.id);
+    if (!candidates?.length) {
+      try { const collected = await reportNews.refreshSafely(user.id); console.log(`[report-news] 为 ${user.name} 启动补收集：${collected.weekStart}`); }
+      catch (e) { console.error(`[report-news] ${user.name} 启动抓取失败：` + e.message); }
+    }
+  }));
   server.listen(PORT, '0.0.0.0', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
 })();

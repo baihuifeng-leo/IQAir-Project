@@ -34,8 +34,9 @@ const ReportSlides = (() => {
   function mountPage(id) { pageId = id; selectedId = null; editingId = null; render(); }
   function unmountPage() { pageId = null; selectedId = null; editingId = null; if (host) host.replaceChildren(); }
   function setPages(nextPages) { pages = Array.isArray(nextPages) ? nextPages : []; if (pageId && !currentPage()) unmountPage(); }
-  function addPage() { const page = { id: uid('pg_'), elements: [] }; pages.push(page); scheduleSave(); return page; }
+  function addPage() { const page = { id: uid('pg_'), name: '', elements: [] }; pages.push(page); scheduleSave(); return page; }
   function deletePage(id) { const at = pages.findIndex((p) => p.id === id); if (at < 0) return false; pages.splice(at, 1); if (pageId === id) unmountPage(); scheduleSave(); return true; }
+  function renamePage(id, name) { const page = pages.find((item) => item.id === id); if (!page) return false; page.name = String(name || '').trim().slice(0, 40); scheduleSave(); return true; }
 
   function render() {
     const page = currentPage(); if (!host || !page) return;
@@ -60,6 +61,7 @@ const ReportSlides = (() => {
     bar.append(mkBtn(fullscreen ? '退出全屏编辑' : '全屏编辑', toggleEditFullscreen, fullscreen ? '退出全屏编辑' : '放大当前画布进行编辑'), mkBtn('新建文字', addTextElement), mkBtn('插入图片', insertImage));
     [['置顶', bringToFront], ['置底', sendToBack], ['删除', deleteSelected]].forEach(([l, fn]) => { const b = mkBtn(l, fn); b.disabled = !el; bar.appendChild(b); });
     if (el?.type === 'text') {
+      const edit = mkBtn('编辑文字', () => enterTextEdit(el)); edit.disabled = editingId === el.id; bar.appendChild(edit);
       const size = document.createElement('input'); size.type = 'number'; size.min = '10'; size.max = '160'; size.className = 'rs-toolbar-size'; size.value = el.fontSize || DEFAULT_FONT_SIZE;
       size.onchange = () => { el.fontSize = Math.max(10, Math.min(160, Number(size.value) || DEFAULT_FONT_SIZE)); scheduleSave(); render(); }; bar.appendChild(size);
       const color = document.createElement('input'); color.type = 'color'; color.className = 'rs-toolbar-color'; color.value = el.color || '#808080';
@@ -79,13 +81,16 @@ const ReportSlides = (() => {
     Object.assign(node.style, { left: el.x + 'px', top: el.y + 'px', width: el.w + 'px', height: el.h + 'px', zIndex: el.z });
     node.addEventListener('pointerdown', (e) => startMove(e, el));
     if (el.type === 'text') {
-      const box = document.createElement('div'); box.className = 'rs-text'; box.textContent = el.text;
+      const isEditing = editingId === el.id;
+      const box = document.createElement(isEditing ? 'textarea' : 'div'); box.className = 'rs-text' + (isEditing ? ' rs-text-editor' : '');
+      if (isEditing) { box.value = el.text; box.setAttribute('aria-label', '编辑文字内容'); }
+      else box.textContent = el.text;
       Object.assign(box.style, { fontSize: (el.fontSize || DEFAULT_FONT_SIZE) + 'px', color: el.color || 'var(--text)', fontWeight: el.bold ? '700' : '400', fontStyle: el.italic ? 'italic' : 'normal', textAlign: el.align || 'left' });
       if (!presenting) {
         node.addEventListener('dblclick', (e) => { e.stopPropagation(); enterTextEdit(el); });
-        if (editingId === el.id) {
-          box.contentEditable = 'true';
-          box.addEventListener('input', () => { el.text = box.textContent.slice(0, 4000); autoGrowHeight(box, el); scheduleSave(); });
+        if (isEditing) {
+          box.addEventListener('pointerdown', (e) => e.stopPropagation());
+          box.addEventListener('input', () => { el.text = box.value.slice(0, 4000); autoGrowHeight(box, el); scheduleSave(); });
           box.addEventListener('blur', () => commitTextEdit(el));
           box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); box.blur(); } });
         }
@@ -144,5 +149,5 @@ const ReportSlides = (() => {
   function savePageOrder(order) { pendingPageOrder = Array.isArray(order) ? order.slice() : null; scheduleSave(); }
   function setPresenting(value) { presenting = value; if (pageId) render(); }
   function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
-  return { init, setPages, addPage, deletePage, mountPage, unmountPage, setPresenting, savePageOrder, flushSave, pageCount: () => pages.length };
+  return { init, setPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, savePageOrder, flushSave, pageCount: () => pages.length };
 })();
