@@ -12,6 +12,7 @@ const { diffSummary } = require('./audit.js');
 const { ReviewStore } = require('./reviews-store.js');
 const { Preview3DStore } = require('./preview3d-store.js');
 const { ReportStore } = require('./report-store.js');
+const { ReportNewsStore } = require('./report-news-store.js');
 const { MaterialCheckStore, PLATFORMS: MATERIALCHECK_PLATFORMS } = require('./materialcheck-store.js');
 const materialcheckOcr = require('./materialcheck-ocr.js');
 const { pipeline } = require('stream/promises');
@@ -29,6 +30,7 @@ const AUDIT_FILE = path.join(DATA_DIR, 'audit.log');
 const REVIEWS_DIR = path.join(DATA_DIR, 'reviews');
 const PRODUCTS3D_DIR = path.join(DATA_DIR, 'products3d');
 const REPORTS_DIR = path.join(DATA_DIR, 'reports');
+const REPORT_NEWS_DIR = path.join(DATA_DIR, 'report-news');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SEED_FILE = path.join(PUBLIC_DIR, 'seed.json');
 
@@ -262,6 +264,25 @@ function scheduleNightly() {
     scheduleNightly();
   }, wait).unref?.();
   console.log(`[backup] 下次自动备份：${next.toLocaleString('zh-CN')}`);
+}
+
+/** 每周一 07:05（服务器本地时区）发布 AI 新闻页；重启后也会补抓本周。 */
+function scheduleWeeklyNews() {
+  const now = new Date();
+  const next = new Date(now);
+  const days = (8 - next.getDay()) % 7 || 7; // 下一个周一；今天周一但过了发布时间也等下周
+  next.setDate(next.getDate() + days);
+  next.setHours(7, 5, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 7);
+  setTimeout(async () => {
+    try {
+      const news = await reportNews.refreshSafely();
+      console.log(`[report-news] 已发布 ${news.weekStart} AI 新闻`);
+      await audit(null, 'reports.news.auto', { detail: [`发布 ${news.weekStart} AI 新闻页`] });
+    } catch (e) { console.error('[report-news]', e.message); }
+    scheduleWeeklyNews();
+  }, next - now).unref?.();
+  console.log(`[report-news] 下次自动发布：${next.toLocaleString('zh-CN')}`);
 }
 
 function readBody(req, limit = MAX_BODY) {
@@ -651,6 +672,17 @@ const server = http.createServer(async (req, res) => {
     /* ── 报告管理 · 个人报告 ─────────────────────────────── */
     if (p === '/api/reports/personal/summary') return json(res, 200, await reports.summary(me.id));
 
+    if (p === '/api/reports/news/summary') return json(res, 200, await reportNews.summary());
+
+    if (p === '/api/reports/news/refresh' && req.method === 'POST') {
+      if (!me.admin) return json(res, 403, { error: '只有管理员能刷新新闻' });
+      let news;
+      try { news = await reportNews.refreshSafely(); }
+      catch (e) { return json(res, 502, { error: `新闻抓取失败：${e.message}` }); }
+      audit(me, 'reports.news.refresh', { detail: [`手动发布 ${news.weekStart} AI 新闻页`] });
+      return json(res, 200, news);
+    }
+
     if (p === '/api/reports/personal/import' && req.method === 'POST') {
       const buf = await readBinary(req, MAX_XLSX);
       let report;
@@ -866,10 +898,11 @@ const server = http.createServer(async (req, res) => {
 const reviews = new ReviewStore(REVIEWS_DIR);
 const preview3d = new Preview3DStore(PRODUCTS3D_DIR);
 const reports = new ReportStore(REPORTS_DIR);
+const reportNews = new ReportNewsStore(REPORT_NEWS_DIR);
 const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UPLOAD_DIR);
 
 (async () => {
-  for (const d of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, REVIEWS_DIR, PRODUCTS3D_DIR, REPORTS_DIR]) await fsp.mkdir(d, { recursive: true });
+  for (const d of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, REVIEWS_DIR, PRODUCTS3D_DIR, REPORTS_DIR, REPORT_NEWS_DIR]) await fsp.mkdir(d, { recursive: true });
   try { SECRET = await fsp.readFile(SECRET_FILE); }
   catch { SECRET = crypto.randomBytes(32); await fsp.writeFile(SECRET_FILE, SECRET, { mode: 0o600 }); }
   await loadUsers();
@@ -879,5 +912,11 @@ const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UP
   await materialcheck.load();
   await materialcheckOcr.checkAvailable();
   scheduleNightly();
+  scheduleWeeklyNews();
+  reportNews.summary().then(({ weekStart, news }) => {
+    if (!news || news.weekStart !== weekStart) return reportNews.refreshSafely()
+      .then((published) => console.log(`[report-news] 启动补发布：${published.weekStart}`))
+      .catch((e) => console.error('[report-news] 启动抓取失败：' + e.message));
+  });
   server.listen(PORT, '0.0.0.0', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
 })();
