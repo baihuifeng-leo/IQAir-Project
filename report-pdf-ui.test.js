@@ -10,6 +10,7 @@ const css = fs.readFileSync('public/styles.css', 'utf8');
 
 assert.match(html, /id="rpt-export-pdf-btn"/, '个人报告标题栏应有导出 PDF 入口');
 assert.match(js, /function pdfFilename\(date = new Date\(\)\)/, '文件名必须随当前日期生成');
+assert.match(js, /const monday = startOfWeek\(date\); monday\.setDate\(monday\.getDate\(\) - 7\);/, '周报文件名必须使用上一个完整自然周');
 assert.match(js, /FY\$\{String\(year\)\.slice\(-2\)\} Q\$\{quarter\}W\$\{String\(week\)\.padStart\(2, '0'\)\}-Weekly Meeting/, 'PDF 文件名应包含财年、季度和周次');
 assert.match(js, /function openPdfDocument\(/, 'PDF 必须在独立的导出文档中生成，不能复用工作台页面');
 assert.doesNotMatch(js, /document\.body\.classList\.add\('rpt-presenting', 'rpt-pdf-export'\)/, 'PDF 不能将工作台页面直接切换到打印状态');

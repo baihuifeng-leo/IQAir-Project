@@ -786,8 +786,10 @@ const Report = (() => {
     return out;
   }
   function pdfFilename(date = new Date()) {
-    const monday = startOfWeek(date), sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-    const year = date.getFullYear(), quarter = Math.floor(date.getMonth() / 3) + 1;
+    // 周报汇总的是最近一个完整自然周；导出日属于本周，不能写进报告文件名。
+    const monday = startOfWeek(date); monday.setDate(monday.getDate() - 7);
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+    const year = monday.getFullYear(), quarter = Math.floor(monday.getMonth() / 3) + 1;
     const quarterStart = startOfWeek(new Date(year, (quarter - 1) * 3, 1));
     const week = Math.floor((monday - quarterStart) / 604800000) + 1;
     const short = (d) => String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
