@@ -780,6 +780,54 @@ const Report = (() => {
   /* ── 放映模式：全屏、隐藏顶栏/侧栏，内容放大，方便会议投屏 ── */
   function togglePresent() { presenting ? exitPresent() : enterPresent(); }
 
+  function startOfWeek(date) {
+    const out = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    out.setDate(out.getDate() - ((out.getDay() + 6) % 7));
+    return out;
+  }
+  function pdfFilename(date = new Date()) {
+    const monday = startOfWeek(date), sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+    const year = date.getFullYear(), quarter = Math.floor(date.getMonth() / 3) + 1;
+    const quarterStart = startOfWeek(new Date(year, (quarter - 1) * 3, 1));
+    const week = Math.floor((monday - quarterStart) / 604800000) + 1;
+    const short = (d) => String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
+    return `FY${String(year).slice(-2)} Q${quarter}W${String(week).padStart(2, '0')}-Weekly Meeting（${short(monday)}-${short(sunday)}）`;
+  }
+  function preparePdfPages() {
+    const holder = A.$('#rpt-pdf-pages'); holder.replaceChildren();
+    const restore = [];
+    reportPages().forEach((item) => {
+      if (item.slide) {
+        const printPage = ReportSlides.buildPrintPage(item.id);
+        if (printPage) holder.appendChild(printPage);
+        return;
+      }
+      const source = A.$(item.selector);
+      if (!source) return;
+      restore.push({ source, parent: source.parentNode, next: source.nextSibling, hidden: source.hidden });
+      source.hidden = false; holder.appendChild(source);
+    });
+    holder.hidden = false;
+    return () => {
+      restore.forEach(({ source, parent, next, hidden }) => { parent.insertBefore(source, next); source.hidden = hidden; });
+      holder.replaceChildren(); holder.hidden = true;
+    };
+  }
+  function exportPdf() {
+    if (!data) return A.toast('报告数据加载中，请稍后再试', 'bad');
+    const button = A.$('#rpt-export-pdf-btn'); const title = document.title, fileName = pdfFilename(), wasPresenting = presenting;
+    const restorePages = preparePdfPages();
+    document.body.classList.add('rpt-presenting', 'rpt-pdf-export'); document.title = fileName;
+    button.disabled = true; button.textContent = '正在生成 PDF…';
+    const restore = () => {
+      document.body.classList.remove('rpt-pdf-export'); if (!wasPresenting) document.body.classList.remove('rpt-presenting'); document.title = title; restorePages();
+      button.disabled = false; button.textContent = '⭳ 导出 PDF'; switchPage(page);
+      window.removeEventListener('afterprint', restore);
+    };
+    window.addEventListener('afterprint', restore);
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+  }
+
   function enterPresent() {
     presenting = true;
     document.body.classList.add('rpt-presenting');
@@ -819,6 +867,7 @@ const Report = (() => {
     A.$('#rpt-personal-view').hidden = s !== 'personal';
     A.$('#rpt-public-view').hidden = s !== 'public';
     A.$('#rpt-head-sub').textContent = s === 'personal' ? '周报数据看板 · 个人报告' : '周报数据看板 · 公共报告';
+    A.$('#rpt-export-pdf-btn').hidden = s !== 'personal';
     A.$('#rpt-present-btn').hidden = s !== 'personal';
     if (s !== 'personal' && presenting) exitPresent();
     if (s === 'personal' && chart) requestAnimationFrame(() => chart.resize());
@@ -903,6 +952,7 @@ const Report = (() => {
     A.$('#rpt-rename-page-confirm').onclick = renameSlide;
     A.$('#rpt-rename-page-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') renameSlide(); });
     A.$('#rpt-rename-page-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-rename-page-mask') closeRenameSlide(); });
+    A.$('#rpt-export-pdf-btn').onclick = exportPdf;
     A.$('#rpt-present-btn').onclick = togglePresent;
     A.$('#rpt-news-open-picker').onclick = openNewsPicker;
     A.$('#rpt-news-open-picker').hidden = false;

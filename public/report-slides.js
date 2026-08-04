@@ -100,6 +100,22 @@ const ReportSlides = (() => {
     if (!presenting && el.id === selectedId) attachHandles(node, el);
     return node;
   }
+  function buildPrintPage(id) {
+    const page = pages.find((item) => item.id === id); if (!page) return null;
+    const section = document.createElement('section'); section.className = 'rpt-page rpt-pdf-custom-page'; section.dataset.pageId = page.id;
+    const canvas = document.createElement('div'); canvas.className = 'rs-canvas';
+    page.elements.slice().sort((a, b) => a.z - b.z).forEach((el) => {
+      const node = document.createElement('div'); node.className = 'rs-el';
+      Object.assign(node.style, { left: el.x + 'px', top: el.y + 'px', width: el.w + 'px', height: el.h + 'px', zIndex: el.z });
+      if (el.type === 'text') {
+        const box = document.createElement('div'); box.className = 'rs-text'; box.textContent = el.text;
+        Object.assign(box.style, { fontSize: (el.fontSize || DEFAULT_FONT_SIZE) + 'px', color: el.color || 'var(--text)', fontWeight: el.bold ? '700' : '400', fontStyle: el.italic ? 'italic' : 'normal', textAlign: el.align || 'left' });
+        node.appendChild(box);
+      } else { const img = document.createElement('img'); img.className = 'rs-image'; img.src = el.url; img.alt = ''; node.appendChild(img); }
+      canvas.appendChild(node);
+    });
+    section.appendChild(canvas); return section;
+  }
   function onCanvasPointerDown(e) { if (e.target === e.currentTarget) { selectedId = null; editingId = null; render(); } }
   function startMove(e, el) {
     if (presenting || editingId === el.id || e.target.classList.contains('rs-handle')) return;
@@ -172,5 +188,5 @@ const ReportSlides = (() => {
   function savePageOrder(order) { pendingPageOrder = Array.isArray(order) ? order.slice() : null; scheduleSave(); }
   function setPresenting(value) { presenting = value; if (pageId) render(); }
   function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('paste', pasteImage); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
-  return { init, setPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, savePageOrder, flushSave, pageCount: () => pages.length };
+  return { init, setPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, savePageOrder, flushSave, buildPrintPage, pageCount: () => pages.length };
 })();

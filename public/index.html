@@ -247,6 +247,7 @@
               <p class="rail-hint">公共报告还在开发中，敬请期待。</p>
             </div>
           </div>
+          <button class="ghost" id="rpt-export-pdf-btn" title="按当前报告与放映顺序导出 PDF">⭳ 导出 PDF</button>
           <button class="ghost" id="rpt-present-btn">▶ 放映模式</button>
         </div>
       </div>
@@ -326,6 +327,7 @@
         </div>
 
         <div class="rpt-page rpt-page-custom" id="rpt-page-custom" hidden></div>
+        <div id="rpt-pdf-pages" hidden aria-hidden="true"></div>
       </div>
 
       <div class="rv-scroll" id="rpt-public-view" hidden>
@@ -345,12 +347,14 @@
   </section>
 
   <div class="sheet-mask" id="rpt-rename-page-mask" hidden>
-    <section class="sheet rpt-delete-page-sheet" role="dialog" aria-modal="true" aria-labelledby="rpt-rename-page-title">
-      <button class="kill" id="rpt-rename-page-close" type="button" aria-label="关闭">✕</button>
-      <h2 id="rpt-rename-page-title">重命名自定义页</h2>
-      <p>名称会同步显示在编辑页签与放映顺序中。</p>
-      <input id="rpt-rename-page-input" type="text" maxlength="40" placeholder="例如：本周重点项目">
-      <div class="rpt-delete-page-actions"><button class="ghost" id="rpt-rename-page-cancel" type="button">取消</button><button class="solid" id="rpt-rename-page-confirm" type="button">保存名称</button></div>
+    <section class="sheet rpt-rename-page-sheet" role="dialog" aria-modal="true" aria-labelledby="rpt-rename-page-title">
+      <div class="sheet-head"><h2 id="rpt-rename-page-title">重命名自定义页</h2><button class="kill" id="rpt-rename-page-close" type="button" aria-label="关闭">✕</button></div>
+      <div class="sheet-body">
+        <p class="rpt-rename-page-hint">名称会同步显示在编辑页签与放映顺序中。</p>
+        <label class="rpt-rename-page-label" for="rpt-rename-page-input">页面名称</label>
+        <input id="rpt-rename-page-input" type="text" maxlength="40" placeholder="例如：本周重点项目">
+        <div class="rpt-rename-page-actions"><button class="ghost" id="rpt-rename-page-cancel" type="button">取消</button><button class="solid" id="rpt-rename-page-confirm" type="button">保存名称</button></div>
+      </div>
     </section>
   </div>
 

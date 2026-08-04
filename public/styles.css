@@ -1623,6 +1623,14 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-delete-page-sheet { width: min(390px, 100%); }
 .rpt-delete-page-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
 .rpt-delete-page-sheet input { box-sizing: border-box; width: 100%; margin-top: 14px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--field-bg); font: inherit; }
+.rpt-rename-page-sheet { width: min(440px, 100%); }
+.rpt-rename-page-sheet .sheet-body { padding: 22px 24px 24px; }
+.rpt-rename-page-hint { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.55; }
+.rpt-rename-page-label { display: block; margin: 22px 0 7px; color: var(--text); font-size: 12.5px; font-weight: 700; }
+.rpt-rename-page-sheet input { box-sizing: border-box; width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--field-bg); font: inherit; }
+.rpt-rename-page-sheet input:focus { outline: 2px solid color-mix(in srgb, var(--mint) 54%, transparent); outline-offset: 2px; border-color: var(--mint); }
+.rpt-rename-page-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }
+.rpt-rename-page-actions .solid { width: auto; }
 
 /* ── 第 3 页：两条新闻组成一张演示页 ──────────────────── */
 .rpt-news-head { align-items: center; }
@@ -2038,6 +2046,32 @@ body.rpt-presenting .rpt-wm-chbar { height: 10px; }
 body.rpt-presenting .rpt-wm-chname,
 body.rpt-presenting .rpt-wm-chval { font-size: clamp(11px, 0.72vw, 13px); }
 body.rpt-presenting .rpt-wm-note { grid-area: note; font-size: clamp(13px, 0.9vw, 17px); font-weight: 600; line-height: 1.45; padding: clamp(9px, 1vh, 13px) clamp(12px, 1.2vw, 18px); margin-top: 0; border-left-width: 3px; }
+
+/* PDF 使用 PowerPoint 默认宽屏纸张。内容只在导出瞬间移入这个打印容器，
+   因此既遵循放映模式的版式，也不会影响平时的编辑和翻页。 */
+@page rptpdf { size: 13.333in 7.5in; margin: 0; }
+@media print {
+  html:has(body.rpt-pdf-export), body.rpt-pdf-export { width: 13.333in; min-width: 13.333in; margin: 0; background: #080c14; }
+  body.rpt-pdf-export .topbar,
+  body.rpt-pdf-export #view-reports > .canvas > .rpt-head,
+  body.rpt-pdf-export #rpt-page-switch,
+  body.rpt-pdf-export #rpt-page-custom,
+  body.rpt-pdf-export #rpt-public-view,
+  body.rpt-pdf-export .rpt-exit-present { display: none !important; }
+  body.rpt-pdf-export #workspace,
+  body.rpt-pdf-export #view-reports,
+  body.rpt-pdf-export #rpt-canvas,
+  body.rpt-pdf-export #rpt-personal-view { display: block !important; width: auto; height: auto; min-height: 0; overflow: visible; padding: 0; background: transparent; }
+  body.rpt-pdf-export #rpt-pdf-pages { display: block !important; }
+  body.rpt-pdf-export #rpt-pdf-pages > .rpt-page {
+    display: flex !important; box-sizing: border-box; width: 1280px; height: 720px; min-height: 720px;
+    overflow: hidden; page: rptpdf; break-after: page; background: #080c14;
+  }
+  body.rpt-pdf-export #rpt-pdf-pages > .rpt-page:not(.rpt-pdf-custom-page) { padding: 22px 48px; }
+  body.rpt-pdf-export #rpt-pdf-pages > .rpt-page:last-child { break-after: auto; }
+  body.rpt-pdf-export .rpt-pdf-custom-page { align-items: stretch; justify-content: stretch; padding: 0; }
+  body.rpt-pdf-export .rpt-pdf-custom-page .rs-canvas { transform: none !important; box-shadow: none; }
+}
 
 /* ═══ 素材质检 (materialcheck) ═══ */
 .mc-subview-switch { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--field-bg); }
