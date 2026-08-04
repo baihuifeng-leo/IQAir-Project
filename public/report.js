@@ -804,14 +804,24 @@ const Report = (() => {
       }
       const source = A.$(item.selector);
       if (!source) return;
-      restore.push({ source, parent: source.parentNode, next: source.nextSibling, hidden: source.hidden });
-      source.hidden = false; holder.appendChild(source);
+      const children = [...source.childNodes], frame = document.createElement('div');
+      frame.className = 'rpt-pdf-fit-content'; frame.append(...children);
+      restore.push({ source, parent: source.parentNode, next: source.nextSibling, hidden: source.hidden, className: source.className, children });
+      source.hidden = false; source.classList.add('rpt-pdf-fixed-page'); source.appendChild(frame); holder.appendChild(source);
     });
     holder.hidden = false;
     return () => {
-      restore.forEach(({ source, parent, next, hidden }) => { parent.insertBefore(source, next); source.hidden = hidden; });
+      restore.forEach(({ source, parent, next, hidden, className, children }) => { source.replaceChildren(...children); source.className = className; parent.insertBefore(source, next); source.hidden = hidden; });
       holder.replaceChildren(); holder.hidden = true;
     };
+  }
+  function fitPdfPages() {
+    A.$$('#rpt-pdf-pages > .rpt-pdf-fixed-page').forEach((pageEl) => {
+      const content = pageEl.querySelector('.rpt-pdf-fit-content'); if (!content) return;
+      pageEl.style.setProperty('--rpt-pdf-scale', '1');
+      const scale = Math.min(1, 720 / Math.max(1, content.scrollHeight));
+      pageEl.style.setProperty('--rpt-pdf-scale', String(scale));
+    });
   }
   function exportPdf() {
     if (!data) return A.toast('报告数据加载中，请稍后再试', 'bad');
@@ -825,7 +835,7 @@ const Report = (() => {
       window.removeEventListener('afterprint', restore);
     };
     window.addEventListener('afterprint', restore);
-    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+    requestAnimationFrame(() => requestAnimationFrame(() => { fitPdfPages(); requestAnimationFrame(() => window.print()); }));
   }
 
   function enterPresent() {

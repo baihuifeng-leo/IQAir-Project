@@ -1973,16 +1973,16 @@ body.rpt-presenting .rpt-scope-badge { font-size: clamp(12px, 0.75vw, 14px); pad
    「更多指标」「渠道占比」「结论」这些没有指定 grid-area 的子元素就被
    自动放进隐式生成的行里、且宽度只有窄的那一列（1fr），导致结论段落
    看起来早早就换行——不是字号问题，是它被塞进了一个很窄的格子。 */
-body.rpt-presenting #rpt-page-1 > .rpt-sec-first {
+body.rpt-presenting #rpt-page-1 .rpt-sec-first {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
   grid-template-areas: "head head" "chart side";
   column-gap: clamp(20px, 2.6vw, 40px);
   row-gap: 10px;
 }
-body.rpt-presenting #rpt-page-1 > .rpt-sec-first > .rpt-sec-head { grid-area: head; }
-body.rpt-presenting #rpt-page-1 > .rpt-sec-first > .rpt-trend-wrap { grid-area: chart; }
-body.rpt-presenting #rpt-page-1 > .rpt-sec-first > .rpt-sidecol { grid-area: side; display: flex; flex-direction: column; min-height: 0; }
+body.rpt-presenting #rpt-page-1 .rpt-sec-first > .rpt-sec-head { grid-area: head; }
+body.rpt-presenting #rpt-page-1 .rpt-sec-first > .rpt-trend-wrap { grid-area: chart; }
+body.rpt-presenting #rpt-page-1 .rpt-sec-first > .rpt-sidecol { grid-area: side; display: flex; flex-direction: column; min-height: 0; }
 
 body.rpt-presenting .rpt-trend-wrap { height: clamp(240px, 40vh, 500px); margin-top: 6px; }
 
@@ -2028,7 +2028,7 @@ body.rpt-presenting .rpt-highlight {
 
 /* ── 第 2 页：趋势图先建立渠道变化的整体判断，随后用浏览量与访客数两张
    重点卡承接，剩余指标、渠道构成和点评填满一张放映页。 */
-body.rpt-presenting #rpt-page-2 > .rpt-sec-first { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "head head" "trend trend" "metrics metrics" "channels channels" "note note"; gap: clamp(8px, 1vh, 13px) clamp(22px, 2vw, 34px); align-content: start; }
+body.rpt-presenting #rpt-page-2 .rpt-sec-first { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "head head" "trend trend" "metrics metrics" "channels channels" "note note"; gap: clamp(8px, 1vh, 13px) clamp(22px, 2vw, 34px); align-content: start; }
 body.rpt-presenting #rpt-page-2 .rpt-sec-head { grid-area: head; }
 body.rpt-presenting .rpt-wm-trend { grid-area: trend; height: clamp(200px, 27vh, 320px); margin-top: 0; }
 body.rpt-presenting .rpt-wm-metrics { grid-area: metrics; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 0; }
@@ -2063,14 +2063,22 @@ body.rpt-presenting .rpt-wm-note { grid-area: note; font-size: clamp(13px, 0.9vw
   body.rpt-pdf-export #rpt-canvas,
   body.rpt-pdf-export #rpt-personal-view { display: block !important; width: auto; height: auto; min-height: 0; overflow: visible; padding: 0; background: transparent; }
   body.rpt-pdf-export #rpt-pdf-pages { display: block !important; }
-  body.rpt-pdf-export #rpt-pdf-pages > .rpt-page {
-    display: flex !important; box-sizing: border-box; width: 1280px; height: 720px; min-height: 720px;
-    overflow: hidden; page: rptpdf; break-after: page; background: #080c14;
-  }
-  body.rpt-pdf-export #rpt-pdf-pages > .rpt-page:not(.rpt-pdf-custom-page) { padding: 22px 48px; }
+  body.rpt-pdf-export #rpt-pdf-pages > .rpt-page { page: rptpdf; break-after: page; }
   body.rpt-pdf-export #rpt-pdf-pages > .rpt-page:last-child { break-after: auto; }
-  body.rpt-pdf-export .rpt-pdf-custom-page { align-items: stretch; justify-content: stretch; padding: 0; }
+  body.rpt-pdf-export .rpt-pdf-custom-page { display: flex !important; box-sizing: border-box; width: 1280px; height: 720px; min-height: 720px; align-items: stretch; justify-content: stretch; padding: 0; overflow: hidden; background: #080c14; }
   body.rpt-pdf-export .rpt-pdf-custom-page .rs-canvas { transform: none !important; box-shadow: none; }
+}
+
+/* 这层不放进 @media print：导出前需先按同一张 1280×720 画布测量内容高度，
+   再等比缩放。否则浏览器打印预览只会看到被 720px 裁掉的下半页。 */
+body.rpt-pdf-export #rpt-pdf-pages > .rpt-pdf-fixed-page {
+  display: block !important; box-sizing: border-box; width: 1280px; height: 720px; min-height: 720px;
+  overflow: visible; background: #080c14;
+}
+body.rpt-pdf-export .rpt-pdf-fit-content {
+  --rpt-pdf-scale: 1;
+  box-sizing: border-box; width: calc(100% / var(--rpt-pdf-scale)); min-height: calc(100% / var(--rpt-pdf-scale));
+  padding: 22px 48px; transform: scale(var(--rpt-pdf-scale)); transform-origin: top left;
 }
 
 /* ═══ 素材质检 (materialcheck) ═══ */
