@@ -1616,10 +1616,12 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-page-switch .rpt-page-tab:focus-within { outline: 1px solid var(--mint); outline-offset: 2px; }
 .rpt-page-switch .rpt-page-tab.dragging { opacity: .42; cursor: grabbing; }
 .rpt-page-switch .rpt-page-tab.drop-target { background: var(--mint-dim); }
-.rpt-page-switch .rpt-page-tab .kill { opacity: .7; width: 16px; height: 16px; font-size: 11px; }
-.rpt-page-switch .rpt-page-tab.on .kill { color: var(--mint); }
-.rpt-page-switch .rpt-page-tab .rename { opacity: .78; width: 18px; height: 18px; padding: 0; font-size: 12px; }
-.rpt-page-switch .rpt-page-tab.on .rename { color: var(--mint); }
+.rpt-page-switch .rpt-page-tab .page-action { min-height: 26px; padding: 4px 7px; border: 1px solid transparent; border-radius: 6px; font-size: 11px; line-height: 1; opacity: .92; }
+.rpt-page-switch .rpt-page-tab .page-action.rename { color: var(--dim); }
+.rpt-page-switch .rpt-page-tab .page-action.kill { color: var(--bad-text); }
+.rpt-page-switch .rpt-page-tab .page-action:hover { background: var(--overlay-weak); border-color: var(--line); }
+.rpt-page-switch .rpt-page-tab .page-action.kill:hover { background: color-mix(in srgb, var(--bad) 14%, transparent); border-color: color-mix(in srgb, var(--bad) 42%, var(--line)); }
+.rpt-page-switch .rpt-page-tab.on .page-action.rename { color: var(--mint); }
 .rpt-delete-page-sheet { width: min(390px, 100%); }
 .rpt-delete-page-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
 .rpt-delete-page-sheet input { box-sizing: border-box; width: 100%; margin-top: 14px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--field-bg); font: inherit; }
@@ -1629,8 +1631,8 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-rename-page-label { display: block; margin: 22px 0 7px; color: var(--text); font-size: 12.5px; font-weight: 700; }
 .rpt-rename-page-sheet input { box-sizing: border-box; width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--field-bg); font: inherit; }
 .rpt-rename-page-sheet input:focus { outline: 2px solid color-mix(in srgb, var(--mint) 54%, transparent); outline-offset: 2px; border-color: var(--mint); }
-.rpt-rename-page-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }
-.rpt-rename-page-actions .solid { width: auto; }
+.rpt-rename-page-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 10px; margin-top: 24px; }
+.rpt-rename-page-actions .ghost, .rpt-rename-page-actions .solid { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: 42px; margin: 0; padding: 9px 12px; }
 
 /* 周报档案：右侧抽屉保留当前报告画布，方便对照后打开某个历史版本。 */
 .rpt-archive-mask { justify-content: flex-end; padding: 0; background: #02061175; }

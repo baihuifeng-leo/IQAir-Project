@@ -666,8 +666,8 @@ const Report = (() => {
       const wrap = document.createElement('span'); wrap.className = 'rpt-page-tab' + (page === index + 1 ? ' on' : ''); wrap.dataset.pageId = item.id; wrap.draggable = !presenting;
       const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.page = String(index + 1); tab.textContent = `第 ${index + 1} 页 · ${item.label}`; tab.classList.toggle('on', page === index + 1); tab.onclick = () => switchPage(index + 1); wrap.appendChild(tab);
       if (item.slide && (!archiveView || archiveEditing())) {
-        const rename = document.createElement('button'); rename.type = 'button'; rename.className = 'rename'; rename.textContent = '✎'; rename.title = '重命名此页'; rename.setAttribute('aria-label', '重命名此页'); rename.onclick = (e) => { e.stopPropagation(); openRenameSlide(item.id); }; wrap.appendChild(rename);
-        const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'kill'; kill.textContent = '✕'; kill.title = '删除此页'; kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(item.id); }; wrap.appendChild(kill);
+        const rename = document.createElement('button'); rename.type = 'button'; rename.className = 'page-action rename'; rename.textContent = '重命名'; rename.title = '重命名此页'; rename.setAttribute('aria-label', '重命名此页'); rename.onclick = (e) => { e.stopPropagation(); openRenameSlide(item.id); }; wrap.appendChild(rename);
+        const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'page-action kill'; kill.textContent = '删除'; kill.title = '删除此页'; kill.setAttribute('aria-label', '删除此页'); kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(item.id); }; wrap.appendChild(kill);
       }
       if (!presenting && (!archiveView || archiveEditing())) {
         wrap.title = '拖动以调整报告与放映顺序';
@@ -985,7 +985,11 @@ const Report = (() => {
   async function createArchive() {
     if (archiveView) return returnToLiveReport();
     const btn = A.$('#rpt-archive-create'); btn.disabled = true; btn.textContent = '归档中…';
-    try { const result = await call('/api/reports/personal/archive/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: archiveWeekStart() }) }); await loadArchives(); await openArchive(result.weekStart, result.version.id, false); A.toast('上周报告已归档，可随时回溯和导出'); }
+    try {
+      await call('/api/reports/personal/archive/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: archiveWeekStart() }) });
+      selectedNewsIds.clear(); closeArchiveDrawer(); await refresh(); page = 1; syncSlidePages(); switchPage(1);
+      A.toast('上周报告已归档；当前报告已还原为三个系统页');
+    }
     catch (e) { A.toast(e.message, 'bad'); }
     finally { btn.disabled = false; btn.textContent = '归档上周报告'; }
   }

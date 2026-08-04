@@ -255,6 +255,10 @@ class ReportStore {
     data.archives.push(archive);
     data.archives.sort((a, b) => a.weekStart.localeCompare(b.weekStart));
     if (data.archives.length > MAX_ARCHIVE_WEEKS) data.archives.splice(0, data.archives.length - MAX_ARCHIVE_WEEKS);
+    // 归档代表上一周期已结束。快照已经保留在 archives，实时工作区则从
+    // 三个系统页重新开始，不能把上周临时加的汇报页带进新的一周。
+    data.slides = [];
+    data.pageOrder = [];
     await this._save(userId, data); return this.archiveGet(userId, weekStart, version.id);
   }
 
