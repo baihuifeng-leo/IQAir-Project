@@ -824,14 +824,41 @@ const Report = (() => {
       .pdf-page, .pdf-page * { animation: none !important; transition: none !important; filter: none !important; box-shadow: none !important; }
       .pdf-page .rs-canvas { transform: none !important; box-shadow: none !important; }
       .rpt-pdf-chart-image { display: block; }
+      /* 固定报告页不再按各自内容高度缩放：缩放会让它们与新闻/自定义页比例失真。
+         这里是 1280×720 专用的紧凑排版，确保所有数据仍留在同一张幻灯片里。 */
+      .pdf-page#rpt-page-1, .pdf-page#rpt-page-2 { display: block !important; }
+      .pdf-page#rpt-page-1 .rv-sec { margin-top: 10px; }
+      .pdf-page#rpt-page-1 .rpt-sec-first { grid-template-columns: minmax(0, 1.7fr) minmax(230px, 1fr); column-gap: 22px; row-gap: 6px; }
+      .pdf-page#rpt-page-1 .rpt-trend-wrap { height: 165px !important; margin-top: 2px; }
+      .pdf-page#rpt-page-1 .rpt-sidecol .rpt-subhead { margin: 0 0 5px; }
+      .pdf-page#rpt-page-1 .rpt-sidecol .rpt-cmp-grid { gap: 6px; }
+      .pdf-page#rpt-page-1 .rpt-cmp-card { padding: 6px 9px; }
+      .pdf-page#rpt-page-1 .rpt-cmp-top { margin-bottom: 4px; }
+      .pdf-page#rpt-page-1 .rpt-cmp-grid { gap: 6px; margin-top: 6px; }
+      .pdf-page#rpt-page-1 .rpt-cmp-label, .pdf-page#rpt-page-1 .rpt-cmp-foot, .pdf-page#rpt-page-1 .rpt-cmp-delta { font-size: 10px; }
+      .pdf-page#rpt-page-1 .rpt-cmp-foot b { font-size: 18px; }
+      .pdf-page#rpt-page-1 .rpt-highlight { margin-top: 8px; padding: 8px 12px; font-size: 15px; line-height: 1.35; border-left-width: 3px; }
+      .pdf-page#rpt-page-1 .rv-sub { margin: 2px 0 0; font-size: 11px; line-height: 1.3; }
+      .pdf-page#rpt-page-2 .rpt-sec-first { gap: 6px 20px; }
+      .pdf-page#rpt-page-2 .rpt-wm-trend { height: 150px !important; }
+      .pdf-page#rpt-page-2 .rpt-wm-metrics { gap: 6px; }
+      .pdf-page#rpt-page-2 .rpt-wm-stat { padding: 6px 8px; }
+      .pdf-page#rpt-page-2 .rpt-wm-stat-label, .pdf-page#rpt-page-2 .rpt-wm-stat-delta, .pdf-page#rpt-page-2 .rpt-wm-chgroup h3, .pdf-page#rpt-page-2 .rpt-wm-chname, .pdf-page#rpt-page-2 .rpt-wm-chval { font-size: 10px; }
+      .pdf-page#rpt-page-2 .rpt-wm-stat b { font-size: 23px; }
+      .pdf-page#rpt-page-2 .rpt-wm-metrics > .rpt-wm-stat:nth-child(-n+2) b { font-size: 34px; }
+      .pdf-page#rpt-page-2 .rpt-wm-channels { gap: 18px; }
+      .pdf-page#rpt-page-2 .rpt-wm-chrow { margin-bottom: 5px; }
+      .pdf-page#rpt-page-2 .rpt-wm-chbar { height: 7px; }
+      .pdf-page#rpt-page-2 .rpt-wm-note { padding: 6px 9px; font-size: 11px; line-height: 1.3; border-left-width: 3px; }
+      .pdf-page#rpt-page-2 .rv-sub { margin: 2px 0 0; font-size: 11px; line-height: 1.3; }
       @media print { html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     `;
   }
   function openPdfDocument(fileName, pagesHtml) {
-    const output = window.open('', '_blank');
+    const output = window.open('', '_blank', 'popup,width=1280,height=720');
     if (!output) throw new Error('浏览器拦截了导出窗口，请允许本站打开新窗口后重试');
     output.document.open();
-    output.document.write(`<!doctype html><html><head><base href="${location.origin}/"><meta charset="utf-8"><meta name="viewport" content="width=1280"><title>${fileName}</title><link rel="stylesheet" href="/styles.css"><style>${pdfDocumentStyles()}</style></head><body class="rpt-presenting"><main class="pdf-document">${pagesHtml}</main><script>\n(function () {\n  function fit() {\n    document.querySelectorAll('.pdf-page:not(.rpt-pdf-custom-page)').forEach(function (page) {\n      page.style.zoom = '1';\n      var scale = Math.min(1, 720 / Math.max(1, page.scrollHeight));\n      page.style.zoom = String(scale);\n      page.style.width = (1280 / scale) + 'px';\n      page.style.height = (720 / scale) + 'px';\n    });\n  }\n  window.addEventListener('load', function () {\n    var images = Array.from(document.images);\n    Promise.all(images.map(function (img) { return img.complete ? Promise.resolve() : new Promise(function (done) { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); }); })).then(function () {\n      requestAnimationFrame(function () { fit(); requestAnimationFrame(function () { window.focus(); window.print(); }); });\n    });\n  }, { once: true });\n}());\n<\/script></body></html>`);
+    output.document.write(`<!doctype html><html><head><base href="${location.origin}/"><meta charset="utf-8"><meta name="viewport" content="width=1280"><title>${fileName}</title><link rel="stylesheet" href="/styles.css"><style>${pdfDocumentStyles()}</style></head><body class="rpt-presenting"><main class="pdf-document">${pagesHtml}</main><script>\nwindow.addEventListener('load', function () {\n  var images = Array.from(document.images);\n  Promise.all(images.map(function (img) { return img.complete ? Promise.resolve() : new Promise(function (done) { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); }); })).then(function () {\n    requestAnimationFrame(function () { requestAnimationFrame(function () { window.focus(); window.print(); }); });\n  });\n}, { once: true });\n<\/script></body></html>`);
     output.document.close();
   }
   function exportPdf() {
