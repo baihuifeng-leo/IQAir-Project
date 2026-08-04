@@ -73,6 +73,7 @@ def main():
                     assert popup.locator(".pdf-page").count() == 3, f"{theme} 模式下导出页数不正确"
                     assert popup.locator("#workspace").count() == 0, f"{theme} 模式下错误复用了工作台"
                     assert popup.locator(".rpt-pdf-chart-image").count() >= 1, f"{theme} 模式下 canvas 未转成原始 PNG"
+                    assert popup.locator(".rpt-pdf-chart-image").evaluate_all("images => images.every(image => image.naturalWidth >= 1600 && image.naturalHeight >= 500)"), f"{theme} 模式下导出图表为空或分辨率不足"
                     assert popup.locator("body").evaluate("body => getComputedStyle(body).backgroundColor") == "rgb(8, 12, 20)", f"{theme} 模式下导出主题不稳定"
                     assert popup.locator(".pdf-page").evaluate_all("pages => pages.every(page => { const box = page.getBoundingClientRect(); return Math.abs(box.width - 1280) < 1 && Math.abs(box.height - 720) < 1; })"), f"{theme} 模式下页面画布尺寸不一致"
                     assert popup.locator(".pdf-page").evaluate_all("pages => pages.every(page => [...page.children].every(child => child.getBoundingClientRect().bottom <= page.getBoundingClientRect().bottom + 1))"), f"{theme} 模式下固定报告页仍有内容被裁切"

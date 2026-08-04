@@ -20,6 +20,9 @@ assert.match(slides, /function buildPrintPage\(id\)/, '自定义页应可生成�
 assert.doesNotMatch(css, /rpt-pdf-export|rpt-pdf-pages/, '旧的工作台内打印样式不应再影响独立导出文档');
 assert.match(js, /function clonePdfPage\(source\)/, '固定页必须克隆到独立文档');
 assert.match(js, /original\.toDataURL\('image\/png'\)/, '图表 canvas 必须保留为高分辨率图片');
+assert.match(js, /function capturePdfChart\(instance, width, height\)/, 'ECharts 图表必须从实例导出，不能依赖隐藏容器中的 canvas 克隆');
+assert.match(js, /instance\.getDataURL\(\{ type: 'png', pixelRatio: 2/, 'ECharts 图表必须导出为两倍分辨率 PNG');
+assert.match(js, /replacePdfChart\(clone, '#rpt-wm-trend', wmChart, 1184, 150\)/, '第二页隐藏状态的图表也必须在导出时重新生成');
 assert.doesNotMatch(js, /function fit\(\)[\s\S]*?page\.style\.zoom/, '各页不能按自身高度分别缩放，否则会与自定义页比例不一致');
 assert.match(js, /\.pdf-page#rpt-page-1, \.pdf-page#rpt-page-2 \{ display: block !important; \}/, '前两页需要使用与 16:9 画布匹配的导出专用排版');
 assert.match(js, /<link rel="stylesheet" href="\/styles\.css">/, '独立文档应加载报告既有组件样式');

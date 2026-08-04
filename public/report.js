@@ -793,6 +793,26 @@ const Report = (() => {
     const short = (d) => String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
     return `FY${String(year).slice(-2)} Q${quarter}W${String(week).padStart(2, '0')}-Weekly Meeting（${short(monday)}-${short(sunday)}）`;
   }
+  function capturePdfChart(instance, width, height) {
+    if (!instance || instance.isDisposed?.()) return '';
+    try {
+      // 第二页平时可能处于 hidden 状态，ECharts 的内部画布会是 0×0；导出时
+      // 显式按目标图表尺寸重绘，再直接从实例取图，不能依赖 cloneNode() 的 canvas。
+      const previous = { width: instance.getWidth(), height: instance.getHeight() };
+      instance.resize({ width, height, silent: true });
+      const image = instance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#101725', excludeComponents: ['toolbox'] });
+      instance.resize({ ...previous, silent: true });
+      return image;
+    } catch { return ''; }
+  }
+  function replacePdfChart(page, selector, instance, width, height) {
+    const target = page.querySelector(selector), src = capturePdfChart(instance, width, height);
+    if (!target || !src) return;
+    const image = document.createElement('img'); image.className = 'rpt-pdf-chart-image'; image.alt = '';
+    image.src = src; image.width = width * 2; image.height = height * 2;
+    image.style.cssText = 'display:block;width:100%;height:100%;object-fit:fill;';
+    target.hidden = false; target.replaceChildren(image);
+  }
   function clonePdfPage(source) {
     const clone = source.cloneNode(true); clone.hidden = false;
     const originalCanvases = source.querySelectorAll('canvas'), clonedCanvases = clone.querySelectorAll('canvas');
@@ -802,6 +822,8 @@ const Report = (() => {
       image.src = original.toDataURL('image/png'); image.width = original.width; image.height = original.height;
       image.style.cssText = 'display:block;width:100%;height:100%;object-fit:fill;'; canvas.replaceWith(image);
     });
+    if (source.id === 'rpt-page-1') replacePdfChart(clone, '#rpt-trend-chart', chart, 740, 165);
+    if (source.id === 'rpt-page-2') replacePdfChart(clone, '#rpt-wm-trend', wmChart, 1184, 150);
     clone.classList.add('pdf-page'); return clone;
   }
   function buildPdfPageHtml(item) {
