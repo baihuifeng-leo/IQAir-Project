@@ -2078,7 +2078,11 @@ body.rpt-pdf-export #rpt-pdf-pages > .rpt-pdf-fixed-page {
 body.rpt-pdf-export .rpt-pdf-fit-content {
   --rpt-pdf-scale: 1;
   box-sizing: border-box; width: calc(100% / var(--rpt-pdf-scale)); min-height: calc(100% / var(--rpt-pdf-scale));
-  padding: 22px 48px; transform: scale(var(--rpt-pdf-scale)); transform-origin: top left;
+  padding: 22px 48px; zoom: var(--rpt-pdf-scale);
+}
+body.rpt-pdf-export .rpt-pdf-fixed-page,
+body.rpt-pdf-export .rpt-pdf-fixed-page * {
+  animation: none !important; box-shadow: none !important; filter: none !important; transition: none !important;
 }
 
 /* ═══ 素材质检 (materialcheck) ═══ */

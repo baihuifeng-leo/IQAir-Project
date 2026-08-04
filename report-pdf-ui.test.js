@@ -19,7 +19,9 @@ assert.match(css, /@page rptpdf \{ size: 13\.333in 7\.5in; margin: 0; \}/, 'PDF 
 assert.doesNotMatch(css, /#rpt-pdf-pages > \.rpt-page \{[\s\S]*?overflow: hidden; page: rptpdf/, '放映页不能在固定 720px 高度下直接裁切内容');
 assert.match(js, /function fitPdfPages\(\)/, '固定报告页应按自身内容高度等比适配打印画布');
 assert.match(js, /720 \/ Math\.max\(1, content\.scrollHeight\)/, 'PDF 内容缩放比例必须由实际溢出高度决定');
-assert.match(css, /\.rpt-pdf-fit-content \{[\s\S]*?transform: scale\(var\(--rpt-pdf-scale\)\)/, '打印内容应等比缩放而不是裁切');
+assert.doesNotMatch(css, /\.rpt-pdf-fit-content \{[^}]*transform: scale\(/, 'PDF 打印内容不能使用 transform 缩放，避免浏览器将整页栅格化为模糊虚影');
+assert.match(js, /content\.style\.zoom = String\(scale\)/, 'PDF 必须用原生布局缩放而非合成层缩放');
+assert.match(css, /\.rpt-pdf-fit-content \{[^}]*zoom: var\(--rpt-pdf-scale\)/, 'PDF 内容应通过 zoom 保持文字与矢量图清晰');
 assert.doesNotMatch(css, /#rpt-page-[12] > \.rpt-sec-first/, 'PDF 包装层不能破坏第 1、2 页的放映布局选择器');
 assert.match(html, /class="sheet rpt-rename-page-sheet"/, '重命名弹窗需要专用布局类');
 assert.match(html, /class="sheet-head"><h2 id="rpt-rename-page-title"/, '重命名弹窗必须使用标准标题区');

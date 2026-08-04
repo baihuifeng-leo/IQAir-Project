@@ -820,7 +820,7 @@ const Report = (() => {
       const content = pageEl.querySelector('.rpt-pdf-fit-content'); if (!content) return;
       pageEl.style.setProperty('--rpt-pdf-scale', '1');
       const scale = Math.min(1, 720 / Math.max(1, content.scrollHeight));
-      pageEl.style.setProperty('--rpt-pdf-scale', String(scale));
+      pageEl.style.setProperty('--rpt-pdf-scale', String(scale)); content.style.zoom = String(scale);
     });
   }
   function exportPdf() {
