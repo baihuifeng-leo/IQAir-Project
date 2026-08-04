@@ -247,6 +247,7 @@
               <p class="rail-hint">公共报告还在开发中，敬请期待。</p>
             </div>
           </div>
+          <button class="ghost" id="rpt-archive-btn" title="归档、回溯和修订每周个人报告">▣ 周报档案</button>
           <button class="ghost" id="rpt-export-pdf-btn" title="按当前报告与放映顺序导出 PDF">⭳ 导出 PDF</button>
           <button class="ghost" id="rpt-present-btn">▶ 放映模式</button>
         </div>
@@ -406,6 +407,16 @@
 <input type="file" id="rv-product-file" accept=".xlsx" hidden>
 <input type="file" id="p3d-file" accept=".xlsx" hidden>
 <input type="file" id="rpt-import-file" accept=".xlsx" hidden>
+
+<div class="sheet-mask rpt-archive-mask" id="rpt-archive-mask" hidden>
+  <aside class="sheet rpt-archive-sheet" role="dialog" aria-modal="true" aria-labelledby="rpt-archive-title">
+    <div class="sheet-head"><div><h2 id="rpt-archive-title">周报档案</h2><p id="rpt-archive-subtitle">归档每周正式报告，随时查看、修订和导出。</p></div><button class="kill" id="rpt-archive-close" type="button" aria-label="关闭">✕</button></div>
+    <div class="sheet-body">
+      <section class="rpt-archive-current"><div><b id="rpt-archive-current-week">上周报告</b><p>归档后会冻结当前数据、新闻和自定义页面。</p></div><button class="solid" id="rpt-archive-create" type="button">归档上周报告</button></section>
+      <div class="rpt-archive-list" id="rpt-archive-list"></div>
+    </div>
+  </aside>
+</div>
 
 <div class="sheet-mask" id="rpt-wm-mask" hidden>
   <div class="sheet">

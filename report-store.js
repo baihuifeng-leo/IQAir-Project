@@ -92,6 +92,15 @@ const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
 const MAX_SLIDE_TEXT_LEN = 4000;
 const MAX_PAGE_ORDER = 100;
 const MAX_SLIDE_NAME_LEN = 40;
+const MAX_ARCHIVE_WEEKS = 104;
+const MAX_ARCHIVE_VERSIONS = 24;
+
+const clone = (value) => JSON.parse(JSON.stringify(value));
+const archiveWeek = (value) => {
+  const week = mondayOf(value);
+  if (!week) throw new Error('报告周不正确');
+  return week;
+};
 
 function sanitizeElement(el) {
   if (!el || typeof el !== 'object' || !SLIDE_ELEMENT_TYPES.has(el.type)) return null;
@@ -141,9 +150,10 @@ class ReportStore {
         daily: Array.isArray(s.daily) ? s.daily : [],
         weimeng: Array.isArray(s.weimeng) ? s.weimeng : [],
         slides: Array.isArray(s.slides) ? s.slides : [],
-        pageOrder: Array.isArray(s.pageOrder) ? s.pageOrder : []
+        pageOrder: Array.isArray(s.pageOrder) ? s.pageOrder : [],
+        archives: Array.isArray(s.archives) ? s.archives : []
       };
-    } catch { return { daily: [], weimeng: [], slides: [], pageOrder: [] }; }
+    } catch { return { daily: [], weimeng: [], slides: [], pageOrder: [], archives: [] }; }
   }
 
   async _save(userId, data) {
@@ -204,6 +214,88 @@ class ReportStore {
     if (pageOrder !== undefined) data.pageOrder = pageOrder;
     await this._save(userId, data);
     return { total: slides.length, pageOrder: data.pageOrder };
+  }
+
+  archiveSnapshot(data, news) {
+    return {
+      report: { daily: clone(data.daily), weimeng: clone(data.weimeng), slides: clone(data.slides), pageOrder: clone(data.pageOrder) },
+      news: news && typeof news === 'object' ? clone(news) : null
+    };
+  }
+
+  archiveListRow(item) {
+    const official = item.versions.find((version) => version.id === item.officialVersionId) || item.versions[item.versions.length - 1];
+    return {
+      weekStart: item.weekStart, officialVersionId: item.officialVersionId,
+      versions: item.versions.map((version) => ({ id: version.id, number: version.number, createdAt: version.createdAt, updatedAt: version.updatedAt, isOfficial: version.id === official?.id }))
+    };
+  }
+
+  async archives(userId) {
+    const data = await this._load(userId);
+    return data.archives.slice().sort((a, b) => b.weekStart.localeCompare(a.weekStart)).map((item) => this.archiveListRow(item));
+  }
+
+  async archiveGet(userId, weekStartInput, versionId) {
+    const weekStart = archiveWeek(weekStartInput); const data = await this._load(userId);
+    const archive = data.archives.find((item) => item.weekStart === weekStart);
+    if (!archive) throw new Error('找不到这周的报告档案');
+    const version = archive.versions.find((item) => item.id === versionId) || archive.versions.find((item) => item.id === archive.officialVersionId);
+    if (!version) throw new Error('找不到该报告版本');
+    return { weekStart, officialVersionId: archive.officialVersionId, versions: this.archiveListRow(archive).versions, version: clone(version) };
+  }
+
+  async archiveCreate(userId, weekStartInput, news) {
+    const weekStart = archiveWeek(weekStartInput); const data = await this._load(userId);
+    let archive = data.archives.find((item) => item.weekStart === weekStart);
+    if (archive) throw new Error('该周已有档案，请从正式版创建修订版');
+    const now = new Date().toISOString();
+    const version = { id: `v_${Date.now().toString(36)}`, number: 1, createdAt: now, updatedAt: now, snapshot: this.archiveSnapshot(data, news) };
+    archive = { weekStart, officialVersionId: version.id, versions: [version] };
+    data.archives.push(archive);
+    data.archives.sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+    if (data.archives.length > MAX_ARCHIVE_WEEKS) data.archives.splice(0, data.archives.length - MAX_ARCHIVE_WEEKS);
+    await this._save(userId, data); return this.archiveGet(userId, weekStart, version.id);
+  }
+
+  async archiveRevision(userId, weekStartInput, sourceVersionId) {
+    const weekStart = archiveWeek(weekStartInput); const data = await this._load(userId);
+    const archive = data.archives.find((item) => item.weekStart === weekStart);
+    if (!archive) throw new Error('请先归档该周报告');
+    const source = archive.versions.find((item) => item.id === sourceVersionId) || archive.versions.find((item) => item.id === archive.officialVersionId);
+    if (!source) throw new Error('找不到要修订的报告版本');
+    const now = new Date().toISOString();
+    const version = { id: `v_${Date.now().toString(36)}`, number: Math.max(0, ...archive.versions.map((item) => item.number || 0)) + 1, createdAt: now, updatedAt: now, snapshot: clone(source.snapshot) };
+    archive.versions.push(version);
+    if (archive.versions.length > MAX_ARCHIVE_VERSIONS) archive.versions.splice(0, archive.versions.length - MAX_ARCHIVE_VERSIONS);
+    await this._save(userId, data); return this.archiveGet(userId, weekStart, version.id);
+  }
+
+  async archiveSave(userId, weekStartInput, versionId, snapshot) {
+    const weekStart = archiveWeek(weekStartInput); const data = await this._load(userId);
+    const archive = data.archives.find((item) => item.weekStart === weekStart);
+    const version = archive?.versions.find((item) => item.id === versionId);
+    if (!version) throw new Error('找不到要保存的报告修订版');
+    const report = snapshot?.report || {};
+    version.snapshot = {
+      report: {
+        daily: Array.isArray(report.daily) ? clone(report.daily).slice(-5000) : [],
+        weimeng: Array.isArray(report.weimeng) ? clone(report.weimeng).slice(-520) : [],
+        slides: sanitizeSlides(report.slides || []),
+        pageOrder: sanitizePageOrder(report.pageOrder) || []
+      },
+      news: snapshot?.news && typeof snapshot.news === 'object' ? clone(snapshot.news) : null
+    };
+    version.updatedAt = new Date().toISOString();
+    await this._save(userId, data); return this.archiveGet(userId, weekStart, versionId);
+  }
+
+  async archiveSetOfficial(userId, weekStartInput, versionId) {
+    const weekStart = archiveWeek(weekStartInput); const data = await this._load(userId);
+    const archive = data.archives.find((item) => item.weekStart === weekStart);
+    if (!archive?.versions.some((item) => item.id === versionId)) throw new Error('找不到要设为正式版的报告版本');
+    archive.officialVersionId = versionId;
+    await this._save(userId, data); return this.archiveGet(userId, weekStart, versionId);
   }
 }
 

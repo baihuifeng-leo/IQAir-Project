@@ -674,6 +674,51 @@ const server = http.createServer(async (req, res) => {
     /* ── 报告管理 · 个人报告 ─────────────────────────────── */
     if (p === '/api/reports/personal/summary') return json(res, 200, await reports.summary(me.id));
 
+    if (p === '/api/reports/personal/archives') return json(res, 200, { archives: await reports.archives(me.id) });
+
+    if (p === '/api/reports/personal/archive' && req.method === 'GET') {
+      try { return json(res, 200, await reports.archiveGet(me.id, url.searchParams.get('weekStart'), url.searchParams.get('versionId') || undefined)); }
+      catch (e) { return json(res, 404, { error: e.message }); }
+    }
+
+    if (p === '/api/reports/personal/archive/create' && req.method === 'POST') {
+      const input = await body(req, 4096);
+      try {
+        const newsData = await reportNews.load(me.id);
+        const currentNews = newsData.weeks[input.weekStart] || (await reportNews.summary(me.id)).news;
+        const archive = await reports.archiveCreate(me.id, input.weekStart, currentNews);
+        audit(me, 'reports.archive.create', { detail: [`归档 ${archive.weekStart} 个人周报`] });
+        return json(res, 200, archive);
+      } catch (e) { return json(res, 400, { error: e.message }); }
+    }
+
+    if (p === '/api/reports/personal/archive/revision' && req.method === 'POST') {
+      const input = await body(req, 4096);
+      try {
+        const archive = await reports.archiveRevision(me.id, input.weekStart, input.sourceVersionId);
+        audit(me, 'reports.archive.revision', { detail: [`创建 ${archive.weekStart} 周报修订版`] });
+        return json(res, 200, archive);
+      } catch (e) { return json(res, 400, { error: e.message }); }
+    }
+
+    if (p === '/api/reports/personal/archive/save' && req.method === 'POST') {
+      const input = await body(req, 2 * 1024 * 1024);
+      try {
+        const archive = await reports.archiveSave(me.id, input.weekStart, input.versionId, input.snapshot);
+        audit(me, 'reports.archive.save', { detail: [`保存 ${archive.weekStart} 周报修订版`] });
+        return json(res, 200, archive);
+      } catch (e) { return json(res, 400, { error: e.message }); }
+    }
+
+    if (p === '/api/reports/personal/archive/official' && req.method === 'POST') {
+      const input = await body(req, 4096);
+      try {
+        const archive = await reports.archiveSetOfficial(me.id, input.weekStart, input.versionId);
+        audit(me, 'reports.archive.official', { detail: [`设置 ${archive.weekStart} 周报正式版`] });
+        return json(res, 200, archive);
+      } catch (e) { return json(res, 400, { error: e.message }); }
+    }
+
     if (p === '/api/reports/news/summary') return json(res, 200, await reportNews.summary(me.id));
 
     if (p === '/api/reports/news/refresh' && req.method === 'POST') {

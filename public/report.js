@@ -31,6 +31,7 @@
    ═══════════════════════════════════════════════════════════ */
 const Report = (() => {
   let A, sub = 'personal', data = null, news = null, selectedNewsIds = new Set(), newsPickerOpen = false, chart = null, wmChart = null, ro = null;
+  let archives = [], archiveView = null;
   let rangeMode = 'thisYear', rangeStart = new Date().getFullYear() + '-01-01', rangeEnd = null, granularity = 'week';
   let page = 1, presenting = false, wmSelectedWeek = null, deleteSlideId = null, renameSlideId = null;
   const FIXED_REPORT_PAGES = [
@@ -75,6 +76,27 @@ const Report = (() => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || '请求失败');
     return j;
+  }
+
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+  const archiveWeekStart = () => { const d = startOfWeek(new Date()); d.setDate(d.getDate() - 7); return ymd(d); };
+  const archiveLabel = (weekStart) => {
+    const monday = new Date(`${weekStart}T00:00:00`), sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+    return `${monday.getFullYear()}.${String(monday.getMonth() + 1).padStart(2, '0')}.${String(monday.getDate()).padStart(2, '0')}–${String(sunday.getMonth() + 1).padStart(2, '0')}.${String(sunday.getDate()).padStart(2, '0')}`;
+  };
+  const archiveEditing = () => !!archiveView?.editable;
+  const archiveSnapshot = () => ({ report: clone(data || { daily: [], weimeng: [], slides: [], pageOrder: [] }), news: clone(news?.news || null) });
+  async function saveArchiveSnapshot() {
+    if (!archiveEditing()) return;
+    await call('/api/reports/personal/archive/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: archiveView.weekStart, versionId: archiveView.versionId, snapshot: archiveSnapshot() }) });
+  }
+  function applyReportMode() {
+    const frozen = !!archiveView;
+    A.$('#rpt-import-btn').disabled = frozen; A.$('#rpt-weimeng-btn').disabled = frozen;
+    A.$('#rpt-news-open-picker').hidden = frozen;
+    A.$('#rpt-head-sub').textContent = frozen ? `周报档案 · ${archiveLabel(archiveView.weekStart)}${archiveEditing() ? ' · 修订中' : ' · 正式版'}` : '周报数据看板 · 个人报告';
+    ReportSlides.setEditable(!frozen || archiveEditing());
+    ReportSlides.setSaveHandler(archiveEditing() ? saveArchiveSnapshot : null);
   }
 
   const fmt = (v, unit) => {
@@ -584,12 +606,14 @@ const Report = (() => {
   }
 
   function openWeimengForm(weekStart) {
+    if (archiveView) return A.toast('历史报告的数据已冻结；如需修订请创建新版后调整自定义页', 'bad');
     loadWeekIntoForm(weekStart || wmSelectedWeek || todayStr());
     A.$('#rpt-wm-mask').hidden = false;
   }
   function closeWeimengForm() { A.$('#rpt-wm-mask').hidden = true; }
 
   async function saveWeimeng() {
+    if (archiveView) return A.toast('历史报告的数据已冻结', 'bad');
     const weekStart = isoWeekToMonday(A.$('#wm-weekStart').value);
     if (!weekStart) return A.toast('先选一周', 'bad');
     const payload = { weekStart, channels: {} };
@@ -627,7 +651,7 @@ const Report = (() => {
   function currentReportPage() { return reportPages()[page - 1] || reportPages()[0]; }
   function normalisePageOrder() { if (data) data.pageOrder = reportPages().map((item) => item.id); }
   function reorderReportPage(sourceId, targetId) {
-    if (!data || sourceId === targetId) return;
+    if (!data || sourceId === targetId || (archiveView && !archiveEditing())) return;
     const activeId = currentReportPage()?.id;
     normalisePageOrder();
     const order = data.pageOrder; const source = order.indexOf(sourceId), target = order.indexOf(targetId);
@@ -641,11 +665,11 @@ const Report = (() => {
     pages.forEach((item, index) => {
       const wrap = document.createElement('span'); wrap.className = 'rpt-page-tab' + (page === index + 1 ? ' on' : ''); wrap.dataset.pageId = item.id; wrap.draggable = !presenting;
       const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.page = String(index + 1); tab.textContent = `第 ${index + 1} 页 · ${item.label}`; tab.classList.toggle('on', page === index + 1); tab.onclick = () => switchPage(index + 1); wrap.appendChild(tab);
-      if (item.slide) {
+      if (item.slide && (!archiveView || archiveEditing())) {
         const rename = document.createElement('button'); rename.type = 'button'; rename.className = 'rename'; rename.textContent = '✎'; rename.title = '重命名此页'; rename.setAttribute('aria-label', '重命名此页'); rename.onclick = (e) => { e.stopPropagation(); openRenameSlide(item.id); }; wrap.appendChild(rename);
         const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'kill'; kill.textContent = '✕'; kill.title = '删除此页'; kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(item.id); }; wrap.appendChild(kill);
       }
-      if (!presenting) {
+      if (!presenting && (!archiveView || archiveEditing())) {
         wrap.title = '拖动以调整报告与放映顺序';
         wrap.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); wrap.classList.add('dragging'); });
         wrap.addEventListener('dragend', () => A.$$('.rpt-page-tab').forEach((node) => node.classList.remove('dragging', 'drop-target')));
@@ -787,7 +811,8 @@ const Report = (() => {
   }
   function pdfFilename(date = new Date()) {
     // 周报汇总的是最近一个完整自然周；导出日属于本周，不能写进报告文件名。
-    const monday = startOfWeek(date); monday.setDate(monday.getDate() - 7);
+    const monday = archiveView ? new Date(`${archiveView.weekStart}T00:00:00`) : startOfWeek(date);
+    if (!archiveView) monday.setDate(monday.getDate() - 7);
     const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
     const year = monday.getFullYear(), quarter = Math.floor(monday.getMonth() / 3) + 1;
     const quarterStart = startOfWeek(new Date(year, (quarter - 1) * 3, 1));
@@ -927,6 +952,64 @@ const Report = (() => {
 
   function render() { renderTrend(); renderShopWeekCompare(); renderCompare(); renderWeimeng(); }
 
+  async function loadArchives() {
+    try { archives = (await call('/api/reports/personal/archives')).archives || []; }
+    catch { archives = []; }
+    renderArchives();
+  }
+  function renderArchives() {
+    const host = A.$('#rpt-archive-list'); if (!host) return; host.replaceChildren();
+    const action = A.$('#rpt-archive-create');
+    A.$('#rpt-archive-current-week').textContent = archiveView ? `当前正在查看 · ${archiveLabel(archiveView.weekStart)}` : `上周报告 · ${archiveLabel(archiveWeekStart())}`;
+    action.textContent = archiveView ? '返回当前报告' : '归档上周报告';
+    if (!archives.length) { host.innerHTML = '<p class="rpt-archive-empty">还没有归档报告。完成上周汇报后，点击上方按钮冻结一份可回溯的正式版本。</p>'; return; }
+    archives.forEach((item) => {
+      const row = document.createElement('section'); row.className = 'rpt-archive-row';
+      const head = document.createElement('div'); head.className = 'rpt-archive-row-head'; head.innerHTML = `<h3>${archiveLabel(item.weekStart)}</h3><span class="rpt-archive-official">${item.versions.length} 个版本</span>`; row.appendChild(head);
+      item.versions.slice().sort((a, b) => b.number - a.number).forEach((version) => {
+        const line = document.createElement('div'); line.className = 'rpt-archive-version' + (archiveView?.versionId === version.id ? ' rpt-archive-active' : '');
+        const updated = new Date(version.updatedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        line.innerHTML = `<div><b>版本 ${version.number}${version.isOfficial ? ' · 正式版' : ' · 修订版'}</b><small>更新于 ${updated}</small></div>`;
+        const actions = document.createElement('div'); actions.className = 'rpt-archive-version-actions';
+        const open = document.createElement('button'); open.className = 'ghost'; open.type = 'button'; open.textContent = '查看'; open.onclick = () => openArchive(item.weekStart, version.id, false);
+        const edit = document.createElement('button'); edit.className = 'ghost'; edit.type = 'button'; edit.textContent = '创建修订'; edit.onclick = () => createArchiveRevision(item.weekStart, version.id);
+        actions.append(open, edit);
+        if (!version.isOfficial) { const official = document.createElement('button'); official.className = 'ghost'; official.type = 'button'; official.textContent = '设为正式版'; official.onclick = () => setArchiveOfficial(item.weekStart, version.id); actions.appendChild(official); }
+        line.appendChild(actions); row.appendChild(line);
+      });
+      host.appendChild(row);
+    });
+  }
+  function openArchiveDrawer() { A.$('#rpt-archive-mask').hidden = false; loadArchives(); }
+  function closeArchiveDrawer() { A.$('#rpt-archive-mask').hidden = true; }
+  async function createArchive() {
+    if (archiveView) return returnToLiveReport();
+    const btn = A.$('#rpt-archive-create'); btn.disabled = true; btn.textContent = '归档中…';
+    try { const result = await call('/api/reports/personal/archive/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: archiveWeekStart() }) }); await loadArchives(); await openArchive(result.weekStart, result.version.id, false); A.toast('上周报告已归档，可随时回溯和导出'); }
+    catch (e) { A.toast(e.message, 'bad'); }
+    finally { btn.disabled = false; btn.textContent = '归档上周报告'; }
+  }
+  async function openArchive(weekStart, versionId, editable) {
+    try {
+      const result = await call(`/api/reports/personal/archive?weekStart=${encodeURIComponent(weekStart)}&versionId=${encodeURIComponent(versionId)}`);
+      data = result.version.snapshot.report; news = { weekStart: result.weekStart, news: result.version.snapshot.news, candidates: [] };
+      archiveView = { weekStart: result.weekStart, versionId: result.version.id, editable: !!editable };
+      selectedNewsIds.clear(); closeArchiveDrawer(); applyReportMode(); ReportSlides.setPages(data.slides || []); normalisePageOrder(); page = 1; syncSlidePages(); render(); renderNews(); switchPage(1); A.toast(editable ? '已进入历史报告修订版，可编辑自定义页和页面顺序' : '正在查看历史报告正式快照');
+    } catch (e) { A.toast('打开档案失败：' + e.message, 'bad'); }
+  }
+  async function createArchiveRevision(weekStart, versionId) {
+    try { const result = await call('/api/reports/personal/archive/revision', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart, sourceVersionId: versionId }) }); await loadArchives(); await openArchive(result.weekStart, result.version.id, true); }
+    catch (e) { A.toast('创建修订版失败：' + e.message, 'bad'); }
+  }
+  async function setArchiveOfficial(weekStart, versionId) {
+    try { await ReportSlides.flushSave(); await call('/api/reports/personal/archive/official', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart, versionId }) }); await loadArchives(); A.toast('已设为该周的正式版本'); }
+    catch (e) { A.toast('设置正式版失败：' + e.message, 'bad'); }
+  }
+  async function returnToLiveReport() {
+    if (!archiveView) return;
+    await ReportSlides.flushSave(); archiveView = null; applyReportMode(); await refresh(); A.toast('已返回当前个人报告');
+  }
+
   /* ── 子页签：个人 / 公共 ──────────────────────────────── */
   function switchSub(s) {
     sub = s;
@@ -934,7 +1017,8 @@ const Report = (() => {
     A.$('#rpt-personal-tools').hidden = s !== 'personal';
     A.$('#rpt-personal-view').hidden = s !== 'personal';
     A.$('#rpt-public-view').hidden = s !== 'public';
-    A.$('#rpt-head-sub').textContent = s === 'personal' ? '周报数据看板 · 个人报告' : '周报数据看板 · 公共报告';
+    A.$('#rpt-head-sub').textContent = s === 'personal' ? (archiveView ? `周报档案 · ${archiveLabel(archiveView.weekStart)}` : '周报数据看板 · 个人报告') : '周报数据看板 · 公共报告';
+    A.$('#rpt-archive-btn').hidden = s !== 'personal';
     A.$('#rpt-export-pdf-btn').hidden = s !== 'personal';
     A.$('#rpt-present-btn').hidden = s !== 'personal';
     if (s !== 'personal' && presenting) exitPresent();
@@ -943,6 +1027,7 @@ const Report = (() => {
 
   /* ── 导入 ─────────────────────────────────────────────── */
   async function doImport(file) {
+    if (archiveView) return A.toast('历史报告的数据已冻结，不能导入到该版本', 'bad');
     if (!/\.xlsx$/i.test(file.name)) return A.toast('只支持 .xlsx', 'bad');
     const btn = A.$('#rpt-import-btn');
     btn.disabled = true; btn.textContent = '解析中…';
@@ -974,6 +1059,7 @@ const Report = (() => {
     try { data = await call('/api/reports/personal/summary'); }
     catch { data = null; }
     ReportSlides.setPages(data?.slides || []);
+    applyReportMode();
     normalisePageOrder();
     await loadNews();
     if (page > totalPages()) page = totalPages();
@@ -1010,7 +1096,7 @@ const Report = (() => {
     // 主题切换时趋势图重读令牌重绘（图表画在 canvas 里，CSS 变量管不到它）
     document.addEventListener('wb-themechange', () => { if (chart && data) renderTrend(); if (wmChart && data) renderWeimengTrend(data.weimeng || []); });
 
-    A.$('#rpt-add-page').onclick = () => { const slide = ReportSlides.addPage(); normalisePageOrder(); data.pageOrder.push(slide.id); ReportSlides.savePageOrder(data.pageOrder); syncSlidePages(); switchPage(reportPages().findIndex((item) => item.id === slide.id) + 1); };
+    A.$('#rpt-add-page').onclick = () => { if (archiveView && !archiveEditing()) return A.toast('正式版为只读，请先创建修订版', 'bad'); const slide = ReportSlides.addPage(); normalisePageOrder(); data.pageOrder.push(slide.id); ReportSlides.savePageOrder(data.pageOrder); syncSlidePages(); switchPage(reportPages().findIndex((item) => item.id === slide.id) + 1); };
     A.$('#rpt-delete-page-close').onclick = closeDeleteSlide;
     A.$('#rpt-delete-page-cancel').onclick = closeDeleteSlide;
     A.$('#rpt-delete-page-confirm').onclick = deleteSlide;
@@ -1021,6 +1107,10 @@ const Report = (() => {
     A.$('#rpt-rename-page-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') renameSlide(); });
     A.$('#rpt-rename-page-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-rename-page-mask') closeRenameSlide(); });
     A.$('#rpt-export-pdf-btn').onclick = exportPdf;
+    A.$('#rpt-archive-btn').onclick = openArchiveDrawer;
+    A.$('#rpt-archive-close').onclick = closeArchiveDrawer;
+    A.$('#rpt-archive-mask').addEventListener('click', (e) => { if (e.target.id === 'rpt-archive-mask') closeArchiveDrawer(); });
+    A.$('#rpt-archive-create').onclick = createArchive;
     A.$('#rpt-present-btn').onclick = togglePresent;
     A.$('#rpt-news-open-picker').onclick = openNewsPicker;
     A.$('#rpt-news-open-picker').hidden = false;

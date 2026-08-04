@@ -54,6 +54,23 @@ async function run() {
     const out = await s.summary('u1');
     assert.strictEqual(out.slides[0].elements[0].text.length, 4000); assert.strictEqual(out.weimeng.length, 1);
   });
+  await t('周报档案冻结正式版，并可创建独立修订版', async () => {
+    const s = await freshStore();
+    await s.slidesSave('u1', [{ id: 'a', name: '原始页', elements: [] }], ['business', 'a']);
+    const archived = await s.archiveCreate('u1', '2026-07-27', { weekStart: '2026-07-27', pages: { global: [{ title: '新闻' }] } });
+    assert.equal(archived.version.number, 1);
+    await s.slidesSave('u1', [{ id: 'a', name: '实时页已修改', elements: [] }]);
+    const frozen = await s.archiveGet('u1', '2026-07-27');
+    assert.equal(frozen.version.snapshot.report.slides[0].name, '原始页');
+    const revision = await s.archiveRevision('u1', '2026-07-27', frozen.version.id);
+    revision.version.snapshot.report.slides[0].name = '修订页';
+    await s.archiveSave('u1', '2026-07-27', revision.version.id, revision.version.snapshot);
+    assert.equal((await s.archiveGet('u1', '2026-07-27', frozen.version.id)).version.snapshot.report.slides[0].name, '原始页');
+    assert.equal((await s.archiveGet('u1', '2026-07-27', revision.version.id)).version.snapshot.report.slides[0].name, '修订页');
+    await s.archiveSetOfficial('u1', '2026-07-27', revision.version.id);
+    const list = await s.archives('u1');
+    assert.equal(list[0].versions.find((item) => item.id === revision.version.id).isOfficial, true);
+  });
   console.log(`\n${pass} passed, ${fail} failed`); process.exitCode = fail ? 1 : 0;
 }
 run();

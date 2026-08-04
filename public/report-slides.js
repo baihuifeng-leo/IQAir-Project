@@ -2,8 +2,8 @@
 const ReportSlides = (() => {
   'use strict';
   const W = 1280, H = 720, DEFAULT_FONT_SIZE = 28;
-  let A, pages = [], pageId = null, host, presenting = false, selectedId = null, editingId = null;
-  let saveTimer = null, saving = false, queued = false, pendingPageOrder = null;
+  let A, pages = [], pageId = null, host, presenting = false, readOnly = false, selectedId = null, editingId = null;
+  let saveTimer = null, saving = false, queued = false, pendingPageOrder = null, saveHandler = null;
 
   const currentPage = () => pages.find((p) => p.id === pageId) || null;
   const uid = (prefix) => A.uid(prefix);
@@ -15,14 +15,17 @@ const ReportSlides = (() => {
   const canvasScale = () => host.querySelector('.rs-canvas')?.getBoundingClientRect().width / W || 1;
 
   function scheduleSave() {
-    if (presenting) return;
+    if (presenting || readOnly) return;
     clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 600);
   }
   async function flushSave() {
     if (saving) { queued = true; return; }
     saving = true;
     const pageOrder = pendingPageOrder; pendingPageOrder = null;
-    try { await call('/api/reports/personal/slides/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slides: pages, ...(pageOrder ? { pageOrder } : {}) }) }); }
+    try {
+      if (saveHandler) await saveHandler({ slides: pages, ...(pageOrder ? { pageOrder } : {}) });
+      else await call('/api/reports/personal/slides/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slides: pages, ...(pageOrder ? { pageOrder } : {}) }) });
+    }
     catch (e) { A.toast('自定义页保存失败：' + e.message, 'bad'); }
     finally { saving = false; if (queued) { queued = false; flushSave(); } }
   }
@@ -42,7 +45,7 @@ const ReportSlides = (() => {
     const page = currentPage(); if (!host || !page) return;
     host.replaceChildren();
     const shell = document.createElement('div'); shell.className = 'rs-shell' + (presenting ? ' presenting' : '');
-    if (!presenting) shell.appendChild(renderToolbar(page));
+    if (!presenting && !readOnly) shell.appendChild(renderToolbar(page));
     const viewport = document.createElement('div'); viewport.className = 'rs-viewport';
     const canvas = document.createElement('div'); canvas.className = 'rs-canvas'; canvas.tabIndex = 0;
     canvas.addEventListener('pointerdown', onCanvasPointerDown);
@@ -72,7 +75,7 @@ const ReportSlides = (() => {
     return bar;
   }
   function updateToolbar() {
-    if (presenting) return;
+    if (presenting || readOnly) return;
     const old = host?.querySelector('.rs-toolbar'), page = currentPage();
     if (old && page) old.replaceWith(renderToolbar(page));
   }
@@ -86,7 +89,7 @@ const ReportSlides = (() => {
       if (isEditing) { box.value = el.text; box.setAttribute('aria-label', '编辑文字内容'); }
       else box.textContent = el.text;
       Object.assign(box.style, { fontSize: (el.fontSize || DEFAULT_FONT_SIZE) + 'px', color: el.color || 'var(--text)', fontWeight: el.bold ? '700' : '400', fontStyle: el.italic ? 'italic' : 'normal', textAlign: el.align || 'left' });
-      if (!presenting) {
+      if (!presenting && !readOnly) {
         node.addEventListener('dblclick', (e) => { e.stopPropagation(); enterTextEdit(el); });
         if (isEditing) {
           box.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -97,7 +100,7 @@ const ReportSlides = (() => {
       }
       node.appendChild(box);
     } else { const img = document.createElement('img'); img.className = 'rs-image'; img.src = el.url; img.draggable = false; node.appendChild(img); }
-    if (!presenting && el.id === selectedId) attachHandles(node, el);
+    if (!presenting && !readOnly && el.id === selectedId) attachHandles(node, el);
     return node;
   }
   function buildPrintPage(id) {
@@ -118,7 +121,7 @@ const ReportSlides = (() => {
   }
   function onCanvasPointerDown(e) { if (e.target === e.currentTarget) { selectedId = null; editingId = null; render(); } }
   function startMove(e, el) {
-    if (presenting || editingId === el.id || e.target.classList.contains('rs-handle')) return;
+    if (presenting || readOnly || editingId === el.id || e.target.classList.contains('rs-handle')) return;
     e.stopPropagation(); selectedId = el.id;
     host.querySelectorAll('.rs-el.sel').forEach((node) => { node.classList.remove('sel'); node.querySelectorAll('.rs-handle').forEach((handle) => handle.remove()); });
     e.currentTarget.classList.add('sel'); attachHandles(e.currentTarget, el); updateToolbar();
@@ -142,15 +145,15 @@ const ReportSlides = (() => {
     const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); scheduleSave(); }; document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
   }
   function autoGrowHeight(box, el) { if (!box) return; box.style.height = 'auto'; el.h = Math.max(34, box.scrollHeight); const node = box.closest('.rs-el'); if (node) node.style.height = el.h + 'px'; }
-  function enterTextEdit(el) { if (presenting) return; selectedId = editingId = el.id; render(); const box = host.querySelector(`.rs-el[data-id="${el.id}"] .rs-text`); if (!box) return; box.focus(); const range = document.createRange(); range.selectNodeContents(box); range.collapse(false); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); }
+  function enterTextEdit(el) { if (presenting || readOnly) return; selectedId = editingId = el.id; render(); const box = host.querySelector(`.rs-el[data-id="${el.id}"] .rs-text`); if (!box) return; box.focus(); const range = document.createRange(); range.selectNodeContents(box); range.collapse(false); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); }
   function commitTextEdit(el) { if (editingId === el.id) editingId = null; scheduleSave(); render(); }
-  function addTextElement() { const page = currentPage(); if (!page || presenting) return; const el = { id: uid('el_'), type: 'text', x: 160, y: 140, w: 420, h: 42, z: nextZ(page), text: '双击编辑文字', fontSize: DEFAULT_FONT_SIZE, color: null, bold: false, italic: false, align: 'left' }; page.elements.push(el); selectedId = el.id; scheduleSave(); render(); enterTextEdit(el); }
+  function addTextElement() { const page = currentPage(); if (!page || presenting || readOnly) return; const el = { id: uid('el_'), type: 'text', x: 160, y: 140, w: 420, h: 42, z: nextZ(page), text: '双击编辑文字', fontSize: DEFAULT_FONT_SIZE, color: null, bold: false, italic: false, align: 'left' }; page.elements.push(el); selectedId = el.id; scheduleSave(); render(); enterTextEdit(el); }
   async function insertImage() {
     let url; try { url = await A.uploadImage(); } catch (e) { A.toast('图片上传失败：' + e.message, 'bad'); return; } if (!url) return;
     await addImageFromUrl(url);
   }
   async function addImageFromUrl(url) {
-    const page = currentPage(); if (!page || presenting) return;
+    const page = currentPage(); if (!page || presenting || readOnly) return;
     const [nw, nh] = await new Promise((resolve) => { const img = new Image(); img.onload = () => resolve([img.naturalWidth, img.naturalHeight]); img.onerror = () => resolve([400, 300]); img.src = url; });
     // PowerPoint 默认宽屏画布为 13.333 × 7.5 英寸；这里按 96dpi 固定成 1280 × 720。
     // 图片原字节上传，并以整页可用区域为初始尺寸，不再被旧的 640px 上限缩小。
@@ -161,7 +164,7 @@ const ReportSlides = (() => {
   }
   async function pasteImage(e) {
     const page = currentPage();
-    if (!page || presenting || editingId) return;
+    if (!page || presenting || readOnly || editingId) return;
     const item = [...(e.clipboardData?.items || [])].find((entry) => /^image\/(png|jpeg|webp)$/.test(entry.type));
     const file = item?.getAsFile();
     if (!file) return;
@@ -173,11 +176,11 @@ const ReportSlides = (() => {
       A.toast('已粘贴原图，可直接拖动或缩放');
     } catch (err) { A.toast('粘贴图片失败：' + err.message, 'bad'); }
   }
-  function deleteSelected() { const page = currentPage(); if (!page || !selectedId) return; page.elements = page.elements.filter((el) => el.id !== selectedId); selectedId = null; scheduleSave(); render(); }
-  function bringToFront() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el) return; el.z = nextZ(page); scheduleSave(); render(); }
-  function sendToBack() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el) return; el.z = Math.min(...page.elements.map((x) => x.z || 0)) - 1; scheduleSave(); render(); }
+  function deleteSelected() { const page = currentPage(); if (!page || !selectedId || readOnly) return; page.elements = page.elements.filter((el) => el.id !== selectedId); selectedId = null; scheduleSave(); render(); }
+  function bringToFront() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el || readOnly) return; el.z = nextZ(page); scheduleSave(); render(); }
+  function sendToBack() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el || readOnly) return; el.z = Math.min(...page.elements.map((x) => x.z || 0)) - 1; scheduleSave(); render(); }
   function toggleEditFullscreen() {
-    const fullscreenTarget = host; if (!fullscreenTarget || presenting) return;
+    const fullscreenTarget = host; if (!fullscreenTarget || presenting || readOnly) return;
     const exit = document.exitFullscreen || document.webkitExitFullscreen;
     const enter = fullscreenTarget.requestFullscreen || fullscreenTarget.webkitRequestFullscreen;
     if (document.fullscreenElement || document.webkitFullscreenElement) exit?.call(document);
@@ -185,8 +188,10 @@ const ReportSlides = (() => {
     else A.toast('这个浏览器不支持全屏编辑，可按 F11 手动放大', 'bad');
   }
   function onFullscreenChange() { if (host?.querySelector('.rs-shell') && !presenting) { updateToolbar(); requestAnimationFrame(scaleCanvas); } }
-  function savePageOrder(order) { pendingPageOrder = Array.isArray(order) ? order.slice() : null; scheduleSave(); }
+  function savePageOrder(order) { if (readOnly) return; pendingPageOrder = Array.isArray(order) ? order.slice() : null; scheduleSave(); }
   function setPresenting(value) { presenting = value; if (pageId) render(); }
+  function setEditable(value) { readOnly = !value; if (pageId) render(); }
   function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('paste', pasteImage); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
-  return { init, setPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, savePageOrder, flushSave, buildPrintPage, pageCount: () => pages.length };
+  function setSaveHandler(handler) { saveHandler = typeof handler === 'function' ? handler : null; }
+  return { init, setPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, setEditable, savePageOrder, flushSave, setSaveHandler, buildPrintPage, pageCount: () => pages.length };
 })();
