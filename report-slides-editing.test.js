@@ -13,5 +13,7 @@ assert.match(source, /mkBtn\('编辑文字',\s*\(\)\s*=>\s*enterTextEdit\(el\)\)
 assert.match(source, /document\.addEventListener\('paste', pasteImage\)/, '自定义页必须监听剪贴板粘贴图片');
 assert.match(source, /A\.uploadImageFile\(file\)/, '剪贴板图片必须走原图直传上传链路');
 assert.match(source, /\(W - 120\) \/ nw, \(H - 90\) \/ nh/, '图片初始尺寸必须按整张 1280×720 画布可用区域适配');
+assert.match(source, /function setPageActions\(actions\)/, '自定义页工具条应支持页面级动作');
+assert.match(source, /rs-toolbar-page-actions/, '重命名和删除应渲染在自定义页工具条右侧');
 
 console.log('✓ 自定义页文字编辑器使用可输入且可保存的 textarea');

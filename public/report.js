@@ -665,10 +665,6 @@ const Report = (() => {
     pages.forEach((item, index) => {
       const wrap = document.createElement('span'); wrap.className = 'rpt-page-tab' + (page === index + 1 ? ' on' : ''); wrap.dataset.pageId = item.id; wrap.draggable = !presenting;
       const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.page = String(index + 1); tab.textContent = `第 ${index + 1} 页 · ${item.label}`; tab.classList.toggle('on', page === index + 1); tab.onclick = () => switchPage(index + 1); wrap.appendChild(tab);
-      if (item.slide && (!archiveView || archiveEditing())) {
-        const rename = document.createElement('button'); rename.type = 'button'; rename.className = 'page-action rename'; rename.textContent = '重命名'; rename.title = '重命名此页'; rename.setAttribute('aria-label', '重命名此页'); rename.onclick = (e) => { e.stopPropagation(); openRenameSlide(item.id); }; wrap.appendChild(rename);
-        const kill = document.createElement('button'); kill.type = 'button'; kill.className = 'page-action kill'; kill.textContent = '删除'; kill.title = '删除此页'; kill.setAttribute('aria-label', '删除此页'); kill.onclick = (e) => { e.stopPropagation(); openDeleteSlide(item.id); }; wrap.appendChild(kill);
-      }
       if (!presenting && (!archiveView || archiveEditing())) {
         wrap.title = '拖动以调整报告与放映顺序';
         wrap.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); wrap.classList.add('dragging'); });
@@ -1080,6 +1076,7 @@ const Report = (() => {
   function init(api) {
     A = api;
     ReportSlides.init(api);
+    ReportSlides.setPageActions({ rename: openRenameSlide, delete: openDeleteSlide });
 
     A.$$('#rpt-switch button').forEach((b) => (b.onclick = () => switchSub(b.dataset.sub)));
 

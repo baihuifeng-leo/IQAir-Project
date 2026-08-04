@@ -1616,12 +1616,6 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-page-switch .rpt-page-tab:focus-within { outline: 1px solid var(--mint); outline-offset: 2px; }
 .rpt-page-switch .rpt-page-tab.dragging { opacity: .42; cursor: grabbing; }
 .rpt-page-switch .rpt-page-tab.drop-target { background: var(--mint-dim); }
-.rpt-page-switch .rpt-page-tab .page-action { min-height: 26px; padding: 4px 7px; border: 1px solid transparent; border-radius: 6px; font-size: 11px; line-height: 1; opacity: .92; }
-.rpt-page-switch .rpt-page-tab .page-action.rename { color: var(--dim); }
-.rpt-page-switch .rpt-page-tab .page-action.kill { color: var(--bad-text); }
-.rpt-page-switch .rpt-page-tab .page-action:hover { background: var(--overlay-weak); border-color: var(--line); }
-.rpt-page-switch .rpt-page-tab .page-action.kill:hover { background: color-mix(in srgb, var(--bad) 14%, transparent); border-color: color-mix(in srgb, var(--bad) 42%, var(--line)); }
-.rpt-page-switch .rpt-page-tab.on .page-action.rename { color: var(--mint); }
 .rpt-delete-page-sheet { width: min(390px, 100%); }
 .rpt-delete-page-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
 .rpt-delete-page-sheet input { box-sizing: border-box; width: 100%; margin-top: 14px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--field-bg); font: inherit; }
@@ -1718,6 +1712,9 @@ body.readonly .rpt-news-editor .kill { display: grid !important; }
 .rs-toolbar-btn { padding: 6px 10px; font-size: 12px; }
 .rs-toolbar-btn.on { background: var(--mint-dim); color: var(--mint); border-color: var(--mint); }
 .rs-toolbar-btn:disabled { opacity: .4; cursor: not-allowed; }
+.rs-toolbar-page-actions { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+.rs-toolbar-page-actions .rs-toolbar-page-delete { color: var(--bad-text); }
+.rs-toolbar-page-actions .rs-toolbar-page-delete:hover { background: color-mix(in srgb, var(--bad) 14%, transparent); border-color: color-mix(in srgb, var(--bad) 42%, var(--line)); }
 .rs-toolbar-size { width: 58px; background: var(--field-bg); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 7px; font-size: 12px; }
 .rs-toolbar-color { width: 31px; height: 31px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }
 .rs-viewport { width: 100%; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 14px; border: 1px solid var(--line); background: var(--surface-2); }

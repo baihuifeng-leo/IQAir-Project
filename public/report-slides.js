@@ -3,7 +3,7 @@ const ReportSlides = (() => {
   'use strict';
   const W = 1280, H = 720, DEFAULT_FONT_SIZE = 28;
   let A, pages = [], pageId = null, host, presenting = false, readOnly = false, selectedId = null, editingId = null;
-  let saveTimer = null, saving = false, queued = false, pendingPageOrder = null, saveHandler = null;
+  let saveTimer = null, saving = false, queued = false, pendingPageOrder = null, saveHandler = null, pageActions = {};
 
   const currentPage = () => pages.find((p) => p.id === pageId) || null;
   const uid = (prefix) => A.uid(prefix);
@@ -72,6 +72,10 @@ const ReportSlides = (() => {
       [['B', 'bold'], ['I', 'italic']].forEach(([label, key]) => { const b = mkBtn(label, () => { el[key] = !el[key]; scheduleSave(); render(); }); b.classList.toggle('on', !!el[key]); bar.appendChild(b); });
       [['left', '左'], ['center', '中'], ['right', '右']].forEach(([align, label]) => { const b = mkBtn(label, () => { el.align = align; scheduleSave(); render(); }); b.classList.toggle('on', (el.align || 'left') === align); bar.appendChild(b); });
     }
+    const actions = document.createElement('div'); actions.className = 'rs-toolbar-page-actions';
+    const rename = mkBtn('重命名', () => pageActions.rename?.(page.id)); rename.classList.add('rs-toolbar-page-rename'); actions.appendChild(rename);
+    const remove = mkBtn('删除页面', () => pageActions.delete?.(page.id)); remove.classList.add('rs-toolbar-page-delete'); actions.appendChild(remove);
+    bar.appendChild(actions);
     return bar;
   }
   function updateToolbar() {
@@ -191,7 +195,8 @@ const ReportSlides = (() => {
   function savePageOrder(order) { if (readOnly) return; pendingPageOrder = Array.isArray(order) ? order.slice() : null; scheduleSave(); }
   function setPresenting(value) { presenting = value; if (pageId) render(); }
   function setEditable(value) { readOnly = !value; if (pageId) render(); }
+  function setPageActions(actions) { pageActions = actions && typeof actions === 'object' ? actions : {}; }
   function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('paste', pasteImage); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
   function setSaveHandler(handler) { saveHandler = typeof handler === 'function' ? handler : null; }
-  return { init, setPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, setEditable, savePageOrder, flushSave, setSaveHandler, buildPrintPage, pageCount: () => pages.length };
+  return { init, setPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, setEditable, setPageActions, savePageOrder, flushSave, setSaveHandler, buildPrintPage, pageCount: () => pages.length };
 })();
