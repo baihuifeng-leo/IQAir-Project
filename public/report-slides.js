@@ -58,7 +58,7 @@ const ReportSlides = (() => {
   function renderToolbar(page) {
     const bar = document.createElement('div'); bar.className = 'rs-toolbar'; const el = page.elements.find((x) => x.id === selectedId);
     const fullscreen = document.fullscreenElement || document.webkitFullscreenElement;
-    bar.append(mkBtn(fullscreen ? '退出全屏编辑' : '全屏编辑', toggleEditFullscreen, fullscreen ? '退出全屏编辑' : '放大当前画布进行编辑'), mkBtn('新建文字', addTextElement), mkBtn('插入图片', insertImage));
+    bar.append(mkBtn(fullscreen ? '退出全屏编辑' : '全屏编辑', toggleEditFullscreen, fullscreen ? '退出全屏编辑' : '放大当前画布进行编辑'), mkBtn('新建文字', addTextElement), mkBtn('插入图片', insertImage, '也可直接按 Ctrl+V 粘贴图片'));
     [['置顶', bringToFront], ['置底', sendToBack], ['删除', deleteSelected]].forEach(([l, fn]) => { const b = mkBtn(l, fn); b.disabled = !el; bar.appendChild(b); });
     if (el?.type === 'text') {
       const edit = mkBtn('编辑文字', () => enterTextEdit(el)); edit.disabled = editingId === el.id; bar.appendChild(edit);
@@ -130,9 +130,32 @@ const ReportSlides = (() => {
   function commitTextEdit(el) { if (editingId === el.id) editingId = null; scheduleSave(); render(); }
   function addTextElement() { const page = currentPage(); if (!page || presenting) return; const el = { id: uid('el_'), type: 'text', x: 160, y: 140, w: 420, h: 42, z: nextZ(page), text: '双击编辑文字', fontSize: DEFAULT_FONT_SIZE, color: null, bold: false, italic: false, align: 'left' }; page.elements.push(el); selectedId = el.id; scheduleSave(); render(); enterTextEdit(el); }
   async function insertImage() {
-    const page = currentPage(); if (!page || presenting) return; let url; try { url = await A.uploadImage(); } catch (e) { A.toast('图片上传失败：' + e.message, 'bad'); return; } if (!url) return;
+    let url; try { url = await A.uploadImage(); } catch (e) { A.toast('图片上传失败：' + e.message, 'bad'); return; } if (!url) return;
+    await addImageFromUrl(url);
+  }
+  async function addImageFromUrl(url) {
+    const page = currentPage(); if (!page || presenting) return;
     const [nw, nh] = await new Promise((resolve) => { const img = new Image(); img.onload = () => resolve([img.naturalWidth, img.naturalHeight]); img.onerror = () => resolve([400, 300]); img.src = url; });
-    const scale = Math.min(1, 640 / Math.max(nw, nh)), w = Math.round(nw * scale), h = Math.round(nh * scale); const el = { id: uid('el_'), type: 'image', x: Math.round((W - w) / 2), y: Math.round((H - h) / 2), w, h, z: nextZ(page), url, naturalW: nw, naturalH: nh }; page.elements.push(el); selectedId = el.id; scheduleSave(); render();
+    // PowerPoint 默认宽屏画布为 13.333 × 7.5 英寸；这里按 96dpi 固定成 1280 × 720。
+    // 图片原字节上传，并以整页可用区域为初始尺寸，不再被旧的 640px 上限缩小。
+    const scale = Math.min(1, (W - 120) / nw, (H - 90) / nh);
+    const w = Math.round(nw * scale), h = Math.round(nh * scale);
+    const el = { id: uid('el_'), type: 'image', x: Math.round((W - w) / 2), y: Math.round((H - h) / 2), w, h, z: nextZ(page), url, naturalW: nw, naturalH: nh };
+    page.elements.push(el); selectedId = el.id; scheduleSave(); render();
+  }
+  async function pasteImage(e) {
+    const page = currentPage();
+    if (!page || presenting || editingId) return;
+    const item = [...(e.clipboardData?.items || [])].find((entry) => /^image\/(png|jpeg|webp)$/.test(entry.type));
+    const file = item?.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    try {
+      const url = await A.uploadImageFile(file);
+      if (!url) return;
+      await addImageFromUrl(url);
+      A.toast('已粘贴原图，可直接拖动或缩放');
+    } catch (err) { A.toast('粘贴图片失败：' + err.message, 'bad'); }
   }
   function deleteSelected() { const page = currentPage(); if (!page || !selectedId) return; page.elements = page.elements.filter((el) => el.id !== selectedId); selectedId = null; scheduleSave(); render(); }
   function bringToFront() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el) return; el.z = nextZ(page); scheduleSave(); render(); }
@@ -148,6 +171,6 @@ const ReportSlides = (() => {
   function onFullscreenChange() { if (host?.querySelector('.rs-shell') && !presenting) { updateToolbar(); requestAnimationFrame(scaleCanvas); } }
   function savePageOrder(order) { pendingPageOrder = Array.isArray(order) ? order.slice() : null; scheduleSave(); }
   function setPresenting(value) { presenting = value; if (pageId) render(); }
-  function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
+  function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('paste', pasteImage); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
   return { init, setPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, savePageOrder, flushSave, pageCount: () => pages.length };
 })();

@@ -328,8 +328,7 @@ const App = (() => {
    * 原图直传：裸二进制 PUT，不经 canvas、不转 base64。
    * 之前那套 toDataURL(0.92) 必然重编码，字再也清晰不了。
    */
-  async function uploadImage() {
-    const file = await pickImage();
+  async function uploadImageFile(file) {
     if (!file) return null;
     if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error('只支持 PNG、JPG、WebP');
     if (file.size > 40 * 1024 * 1024) throw new Error('单张不要超过 40MB');
@@ -343,6 +342,10 @@ const App = (() => {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || '上传失败');
     return j.url;
+  }
+
+  async function uploadImage() {
+    return uploadImageFile(await pickImage());
   }
 
   /* ── 小工具 ─────────────────────────────────────────── */
@@ -645,7 +648,7 @@ const App = (() => {
     get me() { return me; },
     view: () => view,
     peek, lightbox, isEditing, refreshModuleVisibility, wireInfoPanel,
-    $, $$, uid, clone, toast, save, mark, trackable, bindInput, mkKill, uploadImage, renderAll, guard
+    $, $$, uid, clone, toast, save, mark, trackable, bindInput, mkKill, uploadImage, uploadImageFile, renderAll, guard
   };
 
   return { boot, ...api };
