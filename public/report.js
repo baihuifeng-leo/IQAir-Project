@@ -793,49 +793,54 @@ const Report = (() => {
     const short = (d) => String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
     return `FY${String(year).slice(-2)} Q${quarter}W${String(week).padStart(2, '0')}-Weekly Meeting（${short(monday)}-${short(sunday)}）`;
   }
-  function preparePdfPages() {
-    const holder = A.$('#rpt-pdf-pages'); holder.replaceChildren();
-    const restore = [];
-    reportPages().forEach((item) => {
-      if (item.slide) {
-        const printPage = ReportSlides.buildPrintPage(item.id);
-        if (printPage) holder.appendChild(printPage);
-        return;
-      }
-      const source = A.$(item.selector);
-      if (!source) return;
-      const children = [...source.childNodes], frame = document.createElement('div');
-      frame.className = 'rpt-pdf-fit-content'; frame.append(...children);
-      restore.push({ source, parent: source.parentNode, next: source.nextSibling, hidden: source.hidden, className: source.className, children });
-      source.hidden = false; source.classList.add('rpt-pdf-fixed-page'); source.appendChild(frame); holder.appendChild(source);
+  function clonePdfPage(source) {
+    const clone = source.cloneNode(true); clone.hidden = false;
+    const originalCanvases = source.querySelectorAll('canvas'), clonedCanvases = clone.querySelectorAll('canvas');
+    clonedCanvases.forEach((canvas, index) => {
+      const original = originalCanvases[index]; if (!original) return;
+      const image = document.createElement('img'); image.className = 'rpt-pdf-chart-image'; image.alt = '';
+      image.src = original.toDataURL('image/png'); image.width = original.width; image.height = original.height;
+      image.style.cssText = 'display:block;width:100%;height:100%;object-fit:fill;'; canvas.replaceWith(image);
     });
-    holder.hidden = false;
-    return () => {
-      restore.forEach(({ source, parent, next, hidden, className, children }) => { source.replaceChildren(...children); source.className = className; parent.insertBefore(source, next); source.hidden = hidden; });
-      holder.replaceChildren(); holder.hidden = true;
-    };
+    clone.classList.add('pdf-page'); return clone;
   }
-  function fitPdfPages() {
-    A.$$('#rpt-pdf-pages > .rpt-pdf-fixed-page').forEach((pageEl) => {
-      const content = pageEl.querySelector('.rpt-pdf-fit-content'); if (!content) return;
-      pageEl.style.setProperty('--rpt-pdf-scale', '1');
-      const scale = Math.min(1, 720 / Math.max(1, content.scrollHeight));
-      pageEl.style.setProperty('--rpt-pdf-scale', String(scale)); content.style.zoom = String(scale);
-    });
+  function buildPdfPageHtml(item) {
+    if (item.slide) {
+      const custom = ReportSlides.buildPrintPage(item.id); if (!custom) return '';
+      custom.classList.add('pdf-page'); return custom.outerHTML;
+    }
+    const source = A.$(item.selector); return source ? clonePdfPage(source).outerHTML : '';
+  }
+  function pdfDocumentStyles() {
+    return `
+      @page { size: 13.333in 7.5in; margin: 0; }
+      html, body { width: 1280px !important; min-width: 1280px; height: auto !important; min-height: 720px; margin: 0; overflow: visible !important; background: #080c14 !important; color: #e9eef8 !important; }
+      body { font-family: -apple-system, "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif; }
+      .pdf-document { width: 1280px; overflow: visible; }
+      .pdf-page { box-sizing: border-box; display: flex !important; flex: 0 0 auto !important; width: 1280px !important; height: 720px !important; min-height: 720px !important; overflow: hidden !important; padding: 22px 48px; background: #080c14 !important; color: #e9eef8 !important; break-after: page; page-break-after: always; }
+      .pdf-page:last-child { break-after: auto; page-break-after: auto; }
+      .pdf-page.rpt-pdf-custom-page { padding: 0; }
+      .pdf-page .rpt-range, .pdf-page .rpt-wm-weekbar, .pdf-page .rpt-sec-head button, .pdf-page .rpt-news-head { display: none !important; }
+      .pdf-page, .pdf-page * { animation: none !important; transition: none !important; filter: none !important; box-shadow: none !important; }
+      .pdf-page .rs-canvas { transform: none !important; box-shadow: none !important; }
+      .rpt-pdf-chart-image { display: block; }
+      @media print { html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    `;
+  }
+  function openPdfDocument(fileName, pagesHtml) {
+    const output = window.open('', '_blank');
+    if (!output) throw new Error('浏览器拦截了导出窗口，请允许本站打开新窗口后重试');
+    output.document.open();
+    output.document.write(`<!doctype html><html><head><base href="${location.origin}/"><meta charset="utf-8"><meta name="viewport" content="width=1280"><title>${fileName}</title><link rel="stylesheet" href="/styles.css"><style>${pdfDocumentStyles()}</style></head><body class="rpt-presenting"><main class="pdf-document">${pagesHtml}</main><script>\n(function () {\n  function fit() {\n    document.querySelectorAll('.pdf-page:not(.rpt-pdf-custom-page)').forEach(function (page) {\n      page.style.zoom = '1';\n      var scale = Math.min(1, 720 / Math.max(1, page.scrollHeight));\n      page.style.zoom = String(scale);\n      page.style.width = (1280 / scale) + 'px';\n      page.style.height = (720 / scale) + 'px';\n    });\n  }\n  window.addEventListener('load', function () {\n    var images = Array.from(document.images);\n    Promise.all(images.map(function (img) { return img.complete ? Promise.resolve() : new Promise(function (done) { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); }); })).then(function () {\n      requestAnimationFrame(function () { fit(); requestAnimationFrame(function () { window.focus(); window.print(); }); });\n    });\n  }, { once: true });\n}());\n<\/script></body></html>`);
+    output.document.close();
   }
   function exportPdf() {
     if (!data) return A.toast('报告数据加载中，请稍后再试', 'bad');
-    const button = A.$('#rpt-export-pdf-btn'); const title = document.title, fileName = pdfFilename(), wasPresenting = presenting;
-    const restorePages = preparePdfPages();
-    document.body.classList.add('rpt-presenting', 'rpt-pdf-export'); document.title = fileName;
+    const button = A.$('#rpt-export-pdf-btn'); const fileName = pdfFilename();
     button.disabled = true; button.textContent = '正在生成 PDF…';
-    const restore = () => {
-      document.body.classList.remove('rpt-pdf-export'); if (!wasPresenting) document.body.classList.remove('rpt-presenting'); document.title = title; restorePages();
-      button.disabled = false; button.textContent = '⭳ 导出 PDF'; switchPage(page);
-      window.removeEventListener('afterprint', restore);
-    };
-    window.addEventListener('afterprint', restore);
-    requestAnimationFrame(() => requestAnimationFrame(() => { fitPdfPages(); requestAnimationFrame(() => window.print()); }));
+    try { openPdfDocument(fileName, reportPages().map(buildPdfPageHtml).join('')); }
+    catch (e) { A.toast('导出 PDF 失败：' + e.message, 'bad'); }
+    finally { button.disabled = false; button.textContent = '⭳ 导出 PDF'; }
   }
 
   function enterPresent() {
