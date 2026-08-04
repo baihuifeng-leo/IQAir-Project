@@ -23,11 +23,13 @@ assert.match(js, /function clonePdfPage\(source\)/, '固定页必须克隆到独
 assert.match(js, /original\.toDataURL\('image\/png'\)/, '图表 canvas 必须保留为高分辨率图片');
 assert.match(js, /function capturePdfChart\(instance, width, height\)/, 'ECharts 图表必须从实例导出，不能依赖隐藏容器中的 canvas 克隆');
 assert.match(js, /instance\.getDataURL\(\{ type: 'png', pixelRatio: 2/, 'ECharts 图表必须导出为两倍分辨率 PNG');
+assert.match(js, /getComputedStyle\(document\.documentElement\)\.getPropertyValue\('--paper-card'\)/, '图表导出背景必须跟随当前主题');
 assert.match(js, /replacePdfChart\(clone, '#rpt-wm-trend', wmChart, 1184, 150\)/, '第二页隐藏状态的图表也必须在导出时重新生成');
 assert.doesNotMatch(js, /function fit\(\)[\s\S]*?page\.style\.zoom/, '各页不能按自身高度分别缩放，否则会与自定义页比例不一致');
 assert.match(js, /\.pdf-page#rpt-page-1, \.pdf-page#rpt-page-2 \{ display: block !important; \}/, '前两页需要使用与 16:9 画布匹配的导出专用排版');
 assert.match(js, /<link rel="stylesheet" href="\/styles\.css">/, '独立文档应加载报告既有组件样式');
 assert.match(js, /@page \{ size: 13\.333in 7\.5in; margin: 0; \}/, '独立文档应固定为 PowerPoint 默认宽屏纸张');
+assert.match(js, /<html data-theme="\$\{theme\}">/, '独立导出文档必须显式继承深浅主题');
 assert.match(html, /class="sheet rpt-rename-page-sheet"/, '重命名弹窗需要专用布局类');
 assert.match(html, /class="sheet-head"><h2 id="rpt-rename-page-title"/, '重命名弹窗必须使用标准标题区');
 

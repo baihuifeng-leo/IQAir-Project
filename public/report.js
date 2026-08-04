@@ -802,7 +802,8 @@ const Report = (() => {
       // 显式按目标图表尺寸重绘，再直接从实例取图，不能依赖 cloneNode() 的 canvas。
       const previous = { width: instance.getWidth(), height: instance.getHeight() };
       instance.resize({ width, height, silent: true });
-      const image = instance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#101725', excludeComponents: ['toolbox'] });
+      const background = getComputedStyle(document.documentElement).getPropertyValue('--paper-card').trim() || '#101725';
+      const image = instance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: background, excludeComponents: ['toolbox'] });
       instance.resize({ ...previous, silent: true });
       return image;
     } catch { return ''; }
@@ -838,10 +839,10 @@ const Report = (() => {
   function pdfDocumentStyles() {
     return `
       @page { size: 13.333in 7.5in; margin: 0; }
-      html, body { width: 1280px !important; min-width: 1280px; height: auto !important; min-height: 720px; margin: 0; overflow: visible !important; background: #080c14 !important; color: #e9eef8 !important; }
+      html, body { width: 1280px !important; min-width: 1280px; height: auto !important; min-height: 720px; margin: 0; overflow: visible !important; background: var(--bg) !important; color: var(--text) !important; }
       body { font-family: -apple-system, "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif; }
       .pdf-document { width: 1280px; overflow: visible; }
-      .pdf-page { box-sizing: border-box; display: flex !important; flex: 0 0 auto !important; width: 1280px !important; height: 720px !important; min-height: 720px !important; overflow: hidden !important; padding: 22px 48px; background: #080c14 !important; color: #e9eef8 !important; break-after: page; page-break-after: always; }
+      .pdf-page { box-sizing: border-box; display: flex !important; flex: 0 0 auto !important; width: 1280px !important; height: 720px !important; min-height: 720px !important; overflow: hidden !important; padding: 22px 48px; background: var(--bg) !important; color: var(--text) !important; break-after: page; page-break-after: always; }
       .pdf-page:last-child { break-after: auto; page-break-after: auto; }
       .pdf-page.rpt-pdf-custom-page { padding: 0; }
       .pdf-page .rpt-range, .pdf-page .rpt-wm-weekbar, .pdf-page .rpt-sec-head button, .pdf-page .rpt-news-head { display: none !important; }
@@ -881,8 +882,9 @@ const Report = (() => {
   function openPdfDocument(fileName, pagesHtml) {
     const output = window.open('', '_blank', 'popup,width=1280,height=720');
     if (!output) throw new Error('浏览器拦截了导出窗口，请允许本站打开新窗口后重试');
+    const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
     output.document.open();
-    output.document.write(`<!doctype html><html><head><base href="${location.origin}/"><meta charset="utf-8"><meta name="viewport" content="width=1280"><title>${fileName}</title><link rel="stylesheet" href="/styles.css"><style>${pdfDocumentStyles()}</style></head><body class="rpt-presenting"><main class="pdf-document">${pagesHtml}</main><script>\nwindow.addEventListener('load', function () {\n  var images = Array.from(document.images);\n  Promise.all(images.map(function (img) { return img.complete ? Promise.resolve() : new Promise(function (done) { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); }); })).then(function () {\n    requestAnimationFrame(function () { requestAnimationFrame(function () { window.focus(); window.print(); }); });\n  });\n}, { once: true });\n<\/script></body></html>`);
+    output.document.write(`<!doctype html><html data-theme="${theme}"><head><base href="${location.origin}/"><meta charset="utf-8"><meta name="viewport" content="width=1280"><title>${fileName}</title><link rel="stylesheet" href="/styles.css"><style>${pdfDocumentStyles()}</style></head><body class="rpt-presenting"><main class="pdf-document">${pagesHtml}</main><script>\nwindow.addEventListener('load', function () {\n  var images = Array.from(document.images);\n  Promise.all(images.map(function (img) { return img.complete ? Promise.resolve() : new Promise(function (done) { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); }); })).then(function () {\n    requestAnimationFrame(function () { requestAnimationFrame(function () { window.focus(); window.print(); }); });\n  });\n}, { once: true });\n<\/script></body></html>`);
     output.document.close();
   }
   function exportPdf() {
