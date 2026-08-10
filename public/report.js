@@ -811,6 +811,9 @@ const Report = (() => {
     finally { btn.disabled = false; btn.textContent = '确认两条并生成'; }
   }
   async function loadNews() { try { news = await call('/api/reports/news/summary'); } catch { news = null; } renderNews(); }
+  function refreshLiveNews() {
+    if (sub === 'personal' && !archiveView) void loadNews();
+  }
 
   /* ── 页面切换：前三页固定，自定义页接在后面 ── */
   function switchPage(n) {
@@ -1098,11 +1101,14 @@ const Report = (() => {
   function onShow() {
     if (!data) return refresh();
     render();
+    refreshLiveNews();
     if (chart) requestAnimationFrame(() => chart.resize());
   }
 
   function init(api) {
     A = api;
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshLiveNews(); });
+    window.addEventListener('focus', refreshLiveNews);
     ReportSlides.init(api);
     ReportSlides.setPageActions({ rename: openRenameSlide, delete: openDeleteSlide });
 

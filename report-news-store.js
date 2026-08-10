@@ -168,9 +168,9 @@ function articleImages(html, pageUrl, title = '') {
 function articleImage(html, pageUrl, title = '') { return articleImages(html, pageUrl, title)[0]?.url || null; }
 
 class ReportNewsStore {
-  constructor(dir, getText = requestText, ai = null) { this.dir = dir; this.getText = getText; this.ai = ai; }
+  constructor(dir, getText = requestText, ai = null, ownerFor = (userId) => userId) { this.dir = dir; this.getText = getText; this.ai = ai; this.ownerFor = ownerFor; }
   file(userId) {
-    const id = String(userId || '').trim();
+    const id = String(this.ownerFor(userId) || userId || '').trim();
     if (!/^u_[a-z0-9]+$/i.test(id)) throw new Error('用户标识不合法');
     return path.join(this.dir, id + '.json');
   }

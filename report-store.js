@@ -139,9 +139,9 @@ function sanitizePageOrder(input) {
 }
 
 class ReportStore {
-  constructor(dir) { this.dir = dir; }
+  constructor(dir, ownerFor = (userId) => userId) { this.dir = dir; this.ownerFor = ownerFor; }
 
-  file(userId) { return path.join(this.dir, userId + '.json'); }
+  file(userId) { return path.join(this.dir, String(this.ownerFor(userId) || userId) + '.json'); }
 
   async _load(userId) {
     try {

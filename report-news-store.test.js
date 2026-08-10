@@ -36,6 +36,11 @@ assert.deepEqual(coverOptions.map((item) => item.url), ['https://example.com/ai-
   assert.ok(published.publishedAt);
   const summary = await store.summary('u_owner');
   assert.equal(summary.news.pages.radar[1].title, '中文 AI 新闻 4');
+  const sharedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-shared-'));
+  const sharedStore = new ReportNewsStore(sharedDir, async () => '<article>共享账户新闻正文。</article>', fakeAi, (userId) => userId === 'u_leo' ? 'u_admin' : userId);
+  await sharedStore.save('u_admin', { weeks: { [currentWeek]: published }, drafts: {}, candidates: {} });
+  assert.equal((await sharedStore.summary('u_leo')).news.pages.radar[1].title, '中文 AI 新闻 4');
+  fs.rmSync(sharedDir, { recursive: true, force: true });
   const data = await store.load('u_owner');
   data.candidates[currentWeek] = [
     { id: 'a', ...card(5), tags: ['电商相关'] }, { id: 'b', ...card(6), tags: ['空气品质相关'] }

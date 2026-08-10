@@ -40,6 +40,7 @@ const ADMIN_PIN = process.env.ADMIN_PIN || '123456';
 const SESSION_DAYS = Number(process.env.SESSION_DAYS || 30);
 const COOKIE = 'wb_session';
 const DOCS = ['matrix', 'compare'];
+const SHARED_REPORT_NAMES = new Set(['admin', 'leo']);
 
 const MAX_BODY = 24 * 1024 * 1024;
 const MAX_IMAGE = 40 * 1024 * 1024;   // 原图直传，不重编码，所以放宽
@@ -92,6 +93,11 @@ const validPin = (p) => /^\d{6}$/.test(String(p || ''));
 
 /* ═══ 用户表 ═════════════════════════════════════════════ */
 let users = [];
+function sharedReportOwnerId(userId) {
+  const member = users.find((user) => user.id === userId);
+  if (!member || !SHARED_REPORT_NAMES.has(String(member.name || '').trim().toLowerCase())) return userId;
+  return users.find((user) => String(user.name || '').trim().toLowerCase() === 'admin')?.id || userId;
+}
 async function loadUsers() {
   try {
     users = JSON.parse(await fsp.readFile(USERS_FILE, 'utf8'));
@@ -277,10 +283,11 @@ function scheduleWeeklyNews() {
   if (next <= now) next.setDate(next.getDate() + 7);
   setTimeout(async () => {
     try {
-      const results = await Promise.allSettled(users.map((user) => reportNews.refreshSafely(user.id)));
+      const owners = [...new Set(users.map((user) => sharedReportOwnerId(user.id)))];
+      const results = await Promise.allSettled(owners.map((userId) => reportNews.refreshSafely(userId)));
       const succeeded = results.filter((result) => result.status === 'fulfilled').length;
-      console.log(`[report-news] 已为 ${succeeded}/${users.length} 个账户收集 AI 新闻候选`);
-      await audit(null, 'reports.news.collect.auto', { detail: [`为 ${succeeded} 个账户收集 AI 新闻候选`] });
+      console.log(`[report-news] 已为 ${succeeded}/${owners.length} 个报告账户收集 AI 新闻候选`);
+      await audit(null, 'reports.news.collect.auto', { detail: [`为 ${succeeded}/${owners.length} 个报告账户收集 AI 新闻候选`] });
     } catch (e) { console.error('[report-news]', e.message); }
     scheduleWeeklyNews();
   }, next - now).unref?.();
@@ -982,8 +989,8 @@ const server = http.createServer(async (req, res) => {
 
 const reviews = new ReviewStore(REVIEWS_DIR);
 const preview3d = new Preview3DStore(PRODUCTS3D_DIR);
-const reports = new ReportStore(REPORTS_DIR);
-const reportNews = new ReportNewsStore(REPORT_NEWS_DIR, undefined, new ReportNewsAi());
+const reports = new ReportStore(REPORTS_DIR, sharedReportOwnerId);
+const reportNews = new ReportNewsStore(REPORT_NEWS_DIR, undefined, new ReportNewsAi(), sharedReportOwnerId);
 const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UPLOAD_DIR);
 
 (async () => {
@@ -998,11 +1005,12 @@ const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UP
   await materialcheckOcr.checkAvailable();
   scheduleNightly();
   scheduleWeeklyNews();
-  Promise.all(users.map(async (user) => {
-    const { weekStart, candidates } = await reportNews.summary(user.id);
+  const reportOwners = [...new Set(users.map((user) => sharedReportOwnerId(user.id)))];
+  Promise.all(reportOwners.map(async (userId) => {
+    const { weekStart, candidates } = await reportNews.summary(userId);
     if (!candidates?.length) {
-      try { const collected = await reportNews.refreshSafely(user.id); console.log(`[report-news] 为 ${user.name} 启动补收集：${collected.weekStart}`); }
-      catch (e) { console.error(`[report-news] ${user.name} 启动抓取失败：` + e.message); }
+      try { const collected = await reportNews.refreshSafely(userId); console.log(`[report-news] 为共享报告账户启动补收集：${collected.weekStart}`); }
+      catch (e) { console.error('[report-news] 共享报告账户启动抓取失败：' + e.message); }
     }
   }));
   server.listen(PORT, '0.0.0.0', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));

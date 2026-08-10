@@ -15,6 +15,8 @@ assert.match(css, /body\.rpt-presenting \.rpt-news-page\s*\{[^}]*overflow:\s*hid
 assert.match(css, /body\.rpt-presenting \.rpt-news-body\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/);
 assert.match(js, /A\.lightbox\(card\.imageUrl/);
 assert.doesNotMatch(js, /imageLink\.href\s*=\s*card\.url/);
+assert.match(js, /function refreshLiveNews\(\)\s*\{[^}]*loadNews\(\)/);
+assert.match(js, /document\.addEventListener\('visibilitychange',[\s\S]*?refreshLiveNews\(\)/);
 // 编辑态必须能覆盖自动封面；放映态不应出现现场操作控件。
 assert.match(js, /function updateNewsCover\(cardId, imageUrl\)/);
 assert.match(js, /A\.uploadImageFile\(file\)/);

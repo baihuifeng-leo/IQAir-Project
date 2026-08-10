@@ -17,6 +17,15 @@ async function run() {
   await t('新用户 summary 返回空 slides 数组', async () => {
     assert.deepStrictEqual((await (await freshStore()).summary('u1')).slides, []);
   });
+  await t('共享报告账户读写同一份个人报告', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'rs-shared-'));
+    const s = new ReportStore(dir, (userId) => userId === 'u_leo' ? 'u_admin' : userId);
+    await s.slidesSave('u_admin', [{ id: 'shared-page', name: '共同周报', elements: [] }]);
+    assert.strictEqual((await s.summary('u_leo')).slides[0].name, '共同周报');
+    await s.weimengSave('u_leo', { weekStart: '2026-08-10', pageviews: 88, channels: {} });
+    assert.strictEqual((await s.summary('u_admin')).weimeng[0].pageviews, 88);
+    await fsp.rm(dir, { recursive: true, force: true });
+  });
   await t('slidesSave 保存并可读回', async () => {
     const s = await freshStore();
     await s.slidesSave('u1', [{ id: 'pg_1', name: '市场复盘', elements: [{ id: 'el_1', type: 'text', x: 1, y: 2, w: 100, h: 30, z: 1, text: '你好' }] }]);
