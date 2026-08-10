@@ -161,7 +161,7 @@ class ReportNewsStore {
     } catch { return { weeks: {}, drafts: {}, candidates: {}, lastAttempt: null }; }
   }
   async save(userId, data) { await fsp.mkdir(this.dir, { recursive: true }); await fsp.writeFile(this.file(userId), JSON.stringify(data, null, 1)); }
-  async summary(userId) { const data = await this.load(userId); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || data.weeks[Object.keys(data.weeks).sort().pop()] || null, candidates: data.candidates[key] || [], lastAttempt: data.lastAttempt || null }; }
+  async summary(userId) { const data = await this.load(userId); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || null, candidates: data.candidates[key] || [], lastAttempt: data.lastAttempt || null }; }
   async refresh(userId, options = {}) {
     const data = await this.load(userId); const weekStart = mondayOf();
     const results = await Promise.allSettled([
