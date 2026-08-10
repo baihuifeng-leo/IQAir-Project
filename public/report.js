@@ -372,6 +372,18 @@ const Report = (() => {
     return `${curLabel} 各项指标${trend}，其中${best.label}${dirWord}最大，达 ${Math.abs(best.delta).toFixed(1)}%，是本期最值得关注的变化。`;
   }
 
+  /** 放映时先交代店铺整体的流量变化，再落到首页指标的细项判断。 */
+  function buildShopOverview(curLabel, rows, previousRows) {
+    const sum = (items, field) => items.reduce((total, item) => total + (item[field] || 0), 0);
+    const describe = (label, field) => {
+      const current = sum(rows, field), previous = sum(previousRows, field);
+      const delta = deltaTxt(deltaOf(current, previous));
+      const change = delta === '—' ? '暂无环比基数' : delta === '新增' ? '本期新增' : `环比 ${delta}`;
+      return `${label} ${fmt(current, 'count')}（${change}）`;
+    };
+    return `${curLabel} 店铺整体${describe('浏览量', 'shopPageviews')}，${describe('访客数', 'shopVisitors')}。`;
+  }
+
   /* ── 生意参谋指标（首页）：跟标题栏时间范围筛选联动的两周对比 ── */
   function renderCompare() {
     const box = A.$('#rpt-compare');
@@ -421,9 +433,10 @@ const Report = (() => {
     box.appendChild(grid);
 
     if (highlightEl) {
+      const overview = buildShopOverview(curLabel, thisWeek, lastWeek);
       const text = buildPage1Highlight(curLabel, deltas);
-      highlightEl.textContent = text;
-      highlightEl.hidden = !text;
+      highlightEl.textContent = overview ? `${overview} ${text}` : text;
+      highlightEl.hidden = !overview && !text;
     }
   }
 
