@@ -708,6 +708,34 @@ const Report = (() => {
     article.classList.remove('image-wide', 'image-square', 'image-portrait');
     article.classList.add(ratio >= 1.25 ? 'image-wide' : ratio <= 0.8 ? 'image-portrait' : 'image-square');
   }
+  async function updateNewsCover(cardId, imageUrl) {
+    if (!news?.weekStart) return;
+    const updated = await call('/api/reports/news/cover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: news.weekStart, cardId, imageUrl }) });
+    news = { ...news, news: updated };
+    renderNews();
+  }
+  function addNewsCoverActions(body, card) {
+    if (archiveView) return;
+    const actions = document.createElement('div'); actions.className = 'rpt-news-cover-actions';
+    const options = (card.coverOptions || []).filter((item) => item?.url && item.url !== card.imageUrl);
+    if (options.length) {
+      const cycle = document.createElement('button'); cycle.type = 'button'; cycle.className = 'ghost rpt-news-cover-cycle'; cycle.textContent = `换图（${options.length}）`;
+      cycle.title = '切换到同篇新闻中另一张自动筛选的封面';
+      cycle.onclick = async () => { cycle.disabled = true; try { await updateNewsCover(card.id, options[0].url); A.toast('已更换为同篇新闻的备选封面'); } catch (e) { A.toast(e.message, 'bad'); } finally { cycle.disabled = false; } };
+      actions.appendChild(cycle);
+    }
+    const upload = document.createElement('button'); upload.type = 'button'; upload.className = 'ghost rpt-news-cover-upload'; upload.textContent = '上传原图'; upload.title = '上传一张清晰的横版封面图';
+    upload.onclick = () => {
+      const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/png,image/jpeg,image/webp';
+      input.onchange = async () => {
+        const file = input.files?.[0]; if (!file) return;
+        upload.disabled = true; const old = upload.textContent; upload.textContent = '上传中…';
+        try { await updateNewsCover(card.id, await A.uploadImageFile(file)); A.toast('已使用上传的原图作为封面'); } catch (e) { A.toast(e.message, 'bad'); } finally { upload.disabled = false; upload.textContent = old; }
+      };
+      input.click();
+    };
+    actions.appendChild(upload); body.appendChild(actions);
+  }
   function renderNewsCards(target, cards) {
     const host = A.$(target); host.replaceChildren();
     if (!cards?.length) { host.innerHTML = '<p class="rpt-news-empty">本周新闻还未发布。可从“选择两条新闻”中收集候选并生成。</p>'; return; }
@@ -734,7 +762,7 @@ const Report = (() => {
       const meta = document.createElement('p'); meta.className = 'rpt-news-meta';
       const sourceLink = document.createElement('a'); sourceLink.href = card.url || '#'; sourceLink.target = '_blank'; sourceLink.rel = 'noreferrer'; sourceLink.textContent = `${card.source} · 原文`; sourceLink.title = '打开新闻原文';
       meta.append(sourceLink, document.createTextNode(` · ${dateLabel(card.publishedAt)}`));
-      body.append(tags, title, keyPoint, summary, bullets, presenter, meta); article.append(visual, body); host.appendChild(article);
+      body.append(tags, title, keyPoint, summary, bullets, presenter, meta); addNewsCoverActions(body, card); article.append(visual, body); host.appendChild(article);
     });
   }
   function renderNews() {

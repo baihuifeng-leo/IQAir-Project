@@ -3,7 +3,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary, articleImage } = require('./report-news-store.js');
+const { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary, articleImage, articleImages } = require('./report-news-store.js');
 const { ReportNewsAi } = require('./report-news-ai.js');
 
 const xml = `<?xml version="1.0"?><rss><channel><item><title><![CDATA[AI 助力中国电商]]></title><link>https://example.com/a</link><description><![CDATA[来源 - 电商平台发布人工智能新能力。]]></description><pubDate>Mon, 03 Aug 2026 00:00:00 GMT</pubDate><source>示例媒体</source></item></channel></rss>`;
@@ -17,6 +17,9 @@ const chinaz = parseChinazAi('<a href="/2026/0803/1768722.shtml" class="home-pro
 assert.equal(chinaz.length, 1);
 assert.equal(chinaz[0].source, '站长之家 AI 新闻');
 assert.equal(articleImage('<article><img class="article-photo" data-src="/images/report.jpg" width="900" height="506"><img src="/logo.png"></article><meta property="og:image" content="https://example.com/cover.jpg">', 'https://example.com/news'), 'https://example.com/images/report.jpg');
+// 若回退成“第一张图即封面”，这条测试会失败：横版且 alt 与新闻主题相关的正文图必须优先，二维码及无关竖图不能进入候选。
+const coverOptions = articleImages('<article><img src="/qrcode.png" width="1000" height="560"><img src="/portrait.jpg" width="600" height="1200" alt="活动现场"><figure><img src="/ai-commerce-launch.jpg" width="1600" height="900" alt="AI 电商平台发布新能力"></figure></article><meta property="og:image" content="https://example.com/site-cover.jpg">', 'https://example.com/news', 'AI 电商平台发布新能力');
+assert.deepEqual(coverOptions.map((item) => item.url), ['https://example.com/ai-commerce-launch.jpg', 'https://example.com/site-cover.jpg']);
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-'));
@@ -43,6 +46,25 @@ assert.equal(articleImage('<article><img class="article-photo" data-src="/images
   assert.equal(generated.pages.global[0].title, 'AI 标题 1');
   assert.equal(generated.pages.global[0].bullets.length, 3);
   assert.equal(generated.pages.global[0].aiGenerated, true);
+  // 若封面覆盖没有写入指定周的已发布新闻，或放宽成任意第三方图片地址，这里应失败。
+  const covered = await store.setCover('u_owner', currentWeek, generated.pages.global[0].id, '/uploads/editor-approved-cover.jpg');
+  assert.equal(covered.pages.global[0].imageUrl, '/uploads/editor-approved-cover.jpg');
+  await assert.rejects(() => store.setCover('u_owner', currentWeek, generated.pages.global[0].id, 'https://untrusted.example/cover.jpg'), /封面必须/);
+  await assert.rejects(() => store.setCover('u_other', currentWeek, generated.pages.global[0].id, '/uploads/editor-approved-cover.jpg'), /未找到/);
+  // 如果有人把“生成主题图”做成必经步骤，或在正文没有图片时完全不调用它，这个兜底行为会回归。
+  const coverDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-cover-'));
+  const coverAi = {
+    configured: () => true,
+    imageConfigured: () => true,
+    generateCover: async () => 'https://cdn.example/ai-cover.png',
+    generate: async (cards) => cards.map((item) => ({ id: item.id, title: item.title, summary: '依据原文整理出的中文新闻摘要，包含事实、业务影响及后续观察重点。', keyPoint: '这是一条可核对的业务结论。', presenterText: '汇报时说明该事件对业务的关键影响。', bullets: ['事件事实', '业务影响', '后续关注'], layout: 'image-focus' }))
+  };
+  const coverStore = new ReportNewsStore(coverDir, async () => '<article>这里是一段足够长的中文新闻正文，但没有任何可用图片。报道详细说明了人工智能能力的发布、应用范围和团队后续计划，供系统生成可靠的汇报摘要。</article>', coverAi);
+  await coverStore.save('u_owner', { weeks: {}, drafts: {}, candidates: { [currentWeek]: [{ id: 'cover-a', ...card(8), imageUrl: null, tags: ['全球 AI 热点'] }, { id: 'cover-b', ...card(9), imageUrl: null, tags: ['电商相关'] }] } });
+  const withGeneratedCover = await coverStore.generate('u_owner', currentWeek, ['cover-a', 'cover-b']);
+  assert.equal(withGeneratedCover.pages.global[0].imageUrl, 'https://cdn.example/ai-cover.png');
+  assert.equal(withGeneratedCover.pages.global[0].coverKind, 'generated');
+  fs.rmSync(coverDir, { recursive: true, force: true });
   const prior = new Date(); prior.setDate(prior.getDate() - 7);
   const priorWeek = mondayOf(prior);
   const rolloverDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-rollover-'));
@@ -100,6 +122,18 @@ assert.equal(articleImage('<article><img class="article-photo" data-src="/images
   assert.equal(anthropicPayload.max_tokens, 1400);
   assert.equal(anthropicPayload.thinking.type, 'disabled');
   assert.equal(anthropicPayload.response_format, undefined);
+  let imageUrl; let imagePayload;
+  const imageAi = new ReportNewsAi({
+    baseUrl: 'https://ai.example/v1', apiKey: 'text-key', model: 'text-model',
+    imageBaseUrl: 'https://images.example/v1', imageApiKey: 'image-key', imageModel: 'image-model',
+    request: async (url, headers, payload) => { imageUrl = url; imagePayload = { headers, payload }; return { data: [{ url: 'https://cdn.example/generated-cover.png' }] }; }
+  });
+  assert.equal(imageAi.imageConfigured(), true);
+  assert.equal(await imageAi.generateCover({ title: 'AI 电商平台发布新能力', articleText: aiArticle }), 'https://cdn.example/generated-cover.png');
+  assert.equal(imageUrl, 'https://images.example/v1/images/generations');
+  assert.equal(imagePayload.headers.Authorization, 'Bearer image-key');
+  assert.equal(imagePayload.payload.size, '1536x1024');
+  assert.match(imagePayload.payload.prompt, /不包含任何文字/);
   fs.rmSync(importDir, { recursive: true, force: true });
   await assert.rejects(() => store.saveDraft('u_owner', { weekStart: currentWeek, pages: { global: [card(1), card(2)], radar: [{ ...card(3), title: 'English news', summary: 'English only' }, card(4)] } }), /中文/);
   assert.equal((await store.summary('u_other')).news, null, '其他账户不能读取本账户发布的新闻');

@@ -47,9 +47,22 @@ class ReportNewsAi {
     this.apiKey = options.apiKey || process.env.AI_API_KEY || '';
     this.model = options.model || process.env.AI_MODEL || '';
     this.protocol = options.protocol || process.env.AI_API_PROTOCOL || 'openai';
+    this.imageBaseUrl = String(options.imageBaseUrl || process.env.AI_IMAGE_API_BASE || this.baseUrl).replace(/\/$/, '');
+    this.imageApiKey = options.imageApiKey || process.env.AI_IMAGE_API_KEY || this.apiKey;
+    this.imageModel = options.imageModel || process.env.AI_IMAGE_MODEL || '';
     this.request = options.request || requestJson;
   }
   configured() { return Boolean(this.apiKey && this.model); }
+  imageConfigured() { return Boolean(this.imageApiKey && this.imageModel); }
+  async generateCover(card) {
+    if (!this.imageConfigured()) return null;
+    const title = clean(card?.title, 120); const article = clean(card?.articleText, 900);
+    if (!title) return null;
+    const prompt = `为一则中文商业周报新闻创作横向 3:2 封面图。主题：${title}。参考事实：${article}。画面应专业、写实或高品质 editorial 风格，突出事件主体或关键技术场景；不包含任何文字、数字、Logo、水印、界面截图或二维码；预留干净的视觉空间，适合裁切到 16:9。`;
+    const response = await this.request(`${this.imageBaseUrl}/images/generations`, { Authorization: `Bearer ${this.imageApiKey}` }, { model: this.imageModel, prompt, size: '1536x1024', n: 1 });
+    const url = response?.data?.[0]?.url;
+    return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null;
+  }
   async generate(cards) {
     if (!this.configured()) throw new Error('AI 新闻生成未配置：请设置 AI_API_KEY 和 AI_MODEL');
     if (!Array.isArray(cards) || cards.length !== 2) throw new Error('AI 生成需要两条新闻');

@@ -125,27 +125,47 @@ function imageAttr(tag, names) {
   }
   return '';
 }
-function articleImage(html, pageUrl) {
-  // OG 图经常只是站点封面。优先正文中尺寸足够、且不是 logo/广告/二维码的图片，
-  // 让新闻页的视觉真正来自报道内容；没有可用正文图时才回退到 OG 图。
+function coverRelevance(title, hint) {
+  const subject = String(title || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const candidate = String(hint || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  if (!subject || !candidate) return 0;
+  let hits = candidate.includes(subject) ? 8 : 0;
+  const terms = subject.match(/[\u4e00-\u9fff]{2}|[a-z0-9]{2,}/g) || [];
+  for (const term of new Set(terms)) if (candidate.includes(term)) hits += 2;
+  return Math.min(hits, 14);
+}
+
+function articleImages(html, pageUrl, title = '') {
+  // OG 图经常只是站点封面。优先正文中尺寸足够、语义更贴近标题、且适合 16:9 的图片；
+  // 再保留高质量的 OG 图，给人工“换图”一个稳定的同篇报道候选池。
   const section = /<[^>]+id=["']article-content["'][^>]*>([\s\S]*?)<\/[^^>]+>/i.exec(html)?.[1]
     || /<(?:article|main)[^>]*>([\s\S]*?)<\/(?:article|main)>/i.exec(html)?.[1] || html;
   const images = [];
+  let index = 0;
   for (const match of section.matchAll(/<img\b[^>]*>/gi)) {
     const tag = match[0]; const raw = imageAttr(tag, ['data-original', 'data-src', 'data-lazy-src', 'src']);
     if (!raw) continue;
     let url; try { url = new URL(raw, pageUrl).toString(); } catch { continue; }
-    if (!/^https?:\/\//i.test(url) || /(?:logo|icon|avatar|qrcode|qr-code|advert|ad[_-]|banner)/i.test(tag + ' ' + url)) continue;
+    const hint = `${tag} ${url}`;
+    if (!/^https?:\/\//i.test(url) || /(?:logo|icon|avatar|qrcode|qr-code|advert|ad[_-]|banner)/i.test(hint)) continue;
     const width = Number(imageAttr(tag, ['data-width', 'width'])) || 0;
     const height = Number(imageAttr(tag, ['data-height', 'height'])) || 0;
-    const score = (width >= 300 ? 4 : 0) + (height >= 180 ? 3 : 0) + (width && height && width / height > 1.2 && width / height < 2.5 ? 2 : 0);
-    images.push({ url, score });
+    const ratio = width && height ? width / height : 1.78;
+    // 竖版素材在双栏放映会挤压摘要，且没有无裁切的横版展示价值；不作为自动候选。
+    if (ratio < 0.82 || ratio > 3) continue;
+    const score = 40 + (width >= 960 ? 16 : width >= 600 ? 9 : 0) + (height >= 540 ? 12 : height >= 300 ? 6 : 0)
+      + (ratio >= 1.35 && ratio <= 2.05 ? 18 : ratio >= 1.1 ? 5 : 0) + coverRelevance(title, hint) - index++;
+    images.push({ url, score, source: 'article' });
   }
-  images.sort((a, b) => b.score - a.score);
-  if (images[0]) return images[0].url;
   const og = metaValue(html, 'og:image') || metaValue(html, 'twitter:image');
-  try { return og ? new URL(og.replace(/&amp;/g, '&'), pageUrl).toString() : null; } catch { return null; }
+  try {
+    const url = og ? new URL(og.replace(/&amp;/g, '&'), pageUrl).toString() : null;
+    if (url && !/(?:logo|icon|avatar|qrcode|qr-code|advert|ad[_-]|banner)/i.test(url)) images.push({ url, score: 8 + coverRelevance(title, url), source: 'og' });
+  } catch { /* 无效 OG 图不能阻断新闻生成 */ }
+  const seen = new Set();
+  return images.sort((a, b) => b.score - a.score).filter((item) => !seen.has(item.url) && seen.add(item.url)).slice(0, 5);
 }
+function articleImage(html, pageUrl, title = '') { return articleImages(html, pageUrl, title)[0]?.url || null; }
 
 class ReportNewsStore {
   constructor(dir, getText = requestText, ai = null) { this.dir = dir; this.getText = getText; this.ai = ai; }
@@ -203,17 +223,43 @@ class ReportNewsStore {
     const sourceCards = await Promise.all(picked.map(async ({ id, lane, ...card }) => {
       const html = await this.getText(card.url);
       const body = articleText(html);
-      return { id, ...card, articleText: body, imageUrl: articleImage(html, card.url) || card.imageUrl };
+      const coverOptions = articleImages(html, card.url, `${card.title} ${body.slice(0, 700)}`);
+      return { id, ...card, articleText: body, imageUrl: coverOptions[0]?.url || card.imageUrl, coverOptions };
     }));
     const generated = await this.ai.generate(sourceCards);
     const cards = generated.map((draft) => {
       const source = sourceCards.find((card) => card.id === draft.id);
       return { ...source, ...draft, aiGenerated: true, articleText: undefined };
     });
+    // 图像服务是非阻断兜底：正文没有合适横图时才尝试生成。失败或未配置都不能
+    // 影响已经可核对的新闻摘要与发布流程。
+    if (typeof this.ai?.imageConfigured === 'function' && this.ai.imageConfigured()) {
+      await Promise.all(cards.map(async (card) => {
+        if (card.coverOptions?.length) return;
+        try {
+          const source = sourceCards.find((item) => item.id === card.id);
+          const imageUrl = await this.ai.generateCover(source);
+          if (imageUrl) { card.imageUrl = imageUrl; card.coverOptions = [{ url: imageUrl, source: 'generated' }]; card.coverKind = 'generated'; }
+        } catch { /* 图像服务不可用时保留无图演示底板与上传入口 */ }
+      }));
+    }
     const news = { weekStart, publishedAt: new Date().toISOString(), pages: { global: cards }, sourceCount: candidates.length };
     data.weeks[weekStart] = news;
     for (const key of Object.keys(data.weeks).sort().slice(0, -12)) delete data.weeks[key];
     await this.save(userId, data); return news;
+  }
+  async setCover(userId, weekStartInput, cardId, imageUrl) {
+    const weekStart = mondayOf(weekStartInput); const data = await this.load(userId);
+    const news = data.weeks[weekStart];
+    const card = news?.pages?.global?.find((item) => item.id === String(cardId || ''));
+    if (!card) throw new Error('未找到本周已生成的新闻');
+    const url = String(imageUrl || '').trim();
+    const autoCandidate = (card.coverOptions || []).some((item) => item?.url === url);
+    if (!url || (!url.startsWith('/uploads/') && !autoCandidate)) throw new Error('封面必须来自本次新闻候选或本站上传图片');
+    card.imageUrl = url;
+    card.coverUpdatedAt = new Date().toISOString();
+    await this.save(userId, data);
+    return news;
   }
   async importUrl(userId, weekStartInput, rawUrl) {
     const weekStart = mondayOf(weekStartInput); const url = String(rawUrl || '').trim();
@@ -225,7 +271,8 @@ class ReportNewsStore {
     const description = clean(metaValue(html, 'description') || metaValue(html, 'og:description') || articleText(html).slice(0, 240));
     if (!title || !/[\u4e00-\u9fff]/.test(title + description)) throw new Error('未读到可用的中文新闻内容');
     const item = { title, description, link: url, source: host.replace(/^www\./, ''), publishedAt: new Date().toISOString(), lane: 'manual' };
-    const card = { ...toCard(item), id: crypto.createHash('sha1').update(url).digest('hex').slice(0, 12), lane: 'manual', imageUrl: /^https:\/\//i.test(metaValue(html, 'og:image')) ? metaValue(html, 'og:image').replace(/&amp;/g, '&') : null };
+    const coverOptions = articleImages(html, url, `${title} ${description}`);
+    const card = { ...toCard(item), id: crypto.createHash('sha1').update(url).digest('hex').slice(0, 12), lane: 'manual', imageUrl: coverOptions[0]?.url || null, coverOptions };
     const data = await this.load(userId); const list = data.candidates[weekStart] || [];
     data.candidates[weekStart] = [card, ...list.filter((x) => x.id !== card.id)].slice(0, 20);
     await this.save(userId, data); return card;
@@ -260,4 +307,4 @@ class ReportNewsStore {
   async refreshSafely(userId, options) { try { return await this.refresh(userId, options); } catch (e) { const data = await this.load(userId); data.lastAttempt = { at: new Date().toISOString(), ok: false, error: e.message }; await this.save(userId, data); throw e; } }
 }
 
-module.exports = { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary, articleImage };
+module.exports = { ReportNewsStore, parseFeed, parseChinazAi, mondayOf, shortSummary, articleImage, articleImages };

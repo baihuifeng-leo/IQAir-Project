@@ -15,6 +15,10 @@ assert.match(css, /body\.rpt-presenting \.rpt-news-page\s*\{[^}]*overflow:\s*hid
 assert.match(css, /body\.rpt-presenting \.rpt-news-body\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/);
 assert.match(js, /A\.lightbox\(card\.imageUrl/);
 assert.doesNotMatch(js, /imageLink\.href\s*=\s*card\.url/);
+// 编辑态必须能覆盖自动封面；放映态不应出现现场操作控件。
+assert.match(js, /function updateNewsCover\(cardId, imageUrl\)/);
+assert.match(js, /A\.uploadImageFile\(file\)/);
+assert.match(css, /body\.rpt-presenting \.rpt-news-cover-actions\s*\{[^}]*display:\s*none/);
 // 放映封面并非一律上图下文：竖图必须切换为左右布局，且正文不会被原文区挤出。
 assert.match(js, /classifyNewsImage\(article, img\)/);
 assert.match(css, /body\.rpt-presenting \.rpt-news-card\.image-portrait\s*\{[^}]*grid-template-columns:/);

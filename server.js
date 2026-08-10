@@ -753,6 +753,14 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, news);
     }
 
+    if (p === '/api/reports/news/cover' && req.method === 'POST') {
+      const input = await body(req, 8192);
+      let news; try { news = await reportNews.setCover(me.id, input.weekStart, input.cardId, input.imageUrl); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      audit(me, 'reports.news.cover', { detail: [`更新 ${input.weekStart} AI 新闻封面`] });
+      return json(res, 200, news);
+    }
+
     if (p === '/api/reports/news/publish' && req.method === 'POST') {
       let news; try { news = await reportNews.publish(me.id, (await body(req, 4096)).weekStart); }
       catch (e) { return json(res, 400, { error: e.message }); }
