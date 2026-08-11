@@ -1,7 +1,10 @@
 /* report-slides.js — 个人报告自定义页：零依赖 PPT 式画布编辑器 */
 const ReportSlides = (() => {
   'use strict';
-  const W = 1280, H = 720, DEFAULT_FONT_SIZE = 28;
+  const W = 1280, H = 720, DEFAULT_FONT_SIZE = 28, DEFAULT_SLIDE_TITLE = '未命名页面', BODY_TOP = 100;
+  const MASTER_LEFT_IMAGE = '/uploads/56a87e70285cdea7e6.png';
+  const MASTER_RIGHT_IMAGE = '/uploads/6f73ccc2f49d28a04c.png';
+  const LEGACY_MASTER_IMAGE_URLS = new Set([MASTER_LEFT_IMAGE, MASTER_RIGHT_IMAGE, '/uploads/7c38a67eae0f6f377d.png']);
   let A, pages = [], pageId = null, host, presenting = false, readOnly = false, selectedId = null, editingId = null;
   let saveTimer = null, saving = false, queued = false, pendingPageOrder = null, saveHandler = null, pageActions = {};
 
@@ -13,6 +16,18 @@ const ReportSlides = (() => {
   };
   const nextZ = (page) => Math.max(0, ...page.elements.map((el) => Number(el.z) || 0)) + 1;
   const canvasScale = () => host.querySelector('.rs-canvas')?.getBoundingClientRect().width / W || 1;
+
+  function isLegacyMasterElement(el, hasLegacyMaster) {
+    if (el?.type === 'image') return LEGACY_MASTER_IMAGE_URLS.has(el.url);
+    return !!(hasLegacyMaster && el?.type === 'text' && Number(el.y) < 80 && Number(el.x) >= 70 && Number(el.x) <= 320);
+  }
+  function migrateSlideMaster(page) {
+    const elements = Array.isArray(page?.elements) ? page.elements : [];
+    const hasLegacyMaster = elements.some((el) => el?.type === 'image' && LEGACY_MASTER_IMAGE_URLS.has(el.url));
+    const legacyTitle = hasLegacyMaster && elements.find((el) => el?.type === 'text' && Number(el.y) < 80 && Number(el.x) >= 70 && Number(el.x) <= 320);
+    const title = String(page?.title || legacyTitle?.text || DEFAULT_SLIDE_TITLE).trim() || DEFAULT_SLIDE_TITLE;
+    return { ...page, title, elements: hasLegacyMaster ? elements.filter((el) => !isLegacyMasterElement(el, hasLegacyMaster)) : elements };
+  }
 
   function scheduleSave() {
     if (presenting || readOnly) return;
@@ -36,8 +51,13 @@ const ReportSlides = (() => {
   }
   function mountPage(id) { pageId = id; selectedId = null; editingId = null; render(); }
   function unmountPage() { pageId = null; selectedId = null; editingId = null; if (host) host.replaceChildren(); }
-  function setPages(nextPages) { pages = Array.isArray(nextPages) ? nextPages : []; if (pageId && !currentPage()) unmountPage(); }
-  function addPage() { const page = { id: uid('pg_'), name: '', elements: [] }; pages.push(page); scheduleSave(); return page; }
+  function setPages(nextPages) {
+    const incoming = Array.isArray(nextPages) ? nextPages : [];
+    pages = incoming.map(migrateSlideMaster);
+    if (JSON.stringify(pages) !== JSON.stringify(incoming) && !readOnly) scheduleSave();
+    if (pageId && !currentPage()) unmountPage();
+  }
+  function addPage() { const page = { id: uid('pg_'), name: '', title: '未命名页面', elements: [] }; pages.push(page); scheduleSave(); return page; }
   function deletePage(id) { const at = pages.findIndex((p) => p.id === id); if (at < 0) return false; pages.splice(at, 1); if (pageId === id) unmountPage(); scheduleSave(); return true; }
   function renamePage(id, name) { const page = pages.find((item) => item.id === id); if (!page) return false; page.name = String(name || '').trim().slice(0, 40); scheduleSave(); return true; }
 
@@ -49,6 +69,7 @@ const ReportSlides = (() => {
     const viewport = document.createElement('div'); viewport.className = 'rs-viewport';
     const canvas = document.createElement('div'); canvas.className = 'rs-canvas'; canvas.tabIndex = 0;
     canvas.addEventListener('pointerdown', onCanvasPointerDown);
+    canvas.appendChild(buildSlideMaster(page, { editable: !presenting && !readOnly }));
     page.elements.slice().sort((a, b) => a.z - b.z).forEach((el) => canvas.appendChild(buildElementNode(el)));
     viewport.appendChild(canvas); shell.appendChild(viewport); host.appendChild(shell);
     requestAnimationFrame(scaleCanvas);
@@ -83,6 +104,20 @@ const ReportSlides = (() => {
     const old = host?.querySelector('.rs-toolbar'), page = currentPage();
     if (old && page) old.replaceWith(renderToolbar(page));
   }
+  function buildSlideMaster(page, { editable = false } = {}) {
+    const master = document.createElement('div'); master.className = 'rs-slide-master' + (editable ? ' editable' : '');
+    const left = document.createElement('img'); left.className = 'rs-slide-master-brand rs-slide-master-brand-left'; left.src = MASTER_LEFT_IMAGE; left.alt = '';
+    const title = document.createElement('div'); title.className = 'rs-slide-title'; title.textContent = page.title || DEFAULT_SLIDE_TITLE;
+    const right = document.createElement('img'); right.className = 'rs-slide-master-brand rs-slide-master-brand-right'; right.src = MASTER_RIGHT_IMAGE; right.alt = '';
+    const line = document.createElement('div'); line.className = 'rs-slide-master-line';
+    if (editable) {
+      title.contentEditable = 'true'; title.spellcheck = false; title.setAttribute('aria-label', '页面标题');
+      title.addEventListener('pointerdown', (e) => e.stopPropagation());
+      title.addEventListener('input', () => { page.title = title.textContent.slice(0, 80); scheduleSave(); });
+      title.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); title.blur(); } });
+    }
+    master.append(left, title, right, line); return master;
+  }
   function buildElementNode(el) {
     const node = document.createElement('div'); node.className = 'rs-el' + (el.id === selectedId ? ' sel' : ''); node.dataset.id = el.id;
     Object.assign(node.style, { left: el.x + 'px', top: el.y + 'px', width: el.w + 'px', height: el.h + 'px', zIndex: el.z });
@@ -111,6 +146,7 @@ const ReportSlides = (() => {
     const page = pages.find((item) => item.id === id); if (!page) return null;
     const section = document.createElement('section'); section.className = 'rpt-page rpt-pdf-custom-page'; section.dataset.pageId = page.id;
     const canvas = document.createElement('div'); canvas.className = 'rs-canvas';
+    canvas.appendChild(buildSlideMaster(page, { print: true }));
     page.elements.slice().sort((a, b) => a.z - b.z).forEach((el) => {
       const node = document.createElement('div'); node.className = 'rs-el';
       Object.assign(node.style, { left: el.x + 'px', top: el.y + 'px', width: el.w + 'px', height: el.h + 'px', zIndex: el.z });
@@ -151,7 +187,7 @@ const ReportSlides = (() => {
   function autoGrowHeight(box, el) { if (!box) return; box.style.height = 'auto'; el.h = Math.max(34, box.scrollHeight); const node = box.closest('.rs-el'); if (node) node.style.height = el.h + 'px'; }
   function enterTextEdit(el) { if (presenting || readOnly) return; selectedId = editingId = el.id; render(); const box = host.querySelector(`.rs-el[data-id="${el.id}"] .rs-text`); if (!box) return; box.focus(); const range = document.createRange(); range.selectNodeContents(box); range.collapse(false); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); }
   function commitTextEdit(el) { if (editingId === el.id) editingId = null; scheduleSave(); render(); }
-  function addTextElement() { const page = currentPage(); if (!page || presenting || readOnly) return; const el = { id: uid('el_'), type: 'text', x: 160, y: 140, w: 420, h: 42, z: nextZ(page), text: '双击编辑文字', fontSize: DEFAULT_FONT_SIZE, color: null, bold: false, italic: false, align: 'left' }; page.elements.push(el); selectedId = el.id; scheduleSave(); render(); enterTextEdit(el); }
+  function addTextElement() { const page = currentPage(); if (!page || presenting || readOnly) return; const el = { id: uid('el_'), type: 'text', x: 160, y: BODY_TOP, w: 420, h: 42, z: nextZ(page), text: '双击编辑文字', fontSize: DEFAULT_FONT_SIZE, color: null, bold: false, italic: false, align: 'left' }; page.elements.push(el); selectedId = el.id; scheduleSave(); render(); enterTextEdit(el); }
   async function insertImage() {
     let url; try { url = await A.uploadImage(); } catch (e) { A.toast('图片上传失败：' + e.message, 'bad'); return; } if (!url) return;
     await addImageFromUrl(url);
@@ -161,9 +197,10 @@ const ReportSlides = (() => {
     const [nw, nh] = await new Promise((resolve) => { const img = new Image(); img.onload = () => resolve([img.naturalWidth, img.naturalHeight]); img.onerror = () => resolve([400, 300]); img.src = url; });
     // PowerPoint 默认宽屏画布为 13.333 × 7.5 英寸；这里按 96dpi 固定成 1280 × 720。
     // 图片原字节上传，并以整页可用区域为初始尺寸，不再被旧的 640px 上限缩小。
-    const scale = Math.min(1, (W - 120) / nw, (H - 90) / nh);
+    const contentHeight = H - BODY_TOP - 30;
+    const scale = Math.min(1, (W - 120) / nw, contentHeight / nh);
     const w = Math.round(nw * scale), h = Math.round(nh * scale);
-    const el = { id: uid('el_'), type: 'image', x: Math.round((W - w) / 2), y: Math.round((H - h) / 2), w, h, z: nextZ(page), url, naturalW: nw, naturalH: nh };
+    const el = { id: uid('el_'), type: 'image', x: Math.round((W - w) / 2), y: BODY_TOP + Math.round((contentHeight - h) / 2), w, h, z: nextZ(page), url, naturalW: nw, naturalH: nh };
     page.elements.push(el); selectedId = el.id; scheduleSave(); render();
   }
   async function pasteImage(e) {
