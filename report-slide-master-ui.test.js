@@ -25,5 +25,6 @@ assert.match(css, /\.rs-slide-master-brand\s*\{[^}]*height:\s*36px/, '左右标�
 assert.match(css, /\.rs-slide-master-brand-left\s*\{[^}]*left:\s*34px/, '左侧标识必须与横线使用统一留白');
 assert.match(css, /\.rs-slide-master-brand-right\s*\{[^}]*right:\s*34px/, '右侧标识必须与横线使用统一留白');
 assert.match(css, /\.rs-slide-master-line\s*\{[^}]*left:\s*34px[^}]*right:\s*34px/, '横线必须对齐左右标识的页边距');
+assert.match(css, /\.rs-slide-title\s*\{[^}]*top:\s*16px[^}]*height:\s*36px/, '标题输入框必须与左右标识同高并居中下移');
 
 console.log('✓ 自定义页以固定母版渲染，标题独立编辑并同步到导出');

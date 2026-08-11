@@ -1727,7 +1727,7 @@ body.readonly .rpt-news-editor .kill { display: grid !important; }
 .rs-slide-master-brand { position: absolute; top: 16px; display: block; height: 36px; width: auto; object-fit: contain; }
 .rs-slide-master-brand-left { left: 34px; }
 .rs-slide-master-brand-right { right: 34px; }
-.rs-slide-title { position: absolute; top: 12px; left: 120px; right: 156px; box-sizing: border-box; height: 44px; margin: 0; padding: 0; overflow: hidden; border: 1px solid transparent; border-radius: 5px; color: var(--text); background: transparent; font: 700 30px/1.25 var(--f-display); letter-spacing: -.02em; white-space: nowrap; text-overflow: ellipsis; }
+.rs-slide-title { position: absolute; top: 16px; left: 120px; right: 156px; box-sizing: border-box; height: 36px; margin: 0; padding: 0; overflow: hidden; border: 1px solid transparent; border-radius: 5px; color: var(--text); background: transparent; font: 700 30px/1.2 var(--f-display); letter-spacing: -.02em; white-space: nowrap; text-overflow: ellipsis; }
 .rs-slide-master.editable .rs-slide-title { pointer-events: auto; cursor: text; }
 .rs-slide-master.editable .rs-slide-title:hover, .rs-slide-master.editable .rs-slide-title:focus { border-color: var(--mint); background: var(--mint-dim); outline: none; }
 .rs-slide-master-line { position: absolute; left: 34px; right: 34px; top: 72px; height: 1px; background: var(--line); }
