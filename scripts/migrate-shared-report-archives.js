@@ -39,6 +39,18 @@ function freezeLegacyMasters(report) {
   return frozen;
 }
 
+// 某一份历史周报需要采用当前的固定母版时，仅升级该周快照的渲染版本。
+// 母版本身由前端按版本构建，因此不用也不能把它写成可编辑的页面元素。
+function restoreArchiveMaster(report, weekStart) {
+  const repaired = clone(report || {});
+  const archive = (repaired.archives || []).find((item) => item?.weekStart === weekStart);
+  if (!archive) throw new Error(`找不到 ${weekStart} 周报档案`);
+  for (const version of archive.versions || []) {
+    if (version?.snapshot?.report) version.snapshot.report.slideMasterVersion = 1;
+  }
+  return repaired;
+}
+
 function clearMismatchedArchiveNews(report, weekStart) {
   const repaired = clone(report || {});
   for (const archive of repaired.archives || []) {
@@ -105,6 +117,17 @@ function restoreArchiveNews(targetFile, weekStart, sourceFile, sourceWeek) {
   return { backup, weekStart, sourceWeek, titles: news.pages.global.map((item) => item.title) };
 }
 
+function restoreMaster(targetFile, weekStart) {
+  const target = JSON.parse(fs.readFileSync(targetFile, 'utf8'));
+  const repaired = restoreArchiveMaster(target, weekStart);
+  const changed = JSON.stringify(target) !== JSON.stringify(repaired);
+  if (!changed) return { backup: null, weekStart, changed: false };
+  const backup = backupName(targetFile, 'archive-master-restore');
+  if (!fs.existsSync(backup)) fs.copyFileSync(targetFile, backup, fs.constants.COPYFILE_EXCL);
+  fs.writeFileSync(targetFile, JSON.stringify(repaired, null, 1));
+  return { backup, weekStart, changed: true };
+}
+
 if (require.main === module) {
   const args = process.argv.slice(2);
   if (args[0] === '--freeze-legacy-masters') {
@@ -120,6 +143,10 @@ if (require.main === module) {
     const sourceFile = path.resolve(sourceFileInput || ''); const targetFile = path.resolve(targetFileInput || '');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart || '') || !/^\d{4}-\d{2}-\d{2}$/.test(sourceWeek || '') || !sourceFileInput || !targetFileInput) { console.error('用法：node scripts/migrate-shared-report-archives.js --restore-archive-news <归档周一日期> <新闻备份文件> <新闻来源周一日期> <共享档案文件>'); process.exitCode = 1; }
     else { try { console.log(JSON.stringify(restoreArchiveNews(targetFile, weekStart, sourceFile, sourceWeek))); } catch (error) { console.error(error.message); process.exitCode = 1; } }
+  } else if (args[0] === '--restore-archive-master') {
+    const weekStart = args[1]; const targetFile = path.resolve(args[2] || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart || '') || !args[2]) { console.error('用法：node scripts/migrate-shared-report-archives.js --restore-archive-master <归档周一日期> <共享档案文件>'); process.exitCode = 1; }
+    else { try { console.log(JSON.stringify(restoreMaster(targetFile, weekStart))); } catch (error) { console.error(error.message); process.exitCode = 1; } }
   } else {
     const [targetFile, sourceFile] = args.map((file) => path.resolve(file || ''));
     if (!targetFile || !sourceFile) {
@@ -132,4 +159,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { mergeArchives, backupName, freezeLegacyMasters, clearMismatchedArchiveNews, replaceArchiveNews, migrate, freeze, clearMismatchedNews, restoreArchiveNews };
+module.exports = { mergeArchives, backupName, freezeLegacyMasters, restoreArchiveMaster, clearMismatchedArchiveNews, replaceArchiveNews, migrate, freeze, clearMismatchedNews, restoreArchiveNews, restoreMaster };

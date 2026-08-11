@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { mergeArchives, freezeLegacyMasters, clearMismatchedArchiveNews, replaceArchiveNews } = require('./scripts/migrate-shared-report-archives.js');
+const { mergeArchives, freezeLegacyMasters, restoreArchiveMaster, clearMismatchedArchiveNews, replaceArchiveNews } = require('./scripts/migrate-shared-report-archives.js');
 
 const source = {
   archives: [{
@@ -36,6 +36,14 @@ const frozen = freezeLegacyMasters({ archives: [{ versions: [{ snapshot: { repor
 assert.equal(frozen.archives[0].versions[0].snapshot.report.slideMasterVersion, 0, '旧档案必须显式冻结为无母版');
 assert.deepEqual(frozen.archives[0].versions[0].snapshot.report.slides, [{ id: 'page' }], '冻结母版不能改变归档页面元素');
 assert.equal(freezeLegacyMasters({ archives: [{ versions: [{ snapshot: { report: { slideMasterVersion: 1 } } }] }] }).archives[0].versions[0].snapshot.report.slideMasterVersion, 1, '已有母版版本不能被迁移覆盖');
+
+const masterRestored = restoreArchiveMaster({ archives: [
+  { weekStart: '2026-07-27', versions: [{ snapshot: { report: { slideMasterVersion: 0 } } }] },
+  { weekStart: '2026-08-03', versions: [{ snapshot: { report: { slideMasterVersion: 0 } } }, { snapshot: { report: { slideMasterVersion: 0 } } }] }
+] }, '2026-08-03');
+assert.equal(masterRestored.archives[1].versions[0].snapshot.report.slideMasterVersion, 1, '目标周的正式版必须恢复固定母版');
+assert.equal(masterRestored.archives[1].versions[1].snapshot.report.slideMasterVersion, 1, '目标周的所有修订版必须使用同一母版');
+assert.equal(masterRestored.archives[0].versions[0].snapshot.report.slideMasterVersion, 0, '恢复母版不能影响其他归档周');
 
 const repaired = clearMismatchedArchiveNews({ archives: [
   { weekStart: '2026-07-27', versions: [{ snapshot: { news: { weekStart: '2026-08-03' } } }] },
