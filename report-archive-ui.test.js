@@ -17,4 +17,9 @@ assert.match(js, /archiveView \? new Date\(`\$\{archiveView\.weekStart\}T00:00:0
 assert.match(slides, /function setEditable\(value\)/, '正式档案应能让自定义页进入只读态');
 assert.match(slides, /if \(presenting \|\| readOnly\) return/, '只读档案不应触发自定义页保存');
 assert.doesNotMatch(server, /\|\| \(await reportNews\.summary\(me\.id\)\)\.news/, '归档不能回退使用其他周的 AI 新闻');
+assert.match(js, /function openArchiveWindow\(weekStart, versionId, editable\)/, '查看档案必须有独立窗口入口');
+assert.match(js, /window\.open\(archiveUrl\.toString\(\), '_blank', 'noopener'\)/, '查看档案必须在新窗口打开');
+assert.match(js, /new URLSearchParams\(window\.location\.search\)/, '独立窗口必须从 URL 读取指定档案');
+assert.match(js, /openArchive\(archiveWeek, archiveVersion, archiveEditable\)/, '独立窗口必须加载 URL 指定版本');
+assert.doesNotMatch(js, /open\.onclick = \(\) => openArchive\(item\.weekStart, version\.id, false\)/, '主窗口查看不能覆盖实时报告');
 console.log('✓ report archive UI is wired for snapshot, revision, and weekly export');
