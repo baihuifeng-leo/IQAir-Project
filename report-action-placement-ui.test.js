@@ -13,5 +13,7 @@ assert.doesNotMatch(html, /id="rpt-weimeng-btn"/);
 assert.match(html, /id="rpt-wm-edit-btn">新增 \/ 编辑该周数据</);
 assert.doesNotMatch(js, /rpt-weimeng-btn/);
 assert.match(css, /\.rpt-range > \.solid\s*\{[^}]*width:\s*auto/);
+assert.match(pageOne, /class="rpt-range-controls">[\s\S]*id="rpt-range-tabs"[\s\S]*id="rpt-range-custom"/);
+assert.match(css, /\.rpt-range-controls\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*nowrap/);
 
 console.log('✓ report actions are placed with their owning data pages');
