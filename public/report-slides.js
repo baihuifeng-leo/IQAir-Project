@@ -107,13 +107,15 @@ const ReportSlides = (() => {
   function buildSlideMaster(page, { editable = false } = {}) {
     const master = document.createElement('div'); master.className = 'rs-slide-master' + (editable ? ' editable' : '');
     const left = document.createElement('img'); left.className = 'rs-slide-master-brand rs-slide-master-brand-left'; left.src = MASTER_LEFT_IMAGE; left.alt = '';
-    const title = document.createElement('div'); title.className = 'rs-slide-title'; title.textContent = page.title || DEFAULT_SLIDE_TITLE;
+    const title = document.createElement(editable ? 'input' : 'div'); title.className = 'rs-slide-title';
+    if (editable) { title.type = 'text'; title.value = page.title || DEFAULT_SLIDE_TITLE; }
+    else title.textContent = page.title || DEFAULT_SLIDE_TITLE;
     const right = document.createElement('img'); right.className = 'rs-slide-master-brand rs-slide-master-brand-right'; right.src = MASTER_RIGHT_IMAGE; right.alt = '';
     const line = document.createElement('div'); line.className = 'rs-slide-master-line';
     if (editable) {
-      title.contentEditable = 'true'; title.spellcheck = false; title.setAttribute('aria-label', '页面标题');
+      title.maxLength = 80; title.spellcheck = false; title.setAttribute('aria-label', '页面标题');
       title.addEventListener('pointerdown', (e) => e.stopPropagation());
-      title.addEventListener('input', () => { page.title = title.textContent.slice(0, 80); scheduleSave(); });
+      title.addEventListener('input', () => { page.title = title.value; scheduleSave(); });
       title.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); title.blur(); } });
     }
     master.append(left, title, right, line); return master;
