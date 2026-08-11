@@ -93,6 +93,7 @@ const MAX_SLIDE_TEXT_LEN = 4000;
 const MAX_PAGE_ORDER = 100;
 const MAX_SLIDE_NAME_LEN = 40;
 const MAX_SLIDE_TITLE_LEN = 80;
+const MAX_IMAGE_PREVIEW_TITLE_LEN = 120;
 const MAX_ARCHIVE_WEEKS = 104;
 const MAX_ARCHIVE_VERSIONS = 24;
 
@@ -119,7 +120,12 @@ function sanitizeElement(el) {
   };
   const url = String(el.url || '');
   if (!url.startsWith('/uploads/')) return null;
-  return { ...base, url, naturalW: num(el.naturalW) || w, naturalH: num(el.naturalH) || h };
+  return {
+    ...base, url, naturalW: num(el.naturalW) || w, naturalH: num(el.naturalH) || h,
+    fit: el.fit === 'contain' ? 'contain' : 'fill',
+    preview: !!el.preview,
+    previewTitle: String(el.previewTitle || '').trim().slice(0, MAX_IMAGE_PREVIEW_TITLE_LEN)
+  };
 }
 
 function sanitizeSlides(input) {

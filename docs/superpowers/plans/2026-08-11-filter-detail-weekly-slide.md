@@ -4,7 +4,7 @@
 
 **Goal:** 将“滤芯详情页重置”写入个人报告第五页，并让放映与编辑状态都能点击素材查看完整原图。
 
-**Architecture:** 复用 `ReportSlides` 的 1280 × 720 自定义页模型，在第五页保存标题、说明文字和五张图像元素。为图片元素增加可选 `fit: 'contain'` 与 `preview: true` 元数据；渲染层将预览型图片绑定到现有 `A.lightbox`，旧长图传入原图模式以开启滚动，其余模块以完整比例居中查看。
+**Architecture:** 复用 `ReportSlides` 的 1280 × 720 自定义页模型，在第五页保存标题、说明文字和五张图像元素。为图片元素增加可选 `fit: 'contain'` 与 `preview: true` 元数据；渲染层将预览型图片绑定到现有 `A.lightbox`，它已提供适应窗口、100% 原图、滚动与关闭交互。
 
 **Tech Stack:** 原生 JavaScript、CSS、现有图片上传 API、Node `assert` 回归测试。
 
@@ -27,13 +27,13 @@
 - Modify: `public/styles.css:1735-1739`
 - Test: `report-filter-detail-slide-ui.test.js`
 
-**Interfaces:** 图片元素可包含 `fit: 'contain'`、`preview: true`、`rawPreview: true` 和 `previewTitle`；`buildElementNode(el)` 对 `preview: true` 调用 `A.lightbox(el.url, el.previewTitle, el.rawPreview)`。
+**Interfaces:** 图片元素可包含 `fit: 'contain'`、`preview: true` 和 `previewTitle`；`buildElementNode(el)` 对 `preview: true` 调用 `A.lightbox(el.url, el.previewTitle)`。
 
 - [ ] **Step 1: Write the failing test**
 
 ```js
 assert.match(slides, /el\.preview\s*&&\s*!readOnly/);
-assert.match(slides, /A\.lightbox\(el\.url, el\.previewTitle.*el\.rawPreview/);
+assert.match(slides, /A\.lightbox\(el\.url, el\.previewTitle/);
 assert.match(css, /\.rs-image\.contain[\s\S]*object-fit:\s*contain/);
 ```
 
@@ -50,7 +50,7 @@ if (el.preview) {
   node.classList.add('rs-previewable');
   node.addEventListener('dblclick', (e) => {
     e.stopPropagation();
-    A.lightbox(el.url, el.previewTitle || '查看原图', !!el.rawPreview);
+    A.lightbox(el.url, el.previewTitle || '查看原图');
   });
 }
 img.classList.toggle('contain', el.fit === 'contain');
@@ -86,7 +86,6 @@ git commit -m "feat(reports): preview full custom slide images"
 ```js
 assert.match(slides, /fit === 'contain'/);
 assert.match(slides, /previewTitle/);
-assert.match(slides, /rawPreview/);
 ```
 
 - [ ] **Step 2: Run test to verify it fails**

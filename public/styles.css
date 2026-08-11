@@ -1736,6 +1736,8 @@ body.readonly .rpt-news-editor .kill { display: grid !important; }
 .rs-text { box-sizing: border-box; width: 100%; min-height: 34px; white-space: pre-wrap; overflow-wrap: break-word; line-height: 1.3; user-select: text; cursor: text; }
 .rs-text-editor { display: block; height: 100%; padding: 0; border: 1px dashed var(--mint); border-radius: 0; outline: 0; resize: none; overflow: hidden; background: var(--mint-dim); font-family: inherit; }
 .rs-image { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+.rs-image.contain { object-fit: contain; background: var(--surface-2); }
+.rs-previewable { cursor: zoom-in; }
 .rs-handle { position: absolute; z-index: 2; background: var(--mint); border: 2px solid var(--surface); }
 .rs-handle-l, .rs-handle-r { top: 50%; width: 7px; height: 24px; border-radius: 5px; transform: translateY(-50%); cursor: ew-resize; }
 .rs-handle-l { left: -5px; }.rs-handle-r { right: -5px; }

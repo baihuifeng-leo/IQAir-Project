@@ -141,7 +141,14 @@ const ReportSlides = (() => {
         }
       }
       node.appendChild(box);
-    } else { const img = document.createElement('img'); img.className = 'rs-image'; img.src = el.url; img.draggable = false; node.appendChild(img); }
+    } else {
+      const img = document.createElement('img'); img.className = 'rs-image'; img.src = el.url; img.draggable = false;
+      img.classList.toggle('contain', el.fit === 'contain'); node.appendChild(img);
+      if (el.preview) {
+        node.classList.add('rs-previewable'); node.title = '查看原图'; node.setAttribute('aria-label', el.previewTitle || '查看原图');
+        node.addEventListener(presenting ? 'click' : 'dblclick', (e) => { e.preventDefault(); e.stopPropagation(); A.lightbox(el.url, el.previewTitle || '查看原图'); });
+      }
+    }
     if (!presenting && !readOnly && el.id === selectedId) attachHandles(node, el);
     return node;
   }
@@ -157,7 +164,7 @@ const ReportSlides = (() => {
         const box = document.createElement('div'); box.className = 'rs-text'; box.textContent = el.text;
         Object.assign(box.style, { fontSize: (el.fontSize || DEFAULT_FONT_SIZE) + 'px', color: el.color || 'var(--text)', fontWeight: el.bold ? '700' : '400', fontStyle: el.italic ? 'italic' : 'normal', textAlign: el.align || 'left' });
         node.appendChild(box);
-      } else { const img = document.createElement('img'); img.className = 'rs-image'; img.src = el.url; img.alt = ''; node.appendChild(img); }
+      } else { const img = document.createElement('img'); img.className = 'rs-image'; img.src = el.url; img.alt = ''; img.classList.toggle('contain', el.fit === 'contain'); node.appendChild(img); }
       canvas.appendChild(node);
     });
     section.appendChild(canvas); return section;

@@ -33,6 +33,14 @@ async function run() {
     assert.strictEqual((await s.summary('u1')).slides[0].name, '市场复盘');
     assert.strictEqual((await s.summary('u1')).slides[0].title, '详情页改版');
   });
+  await t('slidesSave 保留图片完整显示与原图预览设置', async () => {
+    const s = await freshStore();
+    await s.slidesSave('u1', [{ id: 'pg_1', elements: [{ id: 'img_1', type: 'image', x: 1, y: 2, w: 100, h: 30, z: 1, url: '/uploads/filter-detail.png', fit: 'contain', preview: true, previewTitle: '旧版详情页 · 原图' }] }]);
+    const image = (await s.summary('u1')).slides[0].elements[0];
+    assert.strictEqual(image.fit, 'contain');
+    assert.strictEqual(image.preview, true);
+    assert.strictEqual(image.previewTitle, '旧版详情页 · 原图');
+  });
   await t('slidesSave 是整份覆盖', async () => {
     const s = await freshStore(); await s.slidesSave('u1', [{ id: 'a', elements: [] }, { id: 'b', elements: [] }]);
     await s.slidesSave('u1', [{ id: 'a', elements: [] }]);
