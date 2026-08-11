@@ -1643,6 +1643,7 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-archive-row { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .rpt-archive-row-head { display: flex; align-items: start; gap: 10px; }
 .rpt-archive-row h3 { flex: 1; margin: 0; color: var(--text); font-family: var(--f-display); font-size: 16px; }
+.rpt-archive-period { margin-right: 8px; color: var(--mint); font-family: var(--f-mono); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .rpt-archive-row time { display: block; margin-top: 4px; color: var(--dim); font-size: 12px; }
 .rpt-archive-version { display: grid; grid-template-columns: 1fr auto; gap: 7px 12px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
 .rpt-archive-version:first-of-type { margin-top: 12px; }

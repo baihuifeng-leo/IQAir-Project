@@ -22,4 +22,7 @@ assert.match(js, /window\.open\(archiveUrl\.toString\(\), '_blank', 'noopener'\)
 assert.match(js, /new URLSearchParams\(window\.location\.search\)/, '独立窗口必须从 URL 读取指定档案');
 assert.match(js, /openArchive\(archiveWeek, archiveVersion, archiveEditable\)/, '独立窗口必须加载 URL 指定版本');
 assert.doesNotMatch(js, /open\.onclick = \(\) => openArchive\(item\.weekStart, version\.id, false\)/, '主窗口查看不能覆盖实时报告');
+assert.match(js, /function archivePeriodLabel\(weekStart\)/, '档案列表应将周一日期换算为 FY 季度周编号');
+assert.match(js, /return `FY\$\{String\(year\)\.slice\(-2\)\} \$\{quarterWeek\}`/, '档案列表编号应沿用 FYxx QxWxx 口径');
+assert.match(js, /archivePeriodLabel\(item\.weekStart\).*archiveLabel\(item\.weekStart\)/, '档案标题应同时显示周期编号和日期范围');
 console.log('✓ report archive UI is wired for snapshot, revision, and weekly export');

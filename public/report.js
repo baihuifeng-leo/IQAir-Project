@@ -142,6 +142,14 @@ const Report = (() => {
     return `Q${q + 1}W${week}`;
   }
 
+  function archivePeriodLabel(weekStart) {
+    const d = new Date(String(weekStart || '').trim() + 'T00:00:00');
+    if (isNaN(d)) return '';
+    const year = d.getFullYear();
+    const quarterWeek = quarterWeekLabel(weekStart).replace(/W(\d+)$/, (_, week) => `W${String(week).padStart(2, '0')}`);
+    return `FY${String(year).slice(-2)} ${quarterWeek}`;
+  }
+
   /** 周一为一周的起点，offset=0 是本周，-1 是上周 */
   function isoWeekRange(offset) {
     const now = new Date();
@@ -1012,7 +1020,7 @@ const Report = (() => {
     if (!archives.length) { host.innerHTML = '<p class="rpt-archive-empty">还没有归档报告。完成上周汇报后，点击上方按钮冻结一份可回溯的正式版本。</p>'; return; }
     archives.forEach((item) => {
       const row = document.createElement('section'); row.className = 'rpt-archive-row';
-      const head = document.createElement('div'); head.className = 'rpt-archive-row-head'; head.innerHTML = `<h3>${archiveLabel(item.weekStart)}</h3><span class="rpt-archive-official">${item.versions.length} 个版本</span>`; row.appendChild(head);
+      const head = document.createElement('div'); head.className = 'rpt-archive-row-head'; head.innerHTML = `<h3><span class="rpt-archive-period">${archivePeriodLabel(item.weekStart)}</span>${archiveLabel(item.weekStart)}</h3><span class="rpt-archive-official">${item.versions.length} 个版本</span>`; row.appendChild(head);
       item.versions.slice().sort((a, b) => b.number - a.number).forEach((version) => {
         const line = document.createElement('div'); line.className = 'rpt-archive-version' + (archiveView?.versionId === version.id ? ' rpt-archive-active' : '');
         const updated = new Date(version.updatedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
