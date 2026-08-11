@@ -230,7 +230,7 @@ class ReportStore {
 
   archiveSnapshot(data, news) {
     return {
-      report: { daily: clone(data.daily), weimeng: clone(data.weimeng), slides: clone(data.slides), pageOrder: clone(data.pageOrder) },
+      report: { daily: clone(data.daily), weimeng: clone(data.weimeng), slides: clone(data.slides), pageOrder: clone(data.pageOrder), slideMasterVersion: 1 },
       news: news && typeof news === 'object' ? clone(news) : null
     };
   }
@@ -298,7 +298,8 @@ class ReportStore {
         daily: Array.isArray(report.daily) ? clone(report.daily).slice(-5000) : [],
         weimeng: Array.isArray(report.weimeng) ? clone(report.weimeng).slice(-520) : [],
         slides: sanitizeSlides(report.slides || []),
-        pageOrder: sanitizePageOrder(report.pageOrder) || []
+        pageOrder: sanitizePageOrder(report.pageOrder) || [],
+        slideMasterVersion: Number(report.slideMasterVersion) === 1 ? 1 : 0
       },
       news: snapshot?.news && typeof snapshot.news === 'object' ? clone(snapshot.news) : null
     };

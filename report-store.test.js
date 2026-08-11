@@ -77,6 +77,7 @@ async function run() {
     await s.slidesSave('u1', [{ id: 'a', name: '原始页', elements: [] }], ['business', 'a']);
     const archived = await s.archiveCreate('u1', '2026-07-27', { weekStart: '2026-07-27', pages: { global: [{ title: '新闻' }] } });
     assert.equal(archived.version.number, 1);
+    assert.equal(archived.version.snapshot.report.slideMasterVersion, 1, '新归档必须冻结当前母版版本');
     assert.deepStrictEqual((await s.summary('u1')).slides, [], '归档后实时报告应移除自定义页');
     assert.deepStrictEqual((await s.summary('u1')).pageOrder, [], '归档后实时报告应回到系统页顺序');
     await s.slidesSave('u1', [{ id: 'a', name: '实时页已修改', elements: [] }]);

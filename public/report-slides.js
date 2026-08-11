@@ -5,7 +5,7 @@ const ReportSlides = (() => {
   const MASTER_LEFT_IMAGE = '/uploads/56a87e70285cdea7e6.png';
   const MASTER_RIGHT_IMAGE = '/uploads/6f73ccc2f49d28a04c.png';
   const LEGACY_MASTER_IMAGE_URLS = new Set([MASTER_LEFT_IMAGE, MASTER_RIGHT_IMAGE, '/uploads/7c38a67eae0f6f377d.png']);
-  let A, pages = [], pageId = null, host, presenting = false, readOnly = false, selectedId = null, editingId = null;
+  let A, pages = [], pageId = null, host, presenting = false, readOnly = false, selectedId = null, editingId = null, masterVersion = 1;
   let saveTimer = null, saving = false, queued = false, pendingPageOrder = null, saveHandler = null, pageActions = {};
 
   const currentPage = () => pages.find((p) => p.id === pageId) || null;
@@ -70,7 +70,7 @@ const ReportSlides = (() => {
     const viewport = document.createElement('div'); viewport.className = 'rs-viewport';
     const canvas = document.createElement('div'); canvas.className = 'rs-canvas'; canvas.tabIndex = 0;
     canvas.addEventListener('pointerdown', onCanvasPointerDown);
-    canvas.appendChild(buildSlideMaster(page, { editable: !presenting && !readOnly }));
+    if (masterVersion > 0) canvas.appendChild(buildSlideMaster(page, { editable: !presenting && !readOnly }));
     page.elements.slice().sort((a, b) => a.z - b.z).forEach((el) => canvas.appendChild(buildElementNode(el)));
     viewport.appendChild(canvas); shell.appendChild(viewport); host.appendChild(shell);
     requestAnimationFrame(scaleCanvas);
@@ -156,7 +156,7 @@ const ReportSlides = (() => {
     const page = pages.find((item) => item.id === id); if (!page) return null;
     const section = document.createElement('section'); section.className = 'rpt-page rpt-pdf-custom-page'; section.dataset.pageId = page.id;
     const canvas = document.createElement('div'); canvas.className = 'rs-canvas';
-    canvas.appendChild(buildSlideMaster(page, { print: true }));
+    if (masterVersion > 0) canvas.appendChild(buildSlideMaster(page, { print: true }));
     page.elements.slice().sort((a, b) => a.z - b.z).forEach((el) => {
       const node = document.createElement('div'); node.className = 'rs-el';
       Object.assign(node.style, { left: el.x + 'px', top: el.y + 'px', width: el.w + 'px', height: el.h + 'px', zIndex: el.z });
@@ -246,9 +246,10 @@ const ReportSlides = (() => {
   function onFullscreenChange() { if (host?.querySelector('.rs-shell') && !presenting) { updateToolbar(); requestAnimationFrame(scaleCanvas); } }
   function savePageOrder(order) { if (readOnly) return; pendingPageOrder = Array.isArray(order) ? order.slice() : null; scheduleSave(); }
   function setPresenting(value) { presenting = value; if (pageId) render(); }
+  function setMasterVersion(value) { masterVersion = Number(value) === 1 ? 1 : 0; if (pageId) render(); }
   function setEditable(value) { readOnly = !value; if (pageId) render(); }
   function setPageActions(actions) { pageActions = actions && typeof actions === 'object' ? actions : {}; }
   function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('paste', pasteImage); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
   function setSaveHandler(handler) { saveHandler = typeof handler === 'function' ? handler : null; }
-  return { init, setPages, getPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, setEditable, setPageActions, savePageOrder, flushSave, setSaveHandler, buildPrintPage, pageCount: () => pages.length };
+  return { init, setPages, getPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, setMasterVersion, setEditable, setPageActions, savePageOrder, flushSave, setSaveHandler, buildPrintPage, pageCount: () => pages.length };
 })();

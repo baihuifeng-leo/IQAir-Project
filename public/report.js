@@ -1038,7 +1038,7 @@ const Report = (() => {
       const result = await call(`/api/reports/personal/archive?weekStart=${encodeURIComponent(weekStart)}&versionId=${encodeURIComponent(versionId)}`);
       data = result.version.snapshot.report; news = { weekStart: result.weekStart, news: result.version.snapshot.news, candidates: [] };
       archiveView = { weekStart: result.weekStart, versionId: result.version.id, editable: !!editable };
-      selectedNewsIds.clear(); closeArchiveDrawer(); applyReportMode(); ReportSlides.setPages(data.slides || []); normalisePageOrder(); page = 1; syncSlidePages(); render(); renderNews(); switchPage(1); A.toast(editable ? '已进入历史报告修订版，可编辑自定义页和页面顺序' : '正在查看历史报告正式快照');
+      selectedNewsIds.clear(); closeArchiveDrawer(); applyReportMode(); ReportSlides.setMasterVersion(data.slideMasterVersion ?? 0); ReportSlides.setPages(data.slides || []); normalisePageOrder(); page = 1; syncSlidePages(); render(); renderNews(); switchPage(1); A.toast(editable ? '已进入历史报告修订版，可编辑自定义页和页面顺序' : '正在查看历史报告正式快照');
     } catch (e) { A.toast('打开档案失败：' + e.message, 'bad'); }
   }
   async function createArchiveRevision(weekStart, versionId) {
@@ -1102,6 +1102,7 @@ const Report = (() => {
   async function refresh() {
     try { data = await call('/api/reports/personal/summary'); }
     catch { data = null; }
+    ReportSlides.setMasterVersion(data?.slideMasterVersion ?? 1);
     ReportSlides.setPages(data?.slides || []);
     applyReportMode();
     normalisePageOrder();
