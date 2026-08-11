@@ -233,10 +233,6 @@
             <button data-sub="public">公共报告</button>
             <i></i>
           </div>
-          <div id="rpt-personal-tools" class="rv-head-import">
-            <button class="solid" id="rpt-import-btn">导入 / 更新 Excel</button>
-            <button class="solid" id="rpt-weimeng-btn">记录 / 编辑某周数据</button>
-          </div>
           <div class="info-wrap" id="rpt-info-wrap">
             <button class="info-btn" id="rpt-info-btn" type="button" aria-haspopup="true" aria-label="使用说明">ⓘ</button>
             <div class="info-panel" id="rpt-info-panel" hidden>
@@ -266,6 +262,7 @@
                 <p class="rv-sub">线是浏览量，虚线是访客数；<span id="rpt-range-note">默认按周聚合展示本年数据</span>。</p>
               </div>
               <div class="rpt-range">
+                <button class="solid" id="rpt-import-btn">导入 / 更新 Excel</button>
                 <div class="rpt-seg" id="rpt-range-tabs">
                   <button data-range="lastWeek">上周</button>
                   <button data-range="thisWeek">本周</button>
@@ -280,7 +277,7 @@
               </div>
             </div>
             <div class="p3d-chart-wrap rpt-trend-wrap">
-              <p class="rv-empty" id="rpt-trend-empty">还没有数据。用左边的「导入 / 更新 Excel」传一份访客/浏览趋势表进来。</p>
+              <p class="rv-empty" id="rpt-trend-empty">还没有数据。用右上方的「导入 / 更新 Excel」传一份访客/浏览趋势表进来。</p>
               <div class="p3d-chart rpt-trend-chart" id="rpt-trend-chart" hidden></div>
             </div>
             <div class="rpt-sidecol">
@@ -302,11 +299,11 @@
             <div class="rpt-sec-head">
               <div>
                 <h2>微盟数据 <span class="rpt-scope-badge alt2">公众号 / 小程序 / APP</span></h2>
-                <p class="rv-sub" id="rpt-wm-sub">还没有记录，点左边「记录 / 编辑某周数据」填一份。</p>
+                <p class="rv-sub" id="rpt-wm-sub">还没有记录，点击右侧按钮新增或编辑任意一周数据。</p>
               </div>
               <div class="rpt-wm-weekbar">
                 <select id="rpt-wm-week-select"></select>
-                <button class="ghost" id="rpt-wm-edit-btn">编辑该周数据</button>
+                <button class="ghost" id="rpt-wm-edit-btn">新增 / 编辑该周数据</button>
               </div>
             </div>
             <div class="rpt-wm-trend" id="rpt-wm-trend" hidden aria-label="三渠道浏览量周趋势"></div>

@@ -92,7 +92,7 @@ const Report = (() => {
   }
   function applyReportMode() {
     const frozen = !!archiveView;
-    A.$('#rpt-import-btn').disabled = frozen; A.$('#rpt-weimeng-btn').disabled = frozen;
+    A.$('#rpt-import-btn').disabled = frozen;
     A.$('#rpt-news-open-picker').hidden = frozen;
     A.$('#rpt-head-sub').textContent = frozen ? `周报档案 · ${archiveLabel(archiveView.weekStart)}${archiveEditing() ? ' · 修订中' : ' · 正式版'}` : '周报数据看板 · 个人报告';
     ReportSlides.setEditable(!frozen || archiveEditing());
@@ -287,7 +287,7 @@ const Report = (() => {
   function renderTrend() {
     const empty = A.$('#rpt-trend-empty'), box = A.$('#rpt-trend-chart');
     if (!data || !data.daily.length) {
-      empty.textContent = '还没有数据。用标题栏的「导入 / 更新 Excel」传一份进来。';
+      empty.textContent = '还没有数据。用右上方的「导入 / 更新 Excel」传一份进来。';
       empty.hidden = false; box.hidden = true; return;
     }
     const inRange = data.daily.some((r) => (!rangeStart || r.date >= rangeStart) && (!rangeEnd || r.date <= rangeEnd));
@@ -397,7 +397,7 @@ const Report = (() => {
 
     const daily = data?.daily || [];
     if (!daily.length) {
-      box.innerHTML = '<p class="rv-empty">还没有数据。用标题栏的「导入 / 更新 Excel」传一份进来。</p>';
+      box.innerHTML = '<p class="rv-empty">还没有数据。用右上方的「导入 / 更新 Excel」传一份进来。</p>';
       if (highlightEl) { highlightEl.hidden = true; highlightEl.textContent = ''; }
       return;
     }
@@ -538,7 +538,7 @@ const Report = (() => {
     const weeks = data?.weimeng || [];
     if (!weeks.length) {
       select.innerHTML = '';
-      sub.textContent = '还没有记录，点标题栏「记录 / 编辑某周数据」填一份。';
+      sub.textContent = '还没有记录，点击右侧「新增 / 编辑该周数据」填一份。';
       trend.hidden = true;
       note.hidden = true;
       return;
@@ -1131,9 +1131,6 @@ const Report = (() => {
     wireDrop('#rpt-personal-view', '#rpt-import-file');
     A.wireInfoPanel('#rpt-info-wrap', '#rpt-info-btn', '#rpt-info-panel');
 
-    // 标题栏这颗按钮固定填「当周」，不跟随下面选择器正在看的历史周——不然浏览完
-    // 某个旧周再点这里，数据会填错周，当周那格反而一直空着。
-    A.$('#rpt-weimeng-btn').onclick = () => openWeimengForm(todayStr());
     A.$('#rpt-wm-edit-btn').onclick = () => openWeimengForm(A.$('#rpt-wm-week-select').value);
     A.$('#rpt-wm-week-select').onchange = (e) => { wmSelectedWeek = e.target.value; renderWeimeng(); };
     A.$('#rpt-wm-close').onclick = closeWeimengForm;
