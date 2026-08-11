@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { mergeArchives, freezeLegacyMasters } = require('./scripts/migrate-shared-report-archives.js');
+const { mergeArchives, freezeLegacyMasters, clearMismatchedArchiveNews } = require('./scripts/migrate-shared-report-archives.js');
 
 const source = {
   archives: [{
@@ -36,5 +36,12 @@ const frozen = freezeLegacyMasters({ archives: [{ versions: [{ snapshot: { repor
 assert.equal(frozen.archives[0].versions[0].snapshot.report.slideMasterVersion, 0, '旧档案必须显式冻结为无母版');
 assert.deepEqual(frozen.archives[0].versions[0].snapshot.report.slides, [{ id: 'page' }], '冻结母版不能改变归档页面元素');
 assert.equal(freezeLegacyMasters({ archives: [{ versions: [{ snapshot: { report: { slideMasterVersion: 1 } } }] }] }).archives[0].versions[0].snapshot.report.slideMasterVersion, 1, '已有母版版本不能被迁移覆盖');
+
+const repaired = clearMismatchedArchiveNews({ archives: [
+  { weekStart: '2026-07-27', versions: [{ snapshot: { news: { weekStart: '2026-08-03' } } }] },
+  { weekStart: '2026-08-03', versions: [{ snapshot: { news: { weekStart: '2026-08-03' } } }] }
+] }, '2026-07-27');
+assert.equal(repaired.archives[0].versions[0].snapshot.news, null, '只清理目标周内错配的新闻');
+assert.equal(repaired.archives[1].versions[0].snapshot.news.weekStart, '2026-08-03', '其他归档周的新闻必须保持不变');
 
 console.log('✓ shared report archive migration is idempotent and preserves the live workspace');

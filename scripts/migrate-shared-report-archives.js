@@ -39,6 +39,18 @@ function freezeLegacyMasters(report) {
   return frozen;
 }
 
+function clearMismatchedArchiveNews(report, weekStart) {
+  const repaired = clone(report || {});
+  for (const archive of repaired.archives || []) {
+    if (archive?.weekStart !== weekStart) continue;
+    for (const version of archive.versions || []) {
+      const news = version?.snapshot?.news;
+      if (news && typeof news === 'object' && news.weekStart !== weekStart) version.snapshot.news = null;
+    }
+  }
+  return repaired;
+}
+
 function migrate(targetFile, sourceFile) {
   const target = JSON.parse(fs.readFileSync(targetFile, 'utf8'));
   const source = JSON.parse(fs.readFileSync(sourceFile, 'utf8'));
@@ -58,12 +70,27 @@ function freeze(targetFile) {
   return { backup, archives: (frozen.archives || []).map((archive) => archive.weekStart) };
 }
 
+function clearMismatchedNews(targetFile, weekStart) {
+  const target = JSON.parse(fs.readFileSync(targetFile, 'utf8'));
+  const repaired = clearMismatchedArchiveNews(target, weekStart);
+  const changed = JSON.stringify(target) !== JSON.stringify(repaired);
+  if (!changed) return { backup: null, weekStart, changed: false };
+  const backup = backupName(targetFile, 'archive-news-repair');
+  if (!fs.existsSync(backup)) fs.copyFileSync(targetFile, backup, fs.constants.COPYFILE_EXCL);
+  fs.writeFileSync(targetFile, JSON.stringify(repaired, null, 1));
+  return { backup, weekStart, changed: true };
+}
+
 if (require.main === module) {
   const args = process.argv.slice(2);
   if (args[0] === '--freeze-legacy-masters') {
     const targetFile = path.resolve(args[1] || '');
     if (!args[1]) { console.error('用法：node scripts/migrate-shared-report-archives.js --freeze-legacy-masters <共享档案文件>'); process.exitCode = 1; }
     else { try { console.log(JSON.stringify(freeze(targetFile))); } catch (error) { console.error(error.message); process.exitCode = 1; } }
+  } else if (args[0] === '--clear-mismatched-news') {
+    const weekStart = args[1]; const targetFile = path.resolve(args[2] || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart || '') || !args[2]) { console.error('用法：node scripts/migrate-shared-report-archives.js --clear-mismatched-news <周一日期> <共享档案文件>'); process.exitCode = 1; }
+    else { try { console.log(JSON.stringify(clearMismatchedNews(targetFile, weekStart))); } catch (error) { console.error(error.message); process.exitCode = 1; } }
   } else {
     const [targetFile, sourceFile] = args.map((file) => path.resolve(file || ''));
     if (!targetFile || !sourceFile) {
@@ -76,4 +103,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { mergeArchives, backupName, freezeLegacyMasters, migrate, freeze };
+module.exports = { mergeArchives, backupName, freezeLegacyMasters, clearMismatchedArchiveNews, migrate, freeze, clearMismatchedNews };
