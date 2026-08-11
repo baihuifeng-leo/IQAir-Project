@@ -9,6 +9,8 @@ const source = fs.readFileSync(require.resolve('./public/report-slides.js'), 'ut
 
 assert.match(source, /const isEditing = editingId === el\.id;[\s\S]*?document\.createElement\(isEditing \? 'textarea' : 'div'\)/, '编辑中的文字元素应渲染为 textarea');
 assert.match(source, /box\.addEventListener\('input',[\s\S]*?el\.text\s*=\s*box\.value/, 'textarea 输入必须立即写回页面数据');
+assert.match(source, /box\.select\?\.\(\)/, '进入文字编辑时必须使用 textarea 原生选区，保持输入焦点');
+assert.doesNotMatch(source, /document\.createRange\(\)[\s\S]*?selectNodeContents\(box\)/, 'textarea 不能再走普通 DOM Range 选区逻辑');
 assert.match(source, /mkBtn\('编辑文字',\s*\(\)\s*=>\s*enterTextEdit\(el\)\)/, '选中文字后必须提供明确的编辑入口');
 assert.match(source, /document\.addEventListener\('paste', pasteImage\)/, '自定义页必须监听剪贴板粘贴图片');
 assert.match(source, /A\.uploadImageFile\(file\)/, '剪贴板图片必须走原图直传上传链路');

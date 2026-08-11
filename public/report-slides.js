@@ -195,7 +195,12 @@ const ReportSlides = (() => {
     const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); scheduleSave(); }; document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
   }
   function autoGrowHeight(box, el) { if (!box) return; box.style.height = 'auto'; el.h = Math.max(34, box.scrollHeight); const node = box.closest('.rs-el'); if (node) node.style.height = el.h + 'px'; }
-  function enterTextEdit(el) { if (presenting || readOnly) return; selectedId = editingId = el.id; render(); const box = host.querySelector(`.rs-el[data-id="${el.id}"] .rs-text`); if (!box) return; box.focus(); const range = document.createRange(); range.selectNodeContents(box); range.collapse(false); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); }
+  function enterTextEdit(el) {
+    if (presenting || readOnly) return;
+    selectedId = editingId = el.id; render();
+    const box = host.querySelector(`.rs-el[data-id="${el.id}"] .rs-text`); if (!box) return;
+    box.focus(); box.select?.();
+  }
   function commitTextEdit(el) { if (editingId === el.id) editingId = null; scheduleSave(); render(); }
   function addTextElement() { const page = currentPage(); if (!page || presenting || readOnly) return; const el = { id: uid('el_'), type: 'text', x: 160, y: BODY_TOP, w: 420, h: 42, z: nextZ(page), text: '双击编辑文字', fontSize: DEFAULT_FONT_SIZE, color: null, bold: false, italic: false, align: 'left' }; page.elements.push(el); selectedId = el.id; scheduleSave(); render(); enterTextEdit(el); }
   async function insertImage() {
