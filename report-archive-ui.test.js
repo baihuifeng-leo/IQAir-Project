@@ -4,6 +4,7 @@ const fs = require('fs');
 const html = fs.readFileSync('public/index.html', 'utf8');
 const js = fs.readFileSync('public/report.js', 'utf8');
 const slides = fs.readFileSync('public/report-slides.js', 'utf8');
+const server = fs.readFileSync('server.js', 'utf8');
 
 assert.match(html, /id="rpt-archive-btn"/, '个人报告标题栏应有周报档案入口');
 assert.match(html, /id="rpt-archive-mask"/, '档案应使用可关闭的抽屉');
@@ -15,4 +16,5 @@ assert.match(js, /ReportSlides\.setPageActions\(\{ rename: openRenameSlide, dele
 assert.match(js, /archiveView \? new Date\(`\$\{archiveView\.weekStart\}T00:00:00`\)/, '历史 PDF 文件名应使用档案周');
 assert.match(slides, /function setEditable\(value\)/, '正式档案应能让自定义页进入只读态');
 assert.match(slides, /if \(presenting \|\| readOnly\) return/, '只读档案不应触发自定义页保存');
+assert.doesNotMatch(server, /\|\| \(await reportNews\.summary\(me\.id\)\)\.news/, '归档不能回退使用其他周的 AI 新闻');
 console.log('✓ report archive UI is wired for snapshot, revision, and weekly export');
