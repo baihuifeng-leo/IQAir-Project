@@ -28,9 +28,10 @@ async function run() {
   });
   await t('slidesSave 保存并可读回', async () => {
     const s = await freshStore();
-    await s.slidesSave('u1', [{ id: 'pg_1', name: '市场复盘', elements: [{ id: 'el_1', type: 'text', x: 1, y: 2, w: 100, h: 30, z: 1, text: '你好' }] }]);
+    await s.slidesSave('u1', [{ id: 'pg_1', name: '市场复盘', title: '详情页改版', elements: [{ id: 'el_1', type: 'text', x: 1, y: 2, w: 100, h: 30, z: 1, text: '你好' }] }]);
     assert.strictEqual((await s.summary('u1')).slides[0].elements[0].text, '你好');
     assert.strictEqual((await s.summary('u1')).slides[0].name, '市场复盘');
+    assert.strictEqual((await s.summary('u1')).slides[0].title, '详情页改版');
   });
   await t('slidesSave 是整份覆盖', async () => {
     const s = await freshStore(); await s.slidesSave('u1', [{ id: 'a', elements: [] }, { id: 'b', elements: [] }]);

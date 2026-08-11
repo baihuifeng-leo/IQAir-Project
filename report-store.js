@@ -92,6 +92,7 @@ const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
 const MAX_SLIDE_TEXT_LEN = 4000;
 const MAX_PAGE_ORDER = 100;
 const MAX_SLIDE_NAME_LEN = 40;
+const MAX_SLIDE_TITLE_LEN = 80;
 const MAX_ARCHIVE_WEEKS = 104;
 const MAX_ARCHIVE_VERSIONS = 24;
 
@@ -128,7 +129,12 @@ function sanitizeSlides(input) {
     if (!id) throw new Error('页面缺少 id');
     const elements = Array.isArray(page && page.elements)
       ? page.elements.map(sanitizeElement).filter(Boolean) : [];
-    return { id, name: String((page && page.name) || '').trim().slice(0, MAX_SLIDE_NAME_LEN), elements };
+    return {
+      id,
+      name: String((page && page.name) || '').trim().slice(0, MAX_SLIDE_NAME_LEN),
+      title: String((page && page.title) || '').trim().slice(0, MAX_SLIDE_TITLE_LEN),
+      elements
+    };
   });
 }
 
