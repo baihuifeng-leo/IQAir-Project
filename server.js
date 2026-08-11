@@ -694,6 +694,7 @@ const server = http.createServer(async (req, res) => {
         const newsData = await reportNews.load(me.id);
         const currentNews = newsData.weeks[input.weekStart] || (await reportNews.summary(me.id)).news;
         const archive = await reports.archiveCreate(me.id, input.weekStart, currentNews);
+        await reportNews.clearPublishedWeek(me.id, archive.weekStart);
         audit(me, 'reports.archive.create', { detail: [`归档 ${archive.weekStart} 个人周报`] });
         return json(res, 200, archive);
       } catch (e) { return json(res, 400, { error: e.message }); }

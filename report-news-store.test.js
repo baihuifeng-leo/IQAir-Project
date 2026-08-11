@@ -36,6 +36,19 @@ assert.deepEqual(coverOptions.map((item) => item.url), ['https://example.com/ai-
   assert.ok(published.publishedAt);
   const summary = await store.summary('u_owner');
   assert.equal(summary.news.pages.radar[1].title, '中文 AI 新闻 4');
+  const archiveResetDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-archive-reset-'));
+  const archiveResetStore = new ReportNewsStore(archiveResetDir);
+  await archiveResetStore.save('u_owner', {
+    weeks: { [currentWeek]: { weekStart: currentWeek, pages: { global: [card(1), card(2)] } } },
+    drafts: { [currentWeek]: { weekStart: currentWeek, pages: { global: [card(1), card(2)] } } },
+    candidates: { [currentWeek]: [{ id: 'candidate', ...card(7), tags: ['站长之家优选'] }] }
+  });
+  await archiveResetStore.clearPublishedWeek('u_owner', currentWeek);
+  const afterArchiveReset = await archiveResetStore.load('u_owner');
+  assert.equal(afterArchiveReset.weeks[currentWeek], undefined, '归档后当前周已发布新闻应清空');
+  assert.equal(afterArchiveReset.drafts[currentWeek], undefined, '归档后当前周新闻草稿应清空');
+  assert.equal(afterArchiveReset.candidates[currentWeek].length, 1, '归档后新闻候选应保留供新周重新选择');
+  fs.rmSync(archiveResetDir, { recursive: true, force: true });
   const sharedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-news-shared-'));
   const sharedStore = new ReportNewsStore(sharedDir, async () => '<article>共享账户新闻正文。</article>', fakeAi, (userId) => userId === 'u_leo' ? 'u_admin' : userId);
   await sharedStore.save('u_admin', { weeks: { [currentWeek]: published }, drafts: {}, candidates: {} });
