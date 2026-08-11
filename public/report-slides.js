@@ -57,6 +57,7 @@ const ReportSlides = (() => {
     if (JSON.stringify(pages) !== JSON.stringify(incoming) && !readOnly) scheduleSave();
     if (pageId && !currentPage()) unmountPage();
   }
+  function getPages() { return pages; }
   function addPage() { const page = { id: uid('pg_'), name: '', title: '未命名页面', elements: [] }; pages.push(page); scheduleSave(); return page; }
   function deletePage(id) { const at = pages.findIndex((p) => p.id === id); if (at < 0) return false; pages.splice(at, 1); if (pageId === id) unmountPage(); scheduleSave(); return true; }
   function renamePage(id, name) { const page = pages.find((item) => item.id === id); if (!page) return false; page.name = String(name || '').trim().slice(0, 40); scheduleSave(); return true; }
@@ -237,5 +238,5 @@ const ReportSlides = (() => {
   function setPageActions(actions) { pageActions = actions && typeof actions === 'object' ? actions : {}; }
   function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('paste', pasteImage); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
   function setSaveHandler(handler) { saveHandler = typeof handler === 'function' ? handler : null; }
-  return { init, setPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, setEditable, setPageActions, savePageOrder, flushSave, setSaveHandler, buildPrintPage, pageCount: () => pages.length };
+  return { init, setPages, getPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, setEditable, setPageActions, savePageOrder, flushSave, setSaveHandler, buildPrintPage, pageCount: () => pages.length };
 })();

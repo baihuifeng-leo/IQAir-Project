@@ -651,7 +651,7 @@ const Report = (() => {
     }
   }
 
-  function slidePages() { return data?.slides || []; }
+  function slidePages() { return ReportSlides.getPages(); }
   function reportPages() {
     const slides = slidePages(); const known = new Map(FIXED_REPORT_PAGES.map((item) => [item.id, item]));
     slides.forEach((slide) => known.set(slide.id, { id: slide.id, label: slide.name || '自定义页', slide }));

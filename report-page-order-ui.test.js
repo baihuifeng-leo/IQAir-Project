@@ -1,6 +1,7 @@
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
+const vm = require('vm');
 const js = fs.readFileSync('public/report.js', 'utf8');
 const slides = fs.readFileSync('public/report-slides.js', 'utf8');
 const css = fs.readFileSync('public/styles.css', 'utf8');
@@ -23,4 +24,22 @@ assert.match(slides, /const fullscreenTarget = host/);
 assert.match(slides, /enter\.call\(fullscreenTarget\)/);
 assert.doesNotMatch(slides, /const shell = host\?\.querySelector\('\.rs-shell'\)/);
 assert.match(css, /\.rpt-page-custom:fullscreen\s*,/);
+
+// 导航条必须从编辑器的实时页集合读取：重命名、新增、删除后不能等待刷新接口。
+// 若移除编辑器对当前 pages 的公开读取能力，本用例会失败。
+const slideContext = {
+  setTimeout: () => 1,
+  clearTimeout: () => {},
+  window: { addEventListener: () => {} },
+  document: { addEventListener: () => {}, querySelector: () => null }
+};
+slideContext.globalThis = slideContext;
+vm.runInNewContext(`${slides}; globalThis.ReportSlidesForTest = ReportSlides;`, slideContext);
+const liveSlides = slideContext.ReportSlidesForTest;
+liveSlides.init({ uid: (prefix) => `${prefix}new`, toast: () => {} });
+liveSlides.setPages([{ id: 'weekly', name: '原始名称', title: '原始标题', elements: [] }]);
+liveSlides.renamePage('weekly', '实时名称');
+const created = liveSlides.addPage();
+liveSlides.deletePage('weekly');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(liveSlides.getPages())), [{ id: created.id, name: '', title: '未命名页面', elements: [] }], '导航条应能读取新增、重命名和删除后的实时页集合');
 console.log('✓ report pages keep drag order and editor fullscreen controls');
