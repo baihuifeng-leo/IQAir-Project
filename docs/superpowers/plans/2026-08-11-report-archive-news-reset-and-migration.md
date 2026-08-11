@@ -4,7 +4,7 @@
 
 **Goal:** 归档后清空实时 AI 新闻但保留候选，并把旧 leo 档案安全迁移到 admin/leo 的共享档案。
 
-**Architecture:** 在新闻存储层增加一个仅删除指定周已发布新闻与草稿的操作，由归档 API 在报告快照持久化成功后调用。迁移采用独立、幂等的 Node 脚本，将历史 leo 档案按周次和版本 ID 合并到共享 owner，不接触实时工作区数据。
+**Architecture:** 在新闻存储层增加一个清空全部实时已发布新闻与草稿的操作，由归档 API 在报告快照持久化成功后调用，候选列表保持不动。迁移采用独立、幂等的 Node 脚本，将历史 leo 档案按周次和版本 ID 合并到共享 owner，不接触实时工作区数据。
 
 **Tech Stack:** Node.js CommonJS、内置 `node:assert/strict`、JSON 文件存储、现有 HTTP API。
 

@@ -181,12 +181,12 @@ class ReportNewsStore {
     } catch { return { weeks: {}, drafts: {}, candidates: {}, lastAttempt: null }; }
   }
   async save(userId, data) { await fsp.mkdir(this.dir, { recursive: true }); await fsp.writeFile(this.file(userId), JSON.stringify(data, null, 1)); }
-  async clearPublishedWeek(userId, weekStartInput) {
-    const weekStart = mondayOf(weekStartInput); const data = await this.load(userId);
-    delete data.weeks[weekStart];
-    delete data.drafts[weekStart];
+  async clearLiveNews(userId) {
+    const data = await this.load(userId);
+    data.weeks = {};
+    data.drafts = {};
     await this.save(userId, data);
-    return { weekStart };
+    return { cleared: true };
   }
   async summary(userId) { const data = await this.load(userId); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || null, candidates: data.candidates[key] || [], lastAttempt: data.lastAttempt || null }; }
   async refresh(userId, options = {}) {
