@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { mergeArchives } = require('./scripts/migrate-shared-report-archives.js');
+const { mergeArchives, freezeLegacyMasters } = require('./scripts/migrate-shared-report-archives.js');
 
 const source = {
   archives: [{
@@ -31,5 +31,10 @@ const overlapping = mergeArchives(
 );
 assert.equal(overlapping.archives[0].officialVersionId, 'v-current', '合并旧版本不能改变现有正式版');
 assert.deepEqual(overlapping.archives[0].versions.map((item) => item.id), ['v-current', 'v-legacy']);
+
+const frozen = freezeLegacyMasters({ archives: [{ versions: [{ snapshot: { report: { slides: [{ id: 'page' }] } } }] }] });
+assert.equal(frozen.archives[0].versions[0].snapshot.report.slideMasterVersion, 0, '旧档案必须显式冻结为无母版');
+assert.deepEqual(frozen.archives[0].versions[0].snapshot.report.slides, [{ id: 'page' }], '冻结母版不能改变归档页面元素');
+assert.equal(freezeLegacyMasters({ archives: [{ versions: [{ snapshot: { report: { slideMasterVersion: 1 } } }] }] }).archives[0].versions[0].snapshot.report.slideMasterVersion, 1, '已有母版版本不能被迁移覆盖');
 
 console.log('✓ shared report archive migration is idempotent and preserves the live workspace');
