@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { mergeArchives, freezeLegacyMasters, clearMismatchedArchiveNews } = require('./scripts/migrate-shared-report-archives.js');
+const { mergeArchives, freezeLegacyMasters, clearMismatchedArchiveNews, replaceArchiveNews } = require('./scripts/migrate-shared-report-archives.js');
 
 const source = {
   archives: [{
@@ -43,5 +43,14 @@ const repaired = clearMismatchedArchiveNews({ archives: [
 ] }, '2026-07-27');
 assert.equal(repaired.archives[0].versions[0].snapshot.news, null, '只清理目标周内错配的新闻');
 assert.equal(repaired.archives[1].versions[0].snapshot.news.weekStart, '2026-08-03', '其他归档周的新闻必须保持不变');
+
+const restoredNews = { weekStart: '2026-08-10', pages: { global: [{ title: 'DeepSeek 与宇树' }, { title: '苹果与长鑫存储' }] } };
+const restored = replaceArchiveNews({ archives: [
+  { weekStart: '2026-07-27', versions: [{ snapshot: { news: null } }] },
+  { weekStart: '2026-08-03', versions: [{ snapshot: { news: { weekStart: '2026-08-03', pages: { global: [{ title: '旧新闻' }] } } } }] }
+] }, '2026-08-03', restoredNews);
+assert.equal(restored.archives[1].versions[0].snapshot.news.weekStart, '2026-08-03', '恢复的新闻必须绑定目标归档周');
+assert.deepEqual(restored.archives[1].versions[0].snapshot.news.pages.global.map((item) => item.title), ['DeepSeek 与宇树', '苹果与长鑫存储'], '恢复必须写入指定的两条新闻');
+assert.equal(restored.archives[0].versions[0].snapshot.news, null, '恢复一周新闻不能影响其他周归档');
 
 console.log('✓ shared report archive migration is idempotent and preserves the live workspace');
