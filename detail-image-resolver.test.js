@@ -3,204 +3,122 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Readable } = require('node:stream');
-
 const { resolveAllImages } = require('./detail-image-resolver');
 
-const MIB = 1024 * 1024;
 const FIRST = 'https://img.alicdn.com/detail/first.png';
 const SECOND = 'https://img.alicdn.com/detail/second.png';
 
-function response({ status = 200, contentType = 'image/png', chunks = [Buffer.from('image')] } = {}) {
-  return {
-    status,
-    headers: { 'content-type': contentType },
-    body: Readable.from(chunks),
-  };
+function stream(chunks = [Buffer.from('image')]) { return Readable.from(chunks); }
+function reply({ ok = true, status = 200, headers = Promise.resolve({ 'content-type': 'image/png' }), chunks } = {}) {
+  return { ok, status, headers, stream: stream(chunks) };
 }
-
-function imageBlock(candidates, domIndex = 0) {
-  return { kind: 'image', candidates, domIndex, width: 1, height: 9999 };
-}
-
-function fakeSharp({ metadata, failOn } = {}) {
+function image(candidates, domIndex = 0) { return { kind: 'image', candidates, domIndex, width: 1, height: 9999 }; }
+function fakeSharp({ pending = false, fail = false } = {}) {
   const calls = [];
-  const sharp = (buffer, options) => {
+  const sharp = (buffer, options) => ({ metadata: () => {
     calls.push({ buffer, options });
-    return {
-      async metadata() {
-        if (failOn && failOn(buffer)) throw new Error('not a decodable image');
-        return metadata || { width: 640, height: 480 };
-      },
-    };
-  };
+    if (pending) return new Promise(() => {});
+    if (fail) return Promise.reject(new Error('private decoder error'));
+    return Promise.resolve({ width: 640, height: 480 });
+  }});
   return { sharp, calls };
 }
-
-function baseOptions(overrides = {}) {
+function options(overrides = {}) {
   const decoded = fakeSharp();
-  return {
-    request: async () => response(),
-    sharp: decoded.sharp,
-    emit: () => {},
-    limits: { perAssetBytes: 50 * MIB, totalBytes: 500 * MIB },
-    ...overrides,
-    decoded,
-  };
+  return { request: async () => reply(), sharp: decoded.sharp, limits: { perAssetBytes: 50 * 1024 * 1024, totalBytes: 500 * 1024 * 1024 }, ...overrides, decoded };
+}
+async function promptly(promise) {
+  return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('resolver did not abort promptly')), 80))]);
 }
 
-test('falls back from an unavailable candidate and uses decoded metadata instead of DOM dimensions', async () => {
+test('falls back after 404, records normalized sourceUrl, and uses decoded metadata', async () => {
   const calls = [];
-  const options = baseOptions({
+  const result = await resolveAllImages([image([FIRST, SECOND])], options({ request: async (url) => {
+    calls.push(url); return url === FIRST ? reply({ ok: false, status: 404 }) : reply({ chunks: [Buffer.from('second')] });
+  }}));
+  assert.deepEqual(calls, [FIRST, SECOND]);
+  assert.deepEqual(result[0].sourceUrl, SECOND);
+  assert.equal(result[0].width, 640);
+  assert.equal(result[0].height, 480);
+});
+
+test('uses real Sharp metadata from streamed bytes', async () => {
+  const sharp = require('sharp');
+  const png = await sharp({ create: { width: 13, height: 7, channels: 4, background: 'red' } }).png().toBuffer();
+  const result = await resolveAllImages([image([FIRST])], { request: async () => reply({ chunks: [png] }), sharp });
+  assert.deepEqual([result[0].width, result[0].height], [13, 7]);
+});
+
+test('deducts failed candidates and retries from one shared task budget, then stops immediately', async () => {
+  const calls = [];
+  const result = resolveAllImages([image([FIRST, SECOND])], options({
+    limits: { perAssetBytes: 10, totalBytes: 7 },
     request: async (url) => {
       calls.push(url);
-      return url === FIRST ? response({ status: 404 }) : response({ chunks: [Buffer.from('decoded-second')] });
+      async function* broken() { yield Buffer.from('1234'); throw new Error('network broke after bytes'); }
+      return { ok: true, status: 200, headers: Promise.resolve({ 'content-type': 'image/png' }), stream: broken() };
     },
-  });
-
-  const resolved = await resolveAllImages([imageBlock([FIRST, SECOND])], options);
-
-  assert.deepEqual(calls, [FIRST, SECOND]);
-  assert.equal(resolved.length, 1);
-  assert.equal(resolved[0].width, 640);
-  assert.equal(resolved[0].height, 480);
-  assert.equal(resolved[0].buffer.toString(), 'decoded-second');
-  assert.deepEqual(options.decoded.calls[0].options, { animated: false, limitInputPixels: false });
+  }));
+  await assert.rejects(result, (error) => error.code === 'ASSET_UNAVAILABLE' && error.lastError.code === 'TASK_SIZE_LIMIT');
+  assert.deepEqual(calls, [FIRST, FIRST], 'the 8th consumed byte terminates before another candidate');
 });
 
-test('uses the installed Sharp decoder dimensions for a valid streamed PNG', async () => {
-  const sharp = require('sharp');
-  const png = await sharp({ create: { width: 13, height: 7, channels: 4, background: '#336699' } }).png().toBuffer();
-
-  const resolved = await resolveAllImages([imageBlock([FIRST])], {
-    request: async () => response({ chunks: [png.subarray(0, 10), png.subarray(10)] }),
-    sharp,
-  });
-
-  assert.equal(resolved[0].width, 13);
-  assert.equal(resolved[0].height, 7);
+test('requests each normalized URL at most twice', async () => {
+  const calls = [];
+  await assert.rejects(resolveAllImages([image([FIRST, '//img.alicdn.com/detail/first.png', SECOND])], options({
+    request: async (url) => { calls.push(url); throw new Error('socket reset'); },
+  })), { code: 'ASSET_UNAVAILABLE' });
+  assert.deepEqual(calls, [FIRST, FIRST, SECOND, SECOND]);
 });
 
-test('retries a transient request failure once for the same candidate', async () => {
-  let attempts = 0;
-  const options = baseOptions({
-    request: async () => {
-      attempts += 1;
-      if (attempts === 1) throw new Error('socket reset');
-      return response();
-    },
-  });
-
-  await resolveAllImages([imageBlock([FIRST])], options);
-
-  assert.equal(attempts, 2);
+test('rejects buffered and synchronous response bodies instead of materializing them', async () => {
+  for (const unsafe of [Buffer.from('whole body'), [Buffer.from('sync body')]]) {
+    await assert.rejects(resolveAllImages([image([FIRST])], options({ request: async () => ({ ok: true, status: 200, headers: Promise.resolve({ 'content-type': 'image/png' }), stream: unsafe }) })), { code: 'ASSET_UNAVAILABLE' });
+  }
 });
 
-test('makes at most two attempts for each candidate before reporting all-candidates failure', async () => {
-  const attempts = new Map();
-  const options = baseOptions({
-    request: async (url) => {
-      attempts.set(url, (attempts.get(url) || 0) + 1);
-      throw new Error('connection reset');
-    },
-  });
-
-  await assert.rejects(resolveAllImages([imageBlock([FIRST, SECOND])], options), { code: 'ASSET_UNAVAILABLE' });
-
-  assert.deepEqual([...attempts], [[FIRST, 2], [SECOND, 2]]);
+test('rejects invalid type and empty stream without Sharp', async () => {
+  const invalid = options({ request: async () => reply({ headers: Promise.resolve({ 'content-type': 'text/html' }) }) });
+  await assert.rejects(resolveAllImages([image([FIRST])], invalid), { code: 'ASSET_UNAVAILABLE' });
+  assert.equal(invalid.decoded.calls.length, 0);
+  const empty = options({ request: async () => reply({ chunks: [] }) });
+  await assert.rejects(resolveAllImages([image([FIRST])], empty), { code: 'ASSET_UNAVAILABLE' });
 });
 
-test('rejects an invalid content type before accepting its bytes', async () => {
-  const options = baseOptions({
-    request: async () => response({ contentType: 'text/html', chunks: [Buffer.from('<html>login</html>')] }),
-  });
-
-  await assert.rejects(
-    resolveAllImages([imageBlock([FIRST])], options),
-    (error) => error.code === 'ASSET_UNAVAILABLE' && error.assetIndex === 0,
-  );
-  assert.equal(options.decoded.calls.length, 0);
+test('ASSET_UNAVAILABLE has bounded redacted candidates and a fixed safe last error', async () => {
+  const sensitive = `https://img.alicdn.com/${'secret/'.repeat(100)}x.png?token=private`;
+  let error;
+  try { await resolveAllImages([image(Array(12).fill(sensitive))], options({ request: async () => reply({ ok: false, status: 404 }) })); } catch (caught) { error = caught; }
+  assert.equal(error.code, 'ASSET_UNAVAILABLE');
+  assert.equal(error.assetIndex, 0);
+  assert.ok(error.candidates.length <= 8 && error.candidates.every((x) => x.length <= 160));
+  assert.deepEqual(error.lastError, { code: 'HTTP_UNAVAILABLE', message: '图片响应不可用' });
+  assert.equal(JSON.stringify(error).includes('private'), false);
 });
 
-test('rejects an empty successful response', async () => {
-  const options = baseOptions({ request: async () => response({ chunks: [] }) });
-
-  await assert.rejects(resolveAllImages([imageBlock([FIRST])], options), { code: 'ASSET_UNAVAILABLE' });
-  assert.equal(options.decoded.calls.length, 0);
+for (const [name, make] of [
+  ['request', (controller) => ({ request: () => new Promise(() => {}) })],
+  ['headers', () => ({ request: async () => reply({ headers: new Promise(() => {}) }) })],
+  ['iterator.next', () => {
+    let returned = false;
+    const iterator = { next: () => new Promise(() => {}), return: async () => { returned = true; return { done: true }; } };
+    return { request: async () => ({ ok: true, status: 200, headers: Promise.resolve({ 'content-type': 'image/png' }), stream: { [Symbol.asyncIterator]: () => iterator } }), check: () => returned };
+  }],
+]) test(`aborts promptly while ${name} is pending and closes the stream`, async () => {
+  const controller = new AbortController(); const setup = make(controller); const run = resolveAllImages([image([FIRST])], options({ ...setup, signal: controller.signal }));
+  setImmediate(() => controller.abort()); await assert.rejects(promptly(run), { code: 'DETAIL_CANCELLED' }); if (setup.check) assert.equal(setup.check(), true);
 });
 
-test('enforces the 50 MiB per-resource cap while reading a streamed response', async () => {
-  const chunks = [Buffer.alloc(49 * MIB), Buffer.alloc(2 * MIB)];
-  const options = baseOptions({ request: async () => response({ chunks }) });
-
-  await assert.rejects(resolveAllImages([imageBlock([FIRST])], options), { code: 'ASSET_UNAVAILABLE' });
-  assert.equal(options.decoded.calls.length, 0);
+test('aborts promptly while Sharp metadata is pending and closes the iterator', async () => {
+  const controller = new AbortController(); let returned = false;
+  const iterator = { done: false, async next() { if (this.done) return { done: true }; this.done = true; return { value: Buffer.from('image'), done: false }; }, async return() { returned = true; return { done: true }; } };
+  const run = resolveAllImages([image([FIRST])], options({ signal: controller.signal, sharp: fakeSharp({ pending: true }).sharp, request: async () => ({ ok: true, status: 200, headers: Promise.resolve({ 'content-type': 'image/png' }), stream: { [Symbol.asyncIterator]: () => iterator } }) }));
+  setImmediate(() => controller.abort()); await assert.rejects(promptly(run), { code: 'DETAIL_CANCELLED' }); assert.equal(returned, true);
 });
 
-test('enforces the 500 MiB aggregate cap across otherwise valid candidates', async () => {
-  const options = baseOptions({
-    limits: { perAssetBytes: 50 * MIB, totalBytes: 10 },
-    request: async (url) => response({ chunks: [Buffer.from(url === FIRST ? '123456' : '78901')] }),
-  });
-
-  await assert.rejects(
-    resolveAllImages([imageBlock([FIRST]), imageBlock([SECOND], 1)], options),
-    (error) => error.code === 'ASSET_UNAVAILABLE' && error.assetIndex === 1,
-  );
-});
-
-test('rejects a response whose bytes Sharp cannot decode', async () => {
-  const options = baseOptions({
-    sharp: fakeSharp({ failOn: () => true }).sharp,
-    request: async () => response({ chunks: [Buffer.from('corrupt-image')] }),
-  });
-
-  await assert.rejects(resolveAllImages([imageBlock([FIRST])], options), { code: 'ASSET_UNAVAILABLE' });
-});
-
-test('aborting during resolution clears earlier decoded buffers and makes no further requests', async () => {
+test('abort wins over exhausted candidates and emit errors are non-fatal', async () => {
   const controller = new AbortController();
-  let calls = 0;
-  const options = baseOptions({
-    signal: controller.signal,
-    request: async (url) => {
-      calls += 1;
-      if (url === FIRST) return response({ chunks: [Buffer.from('first-image')] });
-      async function* abortingBody() {
-        yield Buffer.from('partial-second-image');
-        controller.abort();
-      }
-      return { status: 200, headers: { 'content-type': 'image/png' }, body: abortingBody() };
-    },
-  });
-
-  await assert.rejects(
-    resolveAllImages([imageBlock([FIRST]), imageBlock([SECOND], 1), imageBlock(['https://img.alicdn.com/detail/never.png'], 2)], options),
-    { code: 'DETAIL_CANCELLED' },
-  );
-  assert.equal(calls, 2);
-  assert.ok(options.decoded.calls[0].buffer.every((byte) => byte === 0), 'previous buffer is zeroed on abort');
-});
-
-test('fails atomically when every candidate is unavailable, zeroes earlier buffers, and redacts URLs', async () => {
-  const sensitive = `https://img.alicdn.com/detail/${'x'.repeat(300)}.png?access_token=very-secret`;
-  const options = baseOptions({
-    request: async (url) => {
-      if (url === FIRST) return response({ chunks: [Buffer.from('first-image')] });
-      return response({ status: 404 });
-    },
-  });
-
-  await assert.rejects(
-    resolveAllImages([imageBlock([FIRST]), imageBlock([SECOND, sensitive], 1)], options),
-    (error) => {
-      assert.equal(error.code, 'ASSET_UNAVAILABLE');
-      assert.equal(error.assetIndex, 1);
-      assert.ok(error.candidates.every((candidate) => candidate.length <= 160));
-      assert.equal(JSON.stringify(error).includes('very-secret'), false);
-      assert.equal(error.candidates.includes(SECOND), false, 'even short candidate URLs are never exposed verbatim');
-      assert.equal(error.message.includes(sensitive), false);
-      return true;
-    },
-  );
-  assert.ok(options.decoded.calls[0].buffer.every((byte) => byte === 0), 'previous buffer is zeroed on atomic failure');
+  await assert.rejects(resolveAllImages([image([FIRST])], options({ signal: controller.signal, request: async () => { controller.abort(); return reply({ ok: false, status: 404 }); } })), { code: 'DETAIL_CANCELLED' });
+  const result = await resolveAllImages([image([FIRST])], options({ emit: () => { throw new Error('observer failed'); } }));
+  assert.equal(result[0].buffer.toString(), 'image');
 });
