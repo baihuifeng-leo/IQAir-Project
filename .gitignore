@@ -2,4 +2,7 @@
 .worktrees/
 venv
 data/
+data/platform-sessions/
+data/detail-jobs/
+data/browser-cache/
 *.log
