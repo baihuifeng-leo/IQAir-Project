@@ -48,6 +48,29 @@ const MaterialCheck = (() => {
     return `${expected}（图里写的是 ￥${pi.found.join('、￥')}）`;
   }
 
+  function priceCheckInfo(priceCheck, priceIssue) {
+    if (priceCheck) return priceCheck;
+    // 兼容还未补算过的旧返回值；新接口始终会给 priceCheck。
+    return priceIssue ? { status: 'failed', ...priceIssue } : null;
+  }
+
+  function priceCheckLabel(priceCheck) {
+    if (!priceCheck) return '';
+    if (priceCheck.status === 'unconfigured') return '未配置预期价格（未校验）';
+    if (priceCheck.status === 'passed') return `通过（预期 ￥${priceCheck.expected}，素材已命中）`;
+    return `不一致：${priceIssueLabel(priceCheck)}`;
+  }
+
+  function priceCheckHtml(priceCheck, options = {}) {
+    if (!priceCheck) return '';
+    const stateClass = priceCheck.status === 'failed' ? 'mc-chip-bad'
+      : priceCheck.status === 'passed' ? 'mc-chip-ok' : 'mc-chip-note';
+    const label = priceCheckLabel(priceCheck);
+    return options.summary
+      ? `价格${priceCheck.status === 'passed' ? '通过' : priceCheck.status === 'failed' ? '不一致' : '未校验'}`
+      : `<div class="mc-chip-row mc-price-check-row"><b>价格校验：</b><span class="mc-chip ${stateClass}">${escapeHtml(label)}</span></div>`;
+  }
+
   async function loadLibraries() {
     const j = await call(`/api/materialcheck/libraries?platform=${encodeURIComponent(platform)}`);
     libraries = j.libraries;
@@ -199,7 +222,9 @@ const MaterialCheck = (() => {
       summaryText.textContent = `本次上传 ${rows.length} 张 · 已完成 ${done} · 待选择 ${pendingPick} · 处理中 ${processing}${cancelled ? ` · 已取消 ${cancelled}` : ''}`;
       // 整批总进度条：按"识别/判定已经跑完"算进度，待人工选择也算跑完了自己那部分，只是还差人点一下
       progress.hidden = false;
-      progressBar.style.width = `${rows.length ? Math.round(((done + pendingPick) / rows.length) * 100) : 0}%`;
+      progressBar.style.setProperty('--mc-progress', String(rows.length ? (done + pendingPick) / rows.length : 0));
+      // 只在实际请求尚未完成时流动；完成、待人工选择或取消后保留进度但静止，避免误以为后台仍在跑。
+      progress.classList.toggle('mc-progress-active', processing > 0);
     };
     const markCancelled = (entry) => {
       if (entry.state !== 'processing') return;
@@ -294,7 +319,7 @@ const MaterialCheck = (() => {
    *  规则命中的附上具体理由（从 normalize() 的规则表反推出来的，不是写死的猜测）。 */
   function keywordDetailHtml(matchedKeywords, options = {}) {
     if (!matchedKeywords || !matchedKeywords.length) {
-      return options.emptyMessage ? `<p class="mc-kw-detail-empty">${escapeHtml(options.emptyMessage)}</p>` : '';
+      return options.emptyMessage ? `${priceCheckHtml(options.priceCheck)}<p class="mc-kw-detail-empty">${escapeHtml(options.emptyMessage)}</p>` : priceCheckHtml(options.priceCheck);
     }
     const missCount = matchedKeywords.filter((k) => k.status === 'missing').length;
     const wrongCount = matchedKeywords.filter((k) => k.status === 'wrong').length;
@@ -317,7 +342,8 @@ const MaterialCheck = (() => {
       </span>`;
     }).join('');
     return `<details class="mc-kw-detail"${options.open ? ' open' : ''}>
-      <summary>关键词处理明细（共 ${matchedKeywords.length} 词 · ${expandedCount} 前后缀不一致 · ${wrongCount} 错词 · ${missCount} 缺失 · ${fuzzyCount} 规则命中）</summary>
+      <summary>关键词处理明细（共 ${matchedKeywords.length} 词 · ${expandedCount} 前后缀不一致 · ${wrongCount} 错词 · ${missCount} 缺失 · ${fuzzyCount} 规则命中 · ${priceCheckHtml(options.priceCheck, { summary: true }) || '价格未记录'}）</summary>
+      ${priceCheckHtml(options.priceCheck)}
       <div class="mc-kw-detail-list">${items}</div>
     </details>`;
   }
@@ -521,7 +547,7 @@ const MaterialCheck = (() => {
       detail += `<div class="mc-chip-row">价格不对：<span class="mc-chip mc-chip-bad">${priceIssueLabel(result.priceIssue)}</span></div>`;
     }
     if (result.warning) detail += `<div class="mc-warning">⚠ ${escapeHtml(result.warning)}</div>`;
-    detail += keywordDetailHtml(result.matchedKeywords);
+    detail += keywordDetailHtml(result.matchedKeywords, { priceCheck: priceCheckInfo(result.priceCheck, result.priceIssue) });
 
     row.innerHTML = `
       <span class="mc-row-name">${escapeHtml(result.filename)}</span>
@@ -687,9 +713,7 @@ const MaterialCheck = (() => {
     const expanded = (r.expandedKeywords || []).map(expandedKeywordHtml).join('') || '（无前后缀不一致）';
     const extra = (r.extraKeywords || []).map((k) => `<span class="mc-chip mc-chip-bad">${escapeHtml(k)}</span>`).join('') || '（无串词）';
     const unregistered = (r.unregisteredKeywords || []).map((k) => `<span class="mc-chip mc-chip-note">${escapeHtml(k)}</span>`).join('') || '（无未入库词）';
-    const priceRow = r.priceIssue
-      ? `<div class="mc-chip-row"><b>价格：</b><span class="mc-chip mc-chip-bad">${priceIssueLabel(r.priceIssue)}</span></div>`
-      : '';
+    const priceCheck = priceCheckInfo(r.priceCheck, r.priceIssue);
     detailBody.innerHTML = `
       <p><b>${escapeHtml(r.filename)}</b> · ${platformLabel(r.platform)} · ${escapeHtml(libraryLabel(r.libraryId))} · ${escapeHtml(r.productName || '')} · ${new Date(r.timestamp).toLocaleString('zh-CN')} ${sourcePreviewHtml(r.imagePath, r.filename)}</p>
       <div class="mc-chip-row"><b>缺词：</b>${missing}</div>
@@ -697,8 +721,7 @@ const MaterialCheck = (() => {
       <div class="mc-chip-row"><b>前后缀不一致：</b>${expanded}</div>
       <div class="mc-chip-row"><b>串词：</b>${extra}</div>
       <div class="mc-chip-row mc-unregistered-row"><b>未入库词：</b><span class="mc-unregistered-note">仅供核对，不影响通过</span>${unregistered}</div>
-      ${priceRow}
-      ${keywordDetailHtml(r.matchedKeywords, { open: true, emptyMessage: '这条历史记录没有保存逐词处理明细。' })}
+      ${keywordDetailHtml(r.matchedKeywords, { open: true, emptyMessage: '这条历史记录没有保存逐词处理明细。', priceCheck })}
       <pre class="mc-ocr-text">${html}</pre>`;
     wireSourcePreviews(detailBody);
     detailMask.hidden = false;

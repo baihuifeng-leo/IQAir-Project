@@ -596,6 +596,17 @@ async function run() {
     assert.strictEqual(rOk.status, 'pass');
   });
 
+  t('matchAgainstProduct 始终返回价格校验明细，明确区分未配置、通过与不一致', () => {
+    const unconfigured = M.matchAgainstProduct('空气净化器 ￥299', { id: 'p0', name: '未配置', keywords: ['空气净化器'], price: null }, []);
+    assert.deepStrictEqual(unconfigured.priceCheck, { status: 'unconfigured' });
+
+    const passed = M.matchAgainstProduct('空气净化器 ￥399', { id: 'p1', name: '已通过', keywords: ['空气净化器'], price: 399 }, []);
+    assert.deepStrictEqual(passed.priceCheck, { status: 'passed', expected: 399 });
+
+    const failed = M.matchAgainstProduct('空气净化器 ￥299', { id: 'p2', name: '不一致', keywords: ['空气净化器'], price: 399 }, []);
+    assert.deepStrictEqual(failed.priceCheck, { status: 'failed', expected: 399, found: [299] });
+  });
+
   t('keywordRatio 兼容纯字符串和脏数据，没配置/不合法值一律归到 both', () => {
     assert.strictEqual(M.keywordRatio('纯字符串词'), 'both');
     assert.strictEqual(M.keywordRatio({ text: '词', ratio: '1:1' }), '1:1');

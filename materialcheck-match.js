@@ -335,6 +335,18 @@ function checkPrice(text, product, ocrLines) {
 }
 
 /**
+ * 价格校验的完整可展示状态。checkPrice 仍只保留“异常或 null”的兼容契约；
+ * 检测结果额外带上此对象，让前端可以明确说明本次为何校验、是否通过。
+ */
+function priceCheckDetail(text, product, ocrLines) {
+  if (product.price == null) return { status: 'unconfigured' };
+  const issue = checkPrice(text, product, ocrLines);
+  return issue
+    ? { status: 'failed', ...issue }
+    : { status: 'passed', expected: product.price };
+}
+
+/**
  * 判断一整行 OCR 文字是否"纯粹就是价格数字"（比如独立成行的 "¥951"、"951"）——
  * 这种行不当候选关键词，因为已经有独立的 price 字段+专门的价格校验机制，重新收进
  * 关键词库只会变成上个月刚清理掉的那种冗余。要求整行掐头去尾之后只剩符号+数字（可选
@@ -540,17 +552,20 @@ function matchAgainstProduct(text, product, allProducts, materialRatio, ocrLines
     });
   });
 
-  const priceIssue = checkPrice(text, product, ocrLines);
+  const priceCheck = priceCheckDetail(text, product, ocrLines);
+  const priceIssue = priceCheck.status === 'failed'
+    ? { expected: priceCheck.expected, found: priceCheck.found }
+    : null;
   const unregisteredKeywords = unregisteredOcrLines(text, allProducts);
 
   const status = (extraKeywords.length > 0 || priceIssue) ? 'error' : (missingKeywords.length > 0 || wrongKeywords.length > 0 || expandedKeywords.length > 0) ? 'warn' : 'pass';
-  return { missingKeywords, wrongKeywords, expandedKeywords, extraKeywords, unregisteredKeywords, priceIssue, status, matchedKeywords };
+  return { missingKeywords, wrongKeywords, expandedKeywords, extraKeywords, unregisteredKeywords, priceIssue, priceCheck, status, matchedKeywords };
 }
 
 module.exports = {
   CATEGORIES, PRODUCT_TYPES, RATIOS, CROSS_CHECK_COMMON_THRESHOLD,
   normalize, keywordText, keywordCategory, keywordRatio, keywordApplies, findKeywordHits, resolveByFilename,
   resolveProduct, resolveProductForUpload, hasStrongOcrProductEvidence, crossCheckWarning, matchAgainstProduct, commonKeywordTexts,
-  extractPriceCandidates, checkPrice, isPriceLikeLine, buildKeywordCandidates, unregisteredOcrLines,
+  extractPriceCandidates, checkPrice, priceCheckDetail, isPriceLikeLine, buildKeywordCandidates, unregisteredOcrLines,
   classifyKeywordMatch, findOneCharMistake, findUncoveredAffix, findKeywordAcrossCoveredInterruption, layoutTextVariants, matchedKeywordDetail
 };

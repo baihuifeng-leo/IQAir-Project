@@ -2162,9 +2162,11 @@ body.rpt-presenting .rpt-wm-note { grid-area: note; font-size: clamp(13px, 0.9vw
 .mc-library-switch { min-width: 140px; }
 
 .mc-progress { height: 7px; border-radius: 999px; background: var(--field-bg); overflow: hidden; margin: 4px 0 14px; }
-.mc-progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--mint) 0%, #9ff4dc 35%, var(--blue) 52%, var(--mint) 70%, #9ff4dc 100%); background-size: 220% 100%; box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 56%, transparent); transition: width 0.25s var(--ease); animation: mc-progress-shimmer 2.2s linear infinite; }
+.mc-progress-bar { height: 100%; width: 100%; transform: scaleX(var(--mc-progress, 0)); transform-origin: left center; background: linear-gradient(90deg, var(--mint) 0%, #9ff4dc 35%, var(--blue) 52%, var(--mint) 70%, #9ff4dc 100%); background-size: 260% 100%; background-position: 0 0; box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 56%, transparent); transition: transform 0.36s var(--ease); }
+.mc-progress-active .mc-progress-bar { animation: mc-progress-shimmer 6.4s ease-in-out infinite alternate; will-change: background-position; }
 .mc-autobuild-progress { width: min(720px, 100%); height: 9px; margin: 6px 0 10px; }
-@keyframes mc-progress-shimmer { to { background-position: -220% 0; } }
+.mc-autobuild-progress .mc-progress-bar { transform: none; }
+@keyframes mc-progress-shimmer { to { background-position: 100% 0; } }
 
 .mc-spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--line-soft); border-top-color: var(--mint); border-radius: 50%; animation: mc-spin 0.7s linear infinite; }
 @keyframes mc-spin { to { transform: rotate(360deg); } }
@@ -2173,6 +2175,7 @@ body.rpt-presenting .rpt-wm-note { grid-area: note; font-size: clamp(13px, 0.9vw
 .mc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: var(--field-bg); font-size: 11.5px; }
 .mc-chip-bad { background: var(--bad); color: #fff; }
 .mc-chip-warn { background: var(--warn); color: #04140f; }
+.mc-chip-ok { background: color-mix(in srgb, var(--ok) 20%, var(--surface-2)); color: var(--ok-text); border: 1px solid color-mix(in srgb, var(--ok) 44%, transparent); }
 .mc-wrong-expected { text-decoration: line-through; text-decoration-thickness: 1px; opacity: 0.76; }
 .mc-wrong-arrow { opacity: 0.72; font-weight: 700; }
 .mc-wrong-actual { font-weight: 700; }
