@@ -1938,6 +1938,11 @@ body.rpt-presenting .rpt-wm-note {
 }
 .mc-source-preview:hover { border-color: var(--mint); background: var(--mint-dim); color: var(--text); transform: translateY(-1px); }
 .mc-source-preview:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mc-result-product { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; color: var(--dim); font-size: 11.5px; white-space: nowrap; }
+.mc-result-product select { max-width: min(230px, 36vw); min-height: 30px; padding: 4px 26px 4px 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--field-bg); color: var(--text); font: inherit; cursor: pointer; }
+.mc-result-product select:hover { border-color: var(--mint); }
+.mc-result-product select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-color: var(--blue); }
+.mc-result-product select:disabled { cursor: wait; opacity: 0.6; }
 .mc-source-panel {
   position: fixed; z-index: 160; width: min(680px, calc(100vw - 24px)); min-width: 260px; max-width: calc(100vw - 24px);
   overflow: hidden; border-radius: 12px; background: var(--surface);

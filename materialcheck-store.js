@@ -159,6 +159,7 @@ class MaterialCheckStore {
     this.autobuildOcrCacheFile = path.join(dir, 'autobuild-ocr-cache.json');
     this.platforms = { tmall: emptyPlatform(), jd: emptyPlatform() };
     this.records = [];
+    this._recordWrite = Promise.resolve();
     this.autobuildOcrCache = {};
     this.pending = new Map();
     // 服务端并发队列：单台 VM 是单进程 Node，OCR 是 CPU 密集操作，
@@ -402,8 +403,48 @@ class MaterialCheckStore {
   }
 
   async append(record) {
-    await fsp.appendFile(this.recordsFile, JSON.stringify(record) + '\n');
-    this.records.push(record);
+    return this._queueRecordWrite(async () => {
+      await fsp.appendFile(this.recordsFile, JSON.stringify(record) + '\n');
+      this.records.push(record);
+    });
+  }
+
+  _queueRecordWrite(write) {
+    const next = this._recordWrite.then(write, write);
+    // 让本次写入的调用方仍能收到错误，同时后续正常写入不会被一次失败永久阻塞。
+    this._recordWrite = next.catch(() => {});
+    return next;
+  }
+
+  async reassignRecord(recordId, productId) {
+    return this._queueRecordWrite(async () => {
+      const index = this.records.findIndex((record) => record.id === recordId);
+      if (index < 0) throw new Error('这条检测记录不存在或已被清理，刷新后重试');
+      const record = this.records[index];
+      const lib = this.getLibrary(record.platform, record.libraryId);
+      if (!lib) throw new Error('这条记录所属词库已不存在，无法切换产品');
+      const product = lib.products.find((item) => item.id === productId);
+      if (!product) throw new Error('所选产品不在这套词库中，请刷新产品列表后重试');
+
+      const matchResult = match.matchAgainstProduct(record.ocrText, product, lib.products, record.ratio, record.ocrLines);
+      const retainedWarning = String(record.warning || '').split('；')
+        .filter((item) => !item.includes('文件名候选') && !item.includes('型号可能填错'))
+        .join('；') || null;
+      const next = {
+        ...record,
+        productId: product.id,
+        productName: product.name,
+        matchMethod: 'manual',
+        warning: retainedWarning,
+        ...matchResult
+      };
+      this.records[index] = next;
+
+      const tempFile = `${this.recordsFile}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+      await fsp.writeFile(tempFile, this.records.map((item) => JSON.stringify(item)).join('\n') + '\n');
+      await fsp.rename(tempFile, this.recordsFile);
+      return next;
+    });
   }
 
   listRecords({ platform, libraryId, productId, status, uploadedBy, limit = 500 } = {}) {

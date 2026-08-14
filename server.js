@@ -832,6 +832,17 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, result);
     }
 
+    if (p === '/api/materialcheck/records/reassign' && req.method === 'PUT') {
+      const { recordId, productId } = await body(req, 4096);
+      if (!recordId || !productId) return json(res, 400, { error: '缺少检测记录或产品型号' });
+      let result;
+      try { result = await materialcheck.reassignRecord(recordId, productId); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      const label = { pass: '通过', warn: '提醒', error: '报错' }[result.status] || result.status;
+      audit(me, 'materialcheck.detect.reassign', { detail: [`${result.filename} · 手动更正为 ${result.productName} · ${label}`] });
+      return json(res, 200, result);
+    }
+
     if (p === '/api/materialcheck/records' && req.method === 'GET') {
       const platform = url.searchParams.get('platform') || undefined;
       const libraryId = url.searchParams.get('libraryId') || undefined;

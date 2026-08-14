@@ -1078,6 +1078,27 @@ async function run() {
     assert.ok(Math.abs(result.ocrConfidence - 0.93) < 1e-9);
   });
 
+  await tAsync('reassignRecord 人工切换产品后立刻按新产品词库重算并持久化记录', async () => {
+    const store = await freshStore();
+    const libId = store.getLibrary(PF).id;
+    await store.saveProducts(PF, libId, [
+      { id: 'pa', name: '产品 A', keywords: ['产品 A'] },
+      { id: 'pb', name: '产品 B', keywords: ['产品 B', '产品 B 专属词'] }
+    ]);
+    const detected = await store.detectFile({
+      buf: Buffer.from('x'), ext: '.jpg', filename: '产品 A.jpg', platform: PF, libraryId: libId,
+      batchId: 'b1', uploadedBy: 'li', ocr: stubOcr('产品 B 产品 B 专属词')
+    });
+    const reassigned = await store.reassignRecord(detected.id, 'pb');
+    assert.strictEqual(reassigned.productId, 'pb');
+    assert.strictEqual(reassigned.productName, '产品 B');
+    assert.strictEqual(reassigned.matchMethod, 'manual');
+    assert.strictEqual(reassigned.status, 'pass');
+    const reloaded = new MaterialCheckStore(store.dir, store.uploadDir);
+    await reloaded.load();
+    assert.strictEqual(reloaded.records[0].productId, 'pb');
+  });
+
   await tAsync('resolvePending 对不存在的 pendingId 抛出错误', async () => {
     const store = await freshStore();
     await assert.rejects(store.resolvePending('mcp_不存在', 'pa', 'li'), /过期|不存在/);
