@@ -2161,12 +2161,13 @@ body.rpt-presenting .rpt-wm-note { grid-area: note; font-size: clamp(13px, 0.9vw
 .mc-platform-switch { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; margin-right: 10px; }
 .mc-library-switch { min-width: 140px; }
 
-.mc-progress { height: 7px; border-radius: 999px; background: var(--field-bg); overflow: hidden; margin: 4px 0 14px; }
-.mc-progress-bar { height: 100%; width: 100%; transform: scaleX(var(--mc-progress, 0)); transform-origin: left center; background: linear-gradient(90deg, var(--mint) 0%, #9ff4dc 35%, var(--blue) 52%, var(--mint) 70%, #9ff4dc 100%); background-size: 260% 100%; background-position: 0 0; box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 56%, transparent); transition: transform 0.36s var(--ease); }
-.mc-progress-active .mc-progress-bar { animation: mc-progress-shimmer 6.4s ease-in-out infinite alternate; will-change: background-position; }
+.mc-progress { position: relative; height: 10px; border: 1px solid var(--line-soft); border-radius: 999px; background: radial-gradient(circle at center, var(--surface-2), var(--field-bg)); overflow: hidden; margin: 4px 0 14px; box-sizing: border-box; }
+.mc-progress-bar { position: relative; height: 100%; width: 100%; transform: scaleX(var(--mc-progress, 0)); transform-origin: left center; background: linear-gradient(90deg, var(--mint), var(--blue)); border-radius: inherit; box-shadow: 0 3px 10px color-mix(in srgb, var(--mint) 34%, transparent); transition: transform 0.36s var(--ease); overflow: hidden; }
+.mc-progress-bar::before { content: ""; position: absolute; top: 50%; left: 50%; width: 200%; height: 200%; transform: translate(-50%, -50%) scale(0.5); background: radial-gradient(circle, rgba(255, 255, 255, 0.18), transparent 62%); opacity: 0; }
+.mc-progress-active .mc-progress-bar::before { animation: mc-progress-ripple 3.8s ease-out infinite; will-change: transform, opacity; }
 .mc-autobuild-progress { width: min(720px, 100%); height: 9px; margin: 6px 0 10px; }
 .mc-autobuild-progress .mc-progress-bar { transform: none; }
-@keyframes mc-progress-shimmer { to { background-position: 100% 0; } }
+@keyframes mc-progress-ripple { from { transform: translate(-50%, -50%) scale(0.5); opacity: 0.62; } to { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
 
 .mc-spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--line-soft); border-top-color: var(--mint); border-radius: 50%; animation: mc-spin 0.7s linear infinite; }
 @keyframes mc-spin { to { transform: rotate(360deg); } }
