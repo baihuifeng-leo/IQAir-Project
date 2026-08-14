@@ -20,7 +20,7 @@ function parseUrl(input, { protocolRelative = false } = {}) {
 }
 
 function hasExplicitPort(input) {
-  const match = String(input).match(/^(?:[a-z][a-z\d+.-]*:)?\/\/([^/?#]*)/i);
+  const match = String(input).trim().match(/^(?:[a-z][a-z\d+.-]*:)?\/\/([^/?#]*)/i);
   if (!match) return false;
   const authority = match[1].replace(/^.*@/, '');
   if (authority.startsWith('[')) {
@@ -48,8 +48,27 @@ function decodeRepeated(value) {
     if (next === decoded) return decoded;
     decoded = next;
   }
+  let next;
+  try {
+    next = decodeURIComponent(decoded);
+  } catch {
+    // A malformed percent escape is not itself a redirect.
+    return decoded;
+  }
+  if (next !== decoded) unsupported('无效的重定向 URL');
   return decoded;
 }
+
+function assertSupportedNodeRuntime(version = process.versions.node) {
+  const match = String(version).match(/^(\d+)\.(\d+)\.(\d+)/);
+  const major = match ? Number(match[1]) : 0;
+  const minor = match ? Number(match[2]) : 0;
+  if (major < 20 || (major === 20 && minor < 9)) {
+    throw new Error('需要 Node.js >=20.9.0 才能运行详情长图功能');
+  }
+}
+
+assertSupportedNodeRuntime();
 
 function looksLikeRedirect(value) {
   const decoded = decodeRepeated(value).trim();
@@ -146,4 +165,5 @@ module.exports = {
   normalizeProductUrl,
   assertAllowedNavigation,
   assertAllowedImageUrl,
+  assertSupportedNodeRuntime,
 };
