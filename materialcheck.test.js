@@ -613,6 +613,7 @@ async function run() {
     const css = fs.readFileSync(path.join(__dirname, 'public', 'styles.css'), 'utf8');
     assert.match(css, /\.mc-progress\s*\{[^}]*width:\s*100%/s);
     assert.match(css, /\.mc-progress\[hidden\]\s*\{\s*display:\s*none\s*;?\s*\}/);
+    assert.match(css, /\.mc-progress-bar\s*\{[^}]*animation:\s*mc-progress-moving\s+2s\s+ease-in-out\s+infinite/s);
   });
 
   t('matchAgainstProduct 始终返回价格校验明细，明确区分未配置、通过与不一致', () => {
