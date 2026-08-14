@@ -22,6 +22,7 @@ class PngStreamWriter {
     this.writtenRows = 0;
     this.started = false;
     this.finished = false;
+    this.outputEnded = false;
     this.outputError = null;
     this.compressionInput = new Uint8Array(COMPRESSION_INPUT_BYTES);
     this.compressionInputLength = 0;
@@ -86,13 +87,14 @@ class PngStreamWriter {
       await this.flushCompressedParts();
       await this.writeBuffer(pngChunk('IEND', Buffer.alloc(0)));
       await this.endWritable();
+      this.outputEnded = true;
       this.writable.removeListener('error', this.onOutputError);
     });
     return this.operation;
   }
 
   abort(error) {
-    if (this.finished && this.writable.destroyed) return;
+    if (this.outputEnded || this.writable.destroyed) return;
     this.finished = true;
     const reason = error instanceof Error ? error : new Error(String(error || 'PNG stream aborted'));
     this.writable.destroy(reason);
@@ -144,12 +146,21 @@ class PngStreamWriter {
     if (this.outputError) throw this.outputError;
     await new Promise((resolve, reject) => {
       let settled = false;
+      const cleanup = () => {
+        this.writable.removeListener('error', onError);
+        this.writable.removeListener('close', onClose);
+      };
       const settle = (error) => {
         if (settled) return;
         settled = true;
+        cleanup();
         if (error) reject(error);
         else resolve();
       };
+      const onError = (error) => settle(error);
+      const onClose = () => settle(this.outputError || new Error('PNG writable closed before completing a write'));
+      this.writable.once('error', onError);
+      this.writable.once('close', onClose);
       try {
         this.writable.write(bytes, (error) => settle(error || this.outputError));
       } catch (error) {

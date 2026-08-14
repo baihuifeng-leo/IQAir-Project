@@ -15,6 +15,14 @@ const TABLE_FONT_SIZE = 22;
 const TABLE_ROW_HEIGHT = 56;
 const VIDEO_LABEL_HEIGHT = 48;
 const FONT_FAMILY = 'Noto Sans CJK SC';
+const MAX_OUTPUT_WIDTH = 16_384;
+const MAX_STRIP_BYTES = 64 * 1024 * 1024;
+const MAX_INPUT_PIXELS = 100_000_000;
+const MAX_STRIP_HEIGHT = 4_096;
+const MAX_TABLE_COLUMNS = 32;
+const MAX_TABLE_CELL_CHARACTERS = 256;
+const MAX_SVG_BYTES = 256 * 1024;
+const DEFAULT_OPERATIONS = Object.freeze({ createReadStream, createWriteStream, rename, stat, unlink });
 
 async function composeDetailPng(blocks, {
   outputPath,
@@ -22,6 +30,7 @@ async function composeDetailPng(blocks, {
   signal,
   sharp,
   emit,
+  operations,
 } = {}) {
   if (typeof outputPath !== 'string' || outputPath.length === 0) {
     throw new TypeError('outputPath must be a non-empty path');
@@ -31,13 +40,21 @@ async function composeDetailPng(blocks, {
   throwIfAborted(signal);
 
   const layout = layoutBlocks(blocks);
+  const io = resolveOperations(operations);
+  const stripBytes = checkedProduct('strip RGBA bytes', layout.width, stripHeight, 4);
+  if (stripHeight > MAX_STRIP_HEIGHT || stripBytes > MAX_STRIP_BYTES) {
+    throw new RangeError('strip allocation exceeds the 64 MiB operational limit');
+  }
   const temporaryPath = path.join(
     path.dirname(outputPath),
     `.${path.basename(outputPath)}.part-${process.pid}-${randomUUID()}`,
   );
-  const writable = createWriteStream(temporaryPath, { flags: 'wx' });
+  const writable = io.createWriteStream(temporaryPath, { flags: 'wx' });
   const writer = new PngStreamWriter(layout.width, layout.height, writable);
   let completed = false;
+  const abortOutput = () => writer.abort(cancelledError());
+  signal?.addEventListener('abort', abortOutput, { once: true });
+  if (signal?.aborted) abortOutput();
 
   try {
     for (let stripTop = 0; stripTop < layout.height; stripTop += stripHeight) {
@@ -70,19 +87,20 @@ async function composeDetailPng(blocks, {
     throwIfAborted(signal);
     await writer.finish();
     throwIfAborted(signal);
-    const fileStat = await stat(temporaryPath);
-    const sha256 = await sha256File(temporaryPath, signal);
+    const fileStat = await io.stat(temporaryPath);
+    const sha256 = await sha256File(temporaryPath, signal, io);
     throwIfAborted(signal);
-    await rename(temporaryPath, outputPath);
+    await io.rename(temporaryPath, outputPath);
     completed = true;
     return { width: layout.width, height: layout.height, size: fileStat.size, sha256 };
   } catch (error) {
     if (!writable.destroyed) writer.abort(error);
     await waitForClose(writable);
-    await removeFile(temporaryPath);
+    await removeFile(temporaryPath, io);
     throw normalizeAbort(error, signal);
   } finally {
-    if (!completed) await removeFile(temporaryPath);
+    signal?.removeEventListener('abort', abortOutput);
+    if (!completed) await removeFile(temporaryPath, io);
   }
 }
 
@@ -91,32 +109,44 @@ function layoutBlocks(input) {
     .map((block, order) => ({ block, order }))
     .sort((left, right) => domOrder(left) - domOrder(right) || left.order - right.order)
     .map(({ block }) => block);
-  const media = blocks.filter((block) => block?.kind === 'image' || block?.kind === 'video');
+  const images = blocks.filter((block) => block?.kind === 'image');
+  const videos = blocks.filter((block) => block?.kind === 'video');
+  const media = [...images, ...videos];
   if (media.length === 0) throw new RangeError('Cannot compose detail PNG without image or video media');
 
   let width = 0;
   for (const block of media) {
     assertMediaBlock(block);
-    width = Math.max(width, block.width);
   }
+  for (const block of images.length > 0 ? images : videos) width = Math.max(width, block.width);
   assertPositiveInteger('output width', width);
+  if (width > MAX_OUTPUT_WIDTH) throw new RangeError('output width exceeds the operational limit');
 
   const positioned = [];
   let top = 0;
   for (const block of blocks) {
     let height;
     let lines;
+    let columnCount;
     if (block?.kind === 'image' || block?.kind === 'video') {
       assertMediaBlock(block);
       height = Math.max(1, Math.round(block.height * width / block.width));
     } else if (block?.kind === 'text') {
       lines = wrapText(xmlText(block.text), width);
-      height = lines.length * TEXT_LINE_HEIGHT + 2 * TEXT_VERTICAL_PADDING;
+      height = checkedProduct('text line pixels', lines.length, TEXT_LINE_HEIGHT)
+        + 2 * TEXT_VERTICAL_PADDING;
     } else if (block?.kind === 'table') {
       if (!Array.isArray(block.rows) || block.rows.length === 0 || !block.rows.every(Array.isArray)) {
         throw new TypeError('table rows must be a non-empty array of arrays');
       }
-      height = block.rows.length * TABLE_ROW_HEIGHT;
+      columnCount = 1;
+      for (const row of block.rows) {
+        if (row.length > MAX_TABLE_COLUMNS) {
+          throw new RangeError(`table exceeds the ${MAX_TABLE_COLUMNS}-column operational limit`);
+        }
+        columnCount = Math.max(columnCount, row.length);
+      }
+      height = checkedProduct('table row pixels', block.rows.length, TABLE_ROW_HEIGHT);
     } else {
       throw new TypeError(`Unsupported detail block kind: ${String(block?.kind)}`);
     }
@@ -124,7 +154,7 @@ function layoutBlocks(input) {
     if (!Number.isSafeInteger(top + height) || top + height > 0x7fffffff) {
       throw new RangeError('Detail PNG height exceeds the PNG limit');
     }
-    positioned.push({ block, top, height, lines });
+    positioned.push({ block, top, height, lines, columnCount });
     top += height;
   }
   if (top === 0) throw new RangeError('Cannot compose an empty detail PNG');
@@ -140,6 +170,10 @@ function domOrder(entry) {
 function assertMediaBlock(block) {
   assertPositiveInteger(`${block.kind} width`, block.width);
   assertPositiveInteger(`${block.kind} height`, block.height);
+  const pixels = checkedProduct(`${block.kind} input pixels`, block.width, block.height);
+  if (pixels > MAX_INPUT_PIXELS) {
+    throw new RangeError(`${block.kind} input pixels exceed the operational limit`);
+  }
   if (!Buffer.isBuffer(block.buffer) && !(block.buffer instanceof Uint8Array)) {
     throw new TypeError(`${block.kind} buffer must be a Buffer or Uint8Array`);
   }
@@ -161,6 +195,7 @@ async function renderBlockIntoStrip(strip, width, stripTop, rowCount, positioned
       blockOffset,
       fragmentHeight,
       sharp,
+      signal,
     );
     try {
       throwIfAborted(signal);
@@ -176,6 +211,7 @@ async function renderBlockIntoStrip(strip, width, stripTop, rowCount, positioned
             width,
             labelHeight,
             sharp,
+            signal,
           );
           try {
             throwIfAborted(signal);
@@ -199,8 +235,8 @@ async function renderBlockIntoStrip(strip, width, stripTop, rowCount, positioned
 
   const svg = block.kind === 'text'
     ? textSvg(width, positioned.height, positioned.lines, blockOffset, fragmentHeight)
-    : tableSvg(width, block.rows, blockOffset, fragmentHeight);
-  const rendered = await rasterSvg(svg, width, fragmentHeight, sharp);
+    : tableSvg(width, block.rows, positioned.columnCount, blockOffset, fragmentHeight);
+  const rendered = await rasterSvg(svg, width, fragmentHeight, sharp, signal);
   try {
     throwIfAborted(signal);
     blendFragment(strip, width, rendered, fragmentHeight, stripOffset);
@@ -209,28 +245,30 @@ async function renderBlockIntoStrip(strip, width, stripTop, rowCount, positioned
   }
 }
 
-async function rasterMediaFragment(block, width, height, top, fragmentHeight, sharp) {
-  const { data, info } = await sharp(block.buffer, {
+async function rasterMediaFragment(block, width, height, top, fragmentHeight, sharp, signal) {
+  const pipeline = sharp(block.buffer, {
     animated: false,
     page: 0,
     pages: 1,
-    limitInputPixels: false,
+    limitInputPixels: MAX_INPUT_PIXELS,
     sequentialRead: true,
   })
     .resize(width, height, { fit: 'fill' })
     .extract({ left: 0, top, width, height: fragmentHeight })
     .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+    .raw();
+  const { data, info } = await runSharpPipeline(pipeline, signal);
   assertRawFragment(info, width, fragmentHeight);
   return data;
 }
 
-async function rasterSvg(svg, width, height, sharp) {
-  const { data, info } = await sharp(Buffer.from(svg), { limitInputPixels: false })
+async function rasterSvg(svg, width, height, sharp, signal) {
+  const svgBytes = Buffer.from(svg);
+  if (svgBytes.length > MAX_SVG_BYTES) throw new RangeError('bounded SVG exceeds its byte limit');
+  const pipeline = sharp(svgBytes, { limitInputPixels: MAX_INPUT_PIXELS })
     .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+    .raw();
+  const { data, info } = await runSharpPipeline(pipeline, signal);
   assertRawFragment(info, width, height);
   return data;
 }
@@ -297,27 +335,37 @@ function glyphUnits(character) {
 }
 
 function textSvg(width, height, lines, clipTop, clipHeight) {
-  const text = lines.map((line, index) => (
+  const firstLine = Math.max(0, Math.floor((clipTop - TEXT_VERTICAL_PADDING) / TEXT_LINE_HEIGHT));
+  const lastLine = Math.min(
+    lines.length,
+    Math.ceil((clipTop + clipHeight - TEXT_VERTICAL_PADDING) / TEXT_LINE_HEIGHT),
+  );
+  const text = lines.slice(firstLine, lastLine).map((line, offset) => {
+    const index = firstLine + offset;
+    return (
     `<text x="${TEXT_HORIZONTAL_PADDING}" y="${TEXT_VERTICAL_PADDING + TEXT_FONT_SIZE + index * TEXT_LINE_HEIGHT}"`
       + ` font-family="${FONT_FAMILY}" font-size="${TEXT_FONT_SIZE}" fill="#20252b">${escapeSvg(line)}</text>`
-  )).join('');
+    );
+  }).join('');
   return svgViewport(width, clipHeight, clipTop, height,
     `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>${text}`);
 }
 
-function tableSvg(width, rows, clipTop, clipHeight) {
-  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+function tableSvg(width, rows, columnCount, clipTop, clipHeight) {
   const columnWidth = width / columnCount;
   const height = rows.length * TABLE_ROW_HEIGHT;
   let contents = `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>`;
-  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+  const firstRow = Math.max(0, Math.floor(clipTop / TABLE_ROW_HEIGHT));
+  const lastRow = Math.min(rows.length, Math.ceil((clipTop + clipHeight) / TABLE_ROW_HEIGHT));
+  for (let rowIndex = firstRow; rowIndex < lastRow; rowIndex += 1) {
     for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
       const x = columnIndex * columnWidth;
       const y = rowIndex * TABLE_ROW_HEIGHT;
       const clipId = `cell-${rowIndex}-${columnIndex}`;
       contents += `<defs><clipPath id="${clipId}"><rect x="${x + 8}" y="${y + 2}" width="${Math.max(1, columnWidth - 16)}" height="${TABLE_ROW_HEIGHT - 4}"/></clipPath></defs>`;
       contents += `<rect x="${x}" y="${y}" width="${columnWidth}" height="${TABLE_ROW_HEIGHT}" fill="none" stroke="#aab2bd" stroke-width="1"/>`;
-      contents += `<text x="${x + 12}" y="${y + 36}" clip-path="url(#${clipId})" font-family="${FONT_FAMILY}" font-size="${TABLE_FONT_SIZE}" fill="#20252b">${escapeSvg(xmlText(rows[rowIndex][columnIndex]))}</text>`;
+      const cell = truncateCharacters(xmlText(rows[rowIndex][columnIndex]), MAX_TABLE_CELL_CHARACTERS);
+      contents += `<text x="${x + 12}" y="${y + 36}" clip-path="url(#${clipId})" font-family="${FONT_FAMILY}" font-size="${TABLE_FONT_SIZE}" fill="#20252b">${escapeSvg(cell)}</text>`;
     }
   }
   return svgViewport(width, clipHeight, clipTop, height, contents);
@@ -362,6 +410,22 @@ function assertPositiveInteger(name, value) {
   }
 }
 
+function checkedProduct(name, ...values) {
+  let result = 1;
+  for (const value of values) {
+    if (!Number.isSafeInteger(value) || value < 0 || result > Number.MAX_SAFE_INTEGER / value) {
+      throw new RangeError(`${name} exceeds the safe integer limit`);
+    }
+    result *= value;
+  }
+  return result;
+}
+
+function truncateCharacters(value, limit) {
+  const characters = Array.from(value);
+  return characters.length <= limit ? value : `${characters.slice(0, limit - 1).join('')}…`;
+}
+
 function throwIfAborted(signal) {
   if (!signal?.aborted) return;
   throw cancelledError();
@@ -383,9 +447,9 @@ function safeEmit(emit, event) {
   } catch {}
 }
 
-async function sha256File(filePath, signal) {
+async function sha256File(filePath, signal, operations) {
   const hash = createHash('sha256');
-  const readable = createReadStream(filePath);
+  const readable = operations.createReadStream(filePath);
   try {
     for await (const chunk of readable) {
       throwIfAborted(signal);
@@ -406,12 +470,68 @@ async function waitForClose(writable) {
   });
 }
 
-async function removeFile(filePath) {
+async function removeFile(filePath, operations) {
   try {
-    await unlink(filePath);
+    await operations.unlink(filePath);
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
 }
 
-module.exports = { composeDetailPng };
+function resolveOperations(overrides) {
+  if (overrides == null) return DEFAULT_OPERATIONS;
+  if (typeof overrides !== 'object') throw new TypeError('operations must be an object');
+  const resolved = { ...DEFAULT_OPERATIONS };
+  for (const name of Object.keys(DEFAULT_OPERATIONS)) {
+    if (overrides[name] == null) continue;
+    if (typeof overrides[name] !== 'function') throw new TypeError(`operations.${name} must be a function`);
+    resolved[name] = overrides[name];
+  }
+  return resolved;
+}
+
+function runSharpPipeline(pipeline, signal) {
+  if (!pipeline || typeof pipeline.toBuffer !== 'function' || typeof pipeline.destroy !== 'function') {
+    return Promise.reject(new TypeError('sharp must return a destroyable pipeline'));
+  }
+  let operation;
+  try {
+    operation = pipeline.toBuffer({ resolveWithObject: true });
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  return raceAbort(operation, signal, () => pipeline.destroy(cancelledError()));
+}
+
+function raceAbort(operation, signal, cancel) {
+  if (!signal) return Promise.resolve(operation);
+  if (signal.aborted) {
+    try { cancel(); } catch {}
+    return Promise.reject(cancelledError());
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      callback(value);
+    };
+    const onAbort = () => {
+      try { cancel(); } catch {}
+      settle(reject, cancelledError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(operation).then(
+      (value) => settle(resolve, value),
+      (error) => settle(reject, error),
+    );
+  });
+}
+
+module.exports = {
+  composeDetailPng,
+  MAX_INPUT_PIXELS,
+  MAX_OUTPUT_WIDTH,
+  MAX_STRIP_BYTES,
+};
