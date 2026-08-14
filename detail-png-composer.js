@@ -22,23 +22,21 @@ const MAX_INPUT_PIXELS = 100_000_000;
 const MAX_STRIP_HEIGHT = 4_096;
 const MAX_TABLE_COLUMNS = 32;
 const MAX_TABLE_CELL_BYTES = 64 * 1024;
-const MAX_SVG_BYTES = 384 * 1024;
+const MAX_SVG_BYTES = 512 * 1024;
 const DEFAULT_OPERATIONS = Object.freeze({ createReadStream, createWriteStream, rename, stat, unlink });
 
 async function composeDetailPng(blocks, {
   outputPath,
   stripHeight = DEFAULT_STRIP_HEIGHT,
   signal,
-  sharp,
-  sharpOperationFactory = createSharpOperationSession,
+  operationSessionFactory = createSharpOperationSession,
   emit,
   operations,
 } = {}) {
   if (typeof outputPath !== 'string' || outputPath.length === 0) {
     throw new TypeError('outputPath must be a non-empty path');
   }
-  if (sharp != null && typeof sharp !== 'function') throw new TypeError('sharp must be a function');
-  if (typeof sharpOperationFactory !== 'function') throw new TypeError('sharpOperationFactory must be a function');
+  if (typeof operationSessionFactory !== 'function') throw new TypeError('operationSessionFactory must be a function');
   assertPositiveInteger('stripHeight', stripHeight);
   throwIfAborted(signal);
 
@@ -52,14 +50,19 @@ async function composeDetailPng(blocks, {
     path.dirname(outputPath),
     `.${path.basename(outputPath)}.part-${process.pid}-${randomUUID()}`,
   );
-  const sharpOperations = sharpOperationFactory();
+  const sharpOperations = operationSessionFactory();
   if (!sharpOperations || typeof sharpOperations.run !== 'function' || typeof sharpOperations.close !== 'function') {
-    throw new TypeError('sharpOperationFactory must return a run/close session');
+    throw new TypeError('operationSessionFactory must return a run/close session');
   }
   const writable = io.createWriteStream(temporaryPath, { flags: 'wx' });
   const writer = new PngStreamWriter(layout.width, layout.height, writable);
   let completed = false;
-  const abortOutput = () => writer.abort(cancelledError());
+  let abortPromise;
+  const abortOutput = () => {
+    abortPromise ||= Promise.resolve(
+      typeof sharpOperations.abort === 'function' ? sharpOperations.abort() : sharpOperations.close(),
+    ).finally(() => writer.abort(cancelledError()));
+  };
   signal?.addEventListener('abort', abortOutput, { once: true });
   if (signal?.aborted) abortOutput();
 
@@ -101,7 +104,7 @@ async function composeDetailPng(blocks, {
     completed = true;
     return { width: layout.width, height: layout.height, size: fileStat.size, sha256 };
   } catch (error) {
-    await sharpOperations.close();
+    await abortPromise?.catch(() => {});
     if (!writable.destroyed) writer.abort(error);
     await waitForClose(writable);
     throw normalizeAbort(error, signal);
@@ -164,6 +167,7 @@ function layoutBlocks(input) {
         }));
       }
       height = checkedProduct('table row pixels', block.rows.length, TABLE_ROW_HEIGHT);
+      assertTableCellSvgBudgets(width, height, tableCells, columnCount);
     } else {
       throw new TypeError(`Unsupported detail block kind: ${String(block?.kind)}`);
     }
@@ -395,15 +399,40 @@ function* tableCellSvgs(width, rows, columnCount, clipTop, clipHeight) {
   const lastRow = Math.min(rows.length, Math.ceil((clipTop + clipHeight) / TABLE_ROW_HEIGHT));
   for (let rowIndex = firstRow; rowIndex < lastRow; rowIndex += 1) {
     for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
-      const x = columnIndex * columnWidth;
-      const y = rowIndex * TABLE_ROW_HEIGHT;
-      const clipId = `cell-${rowIndex}-${columnIndex}`;
       const cell = rows[rowIndex][columnIndex] ?? '';
-      const contents = `<defs><clipPath id="${clipId}"><rect x="${x + 8}" y="${y + 2}" width="${Math.max(1, columnWidth - 16)}" height="${TABLE_ROW_HEIGHT - 4}"/></clipPath></defs>`
-        + `<text x="${x + 12}" y="${y + 36}" clip-path="url(#${clipId})" font-family="${FONT_FAMILY}" font-size="${TABLE_FONT_SIZE}" fill="#20252b">${escapeSvg(cell)}</text>`;
-      yield svgViewport(width, clipHeight, clipTop, height, contents);
+      yield tableCellSvg(width, height, columnWidth, rowIndex, columnIndex, cell, clipTop, clipHeight);
     }
   }
+}
+
+function assertTableCellSvgBudgets(width, height, rows, columnCount) {
+  const columnWidth = width / columnCount;
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+      const svg = tableCellSvg(
+        width,
+        height,
+        columnWidth,
+        rowIndex,
+        columnIndex,
+        rows[rowIndex][columnIndex] ?? '',
+        rowIndex * TABLE_ROW_HEIGHT,
+        Math.min(MAX_STRIP_HEIGHT, height),
+      );
+      if (Buffer.byteLength(svg) > MAX_SVG_BYTES) {
+        throw new RangeError('escaped table cell exceeds the SVG byte operational limit');
+      }
+    }
+  }
+}
+
+function tableCellSvg(width, height, columnWidth, rowIndex, columnIndex, cell, clipTop, clipHeight) {
+  const x = columnIndex * columnWidth;
+  const y = rowIndex * TABLE_ROW_HEIGHT;
+  const clipId = `cell-${rowIndex}-${columnIndex}`;
+  const contents = `<defs><clipPath id="${clipId}"><rect x="${x + 8}" y="${y + 2}" width="${Math.max(1, columnWidth - 16)}" height="${TABLE_ROW_HEIGHT - 4}"/></clipPath></defs>`
+    + `<text x="${x + 12}" y="${y + 36}" clip-path="url(#${clipId})" font-family="${FONT_FAMILY}" font-size="${TABLE_FONT_SIZE}" fill="#20252b">${escapeSvg(cell)}</text>`;
+  return svgViewport(width, clipHeight, clipTop, height, contents);
 }
 
 function videoLabelSvg(width, height, clipTop, clipHeight) {

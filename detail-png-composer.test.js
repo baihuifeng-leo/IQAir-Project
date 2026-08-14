@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const { mkdtemp, readFile, readdir, rm, stat, writeFile } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
+const { EventEmitter } = require('node:events');
 const { Writable } = require('node:stream');
 const { test } = require('node:test');
 const { inflateSync } = require('node:zlib');
@@ -19,7 +20,7 @@ const {
   MAX_TABLE_CELL_BYTES,
 } = require('./detail-png-composer');
 const { PngStreamWriter } = require('./png-stream-writer');
-const { createSharpOperationSession, MAX_CONCURRENT_SHARP_WORKERS } = require('./sharp-operation-runner');
+const { createSharpOperationSession, MAX_CONCURRENT_SHARP_PROCESSES } = require('./sharp-operation-runner');
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const ORANGE = [230, 126, 34, 255];
@@ -139,7 +140,6 @@ test('composeDetailPng makes mixed media full width across strips and renders es
   const result = await composeDetailPng(blocks, {
     outputPath,
     stripHeight: 512,
-    sharp,
     emit: (event) => events.push(event),
   });
 
@@ -225,7 +225,6 @@ test('composeDetailPng removes every partial file on abort and output failure', 
     outputPath,
     stripHeight: 128,
     signal: controller.signal,
-    sharp,
     emit(event) {
       if (event.phase === 'composing' && event.writtenRows === 128) controller.abort();
     },
@@ -235,7 +234,7 @@ test('composeDetailPng removes every partial file on abort and output failure', 
   const missingParentPath = path.join(workDir, 'missing', 'failed.png');
   await assert.rejects(composeDetailPng([
     { kind: 'image', buffer: tall, width: 120, height: 900 },
-  ], { outputPath: missingParentPath, sharp }));
+  ], { outputPath: missingParentPath }));
   assert.deepEqual(await readdir(workDir), []);
 });
 
@@ -248,13 +247,13 @@ test('image widths alone select the canvas while a video-only detail safely fall
   const mixed = await composeDetailPng([
     { kind: 'image', buffer: image, width: 1200, height: 600 },
     { kind: 'video', buffer: poster, width: 2000, height: 1000 },
-  ], { outputPath: path.join(workDir, 'mixed.png'), sharp });
+  ], { outputPath: path.join(workDir, 'mixed.png') });
   assert.equal(mixed.width, 1200);
   assert.equal(mixed.height, 1200);
 
   const videoOnly = await composeDetailPng([
     { kind: 'video', buffer: poster, width: 320, height: 160 },
-  ], { outputPath: path.join(workDir, 'video-only.png'), sharp });
+  ], { outputPath: path.join(workDir, 'video-only.png') });
   assert.equal(videoOnly.width, 320);
   assert.equal(videoOnly.height, 160);
 });
@@ -312,7 +311,7 @@ test('long text and tables serialize only intersecting bounded SVG elements per 
   ], {
     outputPath: path.join(workDir, 'bounded.png'),
     stripHeight: 64,
-    sharpOperationFactory: () => localSharpSession(spyingSharp),
+    operationSessionFactory: () => localSharpSession(spyingSharp),
   });
 
   assert.ok(svgInputs.length > 50);
@@ -337,7 +336,7 @@ test('table cells preserve complete escaped content and reject cells over 64 KiB
   ], {
     outputPath: path.join(workDir, 'complete.png'),
     stripHeight: 64,
-    sharpOperationFactory: () => recordingRawSession(svgInputs),
+    operationSessionFactory: () => recordingRawSession(svgInputs),
   });
   const escaped = completeCell.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   assert.ok(svgInputs.some((svg) => svg.includes(escaped)), 'the complete escaped cell reaches Sharp');
@@ -349,11 +348,21 @@ test('table cells preserve complete escaped content and reject cells over 64 KiB
   ], {
     outputPath: path.join(workDir, 'aggregate.png'),
     stripHeight: 64,
-    sharpOperationFactory: () => recordingRawSession(svgInputs),
+    operationSessionFactory: () => recordingRawSession(svgInputs),
   });
   for (const cell of aggregateCells) {
     assert.ok(svgInputs.some((svg) => svg.includes(cell)), 'each valid cell is rasterized in full');
   }
+
+  const exactBoundary = "'".repeat(MAX_TABLE_CELL_BYTES);
+  await composeDetailPng([
+    { kind: 'image', buffer: media, width: 800, height: 1 },
+    { kind: 'table', rows: [[exactBoundary]] },
+  ], {
+    outputPath: path.join(workDir, 'metachar-boundary.png'),
+    operationSessionFactory: () => recordingRawSession(svgInputs),
+  });
+  assert.ok(svgInputs.some((svg) => svg.includes('&apos;'.repeat(MAX_TABLE_CELL_BYTES))));
 
   let tempCreates = 0;
   await assert.rejects(composeDetailPng([
@@ -361,7 +370,6 @@ test('table cells preserve complete escaped content and reject cells over 64 KiB
     { kind: 'table', rows: [['x'.repeat(MAX_TABLE_CELL_BYTES + 1)]] },
   ], {
     outputPath: path.join(workDir, 'too-large.png'),
-    sharp,
     operations: {
       createWriteStream(...args) {
         tempCreates += 1;
@@ -373,7 +381,7 @@ test('table cells preserve complete escaped content and reject cells over 64 KiB
   assert.deepEqual((await readdir(workDir)).filter((name) => name.includes('.part-')), []);
 });
 
-test('a Sharp worker session rejects overlapping calls without overwriting its active operation', async () => {
+test('a Sharp process session rejects overlapping calls without overwriting its active operation', async () => {
   const session = createSharpOperationSession();
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>');
   const operation = { kind: 'svg', width: 1, height: 1, limitInputPixels: MAX_INPUT_PIXELS };
@@ -387,6 +395,60 @@ test('a Sharp worker session rejects overlapping calls without overwriting its a
   } finally {
     await session.close();
   }
+});
+
+test('Sharp process session close is terminal and settles active, queued, during-close, and post-close runs', async () => {
+  let processCreates = 0;
+  const factory = () => {
+    processCreates += 1;
+    return pendingSharpChild();
+  };
+  const operation = { kind: 'svg', width: 1, height: 1, limitInputPixels: MAX_INPUT_PIXELS };
+  const input = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
+  const sessions = Array.from({ length: MAX_CONCURRENT_SHARP_PROCESSES }, () => (
+    createSharpOperationSession({ processFactory: factory })
+  ));
+  const activeRuns = sessions.map((session) => session.run(operation, input));
+  const activeAssertions = activeRuns.map((run) => assert.rejects(run, /session is closed/));
+  await waitUntil(() => processCreates === MAX_CONCURRENT_SHARP_PROCESSES);
+
+  const queued = createSharpOperationSession({ processFactory: factory });
+  const queuedRun = queued.run(operation, input);
+  const closeQueued = queued.close();
+  await assert.rejects(queuedRun, /session is closed/);
+  await closeQueued;
+  assert.equal(processCreates, MAX_CONCURRENT_SHARP_PROCESSES, 'queued close never starts another process');
+  await assert.rejects(queued.run(operation, input), /session is closed/);
+
+  const closeActive = sessions[0].close();
+  await assert.rejects(sessions[0].run(operation, input), /session is closed/);
+  await activeAssertions[0];
+  await closeActive;
+  await sessions[0].close();
+
+  await Promise.all(sessions.slice(1).map((session) => session.close()));
+  await Promise.all(activeAssertions.slice(1));
+
+  const replacement = createSharpOperationSession({ processFactory: factory });
+  const replacementRun = replacement.run(operation, input);
+  const replacementAssertion = assert.rejects(replacementRun, /session is closed/);
+  await waitUntil(() => processCreates === MAX_CONCURRENT_SHARP_PROCESSES + 1);
+  await replacement.close();
+  await replacementAssertion;
+});
+
+test('aborting one Sharp process run makes its killed session terminal', async () => {
+  const session = createSharpOperationSession({ processFactory: pendingSharpChild });
+  const controller = new AbortController();
+  const operation = { kind: 'svg', width: 1, height: 1, limitInputPixels: MAX_INPUT_PIXELS };
+  const input = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
+  const first = session.run(operation, input, controller.signal);
+  controller.abort();
+  await assert.rejects(first, (error) => error?.name === 'AbortError');
+  await assert.rejects(session.run(operation, input), (error) => (
+    error?.code === 'SHARP_SESSION_CLOSED'
+  ));
+  await session.close();
 });
 
 test('glyphs, table borders, and the video overlay remain continuous across strip boundaries', async (t) => {
@@ -406,7 +468,7 @@ test('glyphs, table borders, and the video overlay remain continuous across stri
     { kind: 'text', text: '中文连续' },
     { kind: 'table', rows: [['型号', 'Atem'], ['面积', '30 m²']] },
     { kind: 'video', buffer: poster, width: 200, height: 80 },
-  ], { outputPath, stripHeight: 64, sharp });
+  ], { outputPath, stripHeight: 64 });
 
   const { data, info } = await sharp(outputPath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   assert.equal(info.height, 287);
@@ -427,12 +489,13 @@ test('glyphs, table borders, and the video overlay remain continuous across stri
   }
 });
 
-test('abort terminates and exits the real Sharp worker before rejection and partial-file removal', async (t) => {
+test('abort kills active native Sharp work and awaits process exit before partial-file removal', async (t) => {
   const workDir = await mkdtemp(path.join(tmpdir(), 'detail-composer-active-abort-'));
   t.after(() => rm(workDir, { recursive: true, force: true }));
   const tiny = await solidPng(2, 2, { r: 1, g: 2, b: 3, alpha: 1 });
+  const longNative = await solidPng(4096, 4096, { r: 4, g: 5, b: 6, alpha: 1 });
 
-  assert.equal(MAX_CONCURRENT_SHARP_WORKERS, 4);
+  assert.equal(MAX_CONCURRENT_SHARP_PROCESSES, 4);
   const sharpController = new AbortController();
   const sharpOutput = path.join(workDir, 'sharp.png');
   const order = [];
@@ -441,15 +504,21 @@ test('abort terminates and exits the real Sharp worker before rejection and part
   process.on('unhandledRejection', onUnhandled);
   t.after(() => process.removeListener('unhandledRejection', onUnhandled));
   const sharpCompose = composeDetailPng([
-    { kind: 'image', buffer: tiny, width: 2, height: 2 },
+    { kind: 'image', buffer: longNative, width: 4096, height: 4096 },
   ], {
     outputPath: sharpOutput,
+    stripHeight: 4096,
     signal: sharpController.signal,
-    sharpOperationFactory: () => createSharpOperationSession({
-      onOperationStart() { sharpController.abort(); },
-      onWorkerExit() { order.push('worker-exit'); },
+    operationSessionFactory: () => createSharpOperationSession({
+      onNativeStart() { sharpController.abort(); },
+      onProcessExit() { order.push('process-exit'); },
     }),
     operations: {
+      createWriteStream(filePath, options) {
+        const stream = fs.createWriteStream(filePath, options);
+        stream.once('close', () => order.push('output-close'));
+        return stream;
+      },
       async unlink(filePath) {
         order.push('unlink');
         await fs.promises.unlink(filePath);
@@ -461,7 +530,7 @@ test('abort terminates and exits the real Sharp worker before rejection and part
     return error?.code === 'DETAIL_CANCELLED';
   });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(order, ['worker-exit', 'unlink', 'rejected']);
+  assert.deepEqual(order, ['process-exit', 'output-close', 'unlink', 'rejected']);
   assert.deepEqual(unhandled, []);
   assert.deepEqual(await readdir(workDir), []);
 
@@ -473,7 +542,6 @@ test('abort terminates and exits the real Sharp worker before rejection and part
   ], {
     outputPath: writeOutput,
     signal: writeController.signal,
-    sharp,
     operations: {
       createWriteStream(filePath, options) {
         writeStream = pendingFileWriteStream(filePath, options);
@@ -495,7 +563,6 @@ test('abort terminates and exits the real Sharp worker before rejection and part
   ], {
     outputPath: endOutput,
     signal: endController.signal,
-    sharp,
     operations: {
       createWriteStream(filePath, options) {
         endStream = pendingFileEndStream(filePath, options);
@@ -530,7 +597,7 @@ test('composer cleans real partial files on IDAT, end, and rename failures witho
         };
     await assert.rejects(composeDetailPng([
       { kind: 'image', buffer: source, width: 64, height: 300 },
-    ], { outputPath: destination, stripHeight: 64, sharp, operations }), new RegExp(`${fault} failed`));
+    ], { outputPath: destination, stripHeight: 64, operations }), new RegExp(`${fault} failed`));
     assert.deepEqual(await readFile(destination), original);
     assert.deepEqual((await readdir(workDir)).filter((name) => name.includes('.part-')), []);
     if (fault === 'idat') assert.ok(stream.idatBytes() > 0, 'an IDAT reached the real temporary file');
@@ -619,6 +686,23 @@ function recordingRawSession(svgInputs) {
     },
     async close() {},
   };
+}
+
+function pendingSharpChild() {
+  const child = new EventEmitter();
+  child.exitCode = null;
+  child.signalCode = null;
+  child.send = (message, callback) => {
+    callback?.();
+    setImmediate(() => child.emit('message', { type: 'native-started', id: message.id }));
+  };
+  child.kill = (signal) => {
+    if (child.signalCode != null) return false;
+    child.signalCode = signal;
+    setImmediate(() => child.emit('exit', null, signal));
+    return true;
+  };
+  return child;
 }
 
 function expectedPixel(y, x, positions, checkerReference) {

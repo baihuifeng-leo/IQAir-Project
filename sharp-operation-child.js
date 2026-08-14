@@ -1,9 +1,8 @@
 'use strict';
 
-const { parentPort } = require('node:worker_threads');
 const sharp = require('sharp');
 
-parentPort.on('message', async ({ id, input, operation }) => {
+process.on('message', async ({ id, input, operation }) => {
   try {
     let pipeline;
     const bytes = Buffer.from(input);
@@ -24,11 +23,12 @@ parentPort.on('message', async ({ id, input, operation }) => {
     } else {
       throw new TypeError(`Unsupported Sharp operation: ${String(operation.kind)}`);
     }
-    parentPort.postMessage({ type: 'started', id });
-    const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
-    parentPort.postMessage({ type: 'result', id, data, info });
+    const nativeOperation = pipeline.toBuffer({ resolveWithObject: true });
+    process.send?.({ type: 'native-started', id });
+    const { data, info } = await nativeOperation;
+    process.send?.({ type: 'result', id, data, info });
   } catch (error) {
-    parentPort.postMessage({
+    process.send?.({
       type: 'failure',
       id,
       error: { message: error?.message || String(error), name: error?.name, code: error?.code },
