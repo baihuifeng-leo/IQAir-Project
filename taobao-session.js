@@ -32,11 +32,33 @@ const QR_SELECTORS = [
   '.qrcode',
   '#login .qrcode',
 ];
+const QR_TTL_MS = 120_000;
 
 function sessionError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
+}
+
+function cancelledRequestError() {
+  return sessionError('WORKER_REQUEST_CANCELLED', '请求已取消');
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw cancelledRequestError();
+}
+
+async function lstatOrNull(filePath) {
+  try {
+    return await fsp.lstat(filePath);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function sameFileIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
 }
 
 function safeAccountId(value) {
@@ -70,6 +92,14 @@ async function findVisibleLocator(page, selectors) {
   return null;
 }
 
+function isFatalBrowserError(error, page) {
+  try {
+    if (typeof page?.isClosed === 'function' && page.isClosed()) return true;
+  } catch { /* Playwright 对象可能已失效 */ }
+  if (error?.name === 'TargetClosedError' || error?.code === 'ERR_CLOSED') return true;
+  return /(?:target page|browser|context|page).*(?:has been |is )?closed|page crashed/i.test(String(error?.message || ''));
+}
+
 class TaobaoSession {
   constructor({ dataDir, chromium, statusStore, emit } = {}) {
     if (!dataDir || typeof dataDir !== 'string') throw new Error('淘宝会话目录不能为空');
@@ -86,10 +116,13 @@ class TaobaoSession {
     this.emit = typeof emit === 'function' ? emit : () => {};
     this._contexts = new Map();
     this._qrBytes = new Map();
-    this._locks = new Map();
+    this._active = new Set();
+    this._waiters = new Map();
+    this._rootIdentity = null;
+    this.maxQueue = 8;
   }
 
-  runExclusive(accountId, fn) {
+  runExclusive(accountId, fn, { signal } = {}) {
     let id;
     try {
       id = safeAccountId(accountId);
@@ -97,55 +130,91 @@ class TaobaoSession {
       return Promise.reject(error);
     }
     if (typeof fn !== 'function') return Promise.reject(new Error('账号操作必须是函数'));
+    if (signal?.aborted) return Promise.reject(cancelledRequestError());
+    const waiters = this._waiters.get(id) || [];
+    if (this._active.has(id) && waiters.length >= this.maxQueue) {
+      return Promise.reject(sessionError('ACCOUNT_BUSY', '该账号正忙'));
+    }
 
-    const previous = this._locks.get(id) || Promise.resolve();
-    let release;
-    const own = new Promise((resolve) => { release = resolve; });
-    const tail = previous.then(() => own);
-    this._locks.set(id, tail);
-
-    return previous.then(async () => {
-      try {
-        return await fn();
-      } finally {
-        release();
-        if (this._locks.get(id) === tail) this._locks.delete(id);
+    return new Promise((resolve, reject) => {
+      const entry = { fn, resolve, reject, signal, onAbort: null };
+      if (!this._active.has(id)) {
+        this._startExclusive(id, entry);
+        return;
       }
+      entry.onAbort = () => {
+        const queue = this._waiters.get(id);
+        const index = queue?.indexOf(entry) ?? -1;
+        if (index === -1) return;
+        queue.splice(index, 1);
+        if (queue.length === 0) this._waiters.delete(id);
+        reject(cancelledRequestError());
+      };
+      signal?.addEventListener('abort', entry.onAbort, { once: true });
+      waiters.push(entry);
+      this._waiters.set(id, waiters);
     });
   }
 
-  status(accountId = 'default') {
-    return this.runExclusive(accountId, async () => {
-      const id = safeAccountId(accountId);
-      try {
-        const page = await this._pageFor(id);
-        await page.goto(PROTECTED_PAGE_URL, { waitUntil: 'domcontentloaded' });
-        return this._setDetectedStatus(id, page, 'logged_out');
-      } catch {
-        return this._setStatus(id, 'unavailable', { errorCode: 'PROBE_FAILED' });
-      }
+  _startExclusive(accountId, entry) {
+    this._active.add(accountId);
+    entry.signal?.removeEventListener?.('abort', entry.onAbort);
+    Promise.resolve().then(() => {
+      throwIfAborted(entry.signal);
+      return entry.fn();
+    }).then(entry.resolve, entry.reject).finally(() => {
+      const waiters = this._waiters.get(accountId);
+      const next = waiters?.shift();
+      if (waiters?.length === 0) this._waiters.delete(accountId);
+      if (next) this._startExclusive(accountId, next);
+      else this._active.delete(accountId);
     });
   }
 
-  beginLogin(accountId = 'default') {
+  status(accountId = 'default', { signal } = {}) {
     return this.runExclusive(accountId, async () => {
       const id = safeAccountId(accountId);
       let page;
       try {
+        throwIfAborted(signal);
+        page = await this._pageFor(id);
+        const response = await page.goto(PROTECTED_PAGE_URL, { waitUntil: 'domcontentloaded' });
+        throwIfAborted(signal);
+        return this._setDetectedStatus(id, page, 'logged_out', response, signal);
+      } catch (error) {
+        if (signal?.aborted) throw cancelledRequestError();
+        await this._evictFatalContext(id, error, page);
+        return this._setStatus(id, 'unavailable', { errorCode: 'PROBE_FAILED' });
+      }
+    }, { signal });
+  }
+
+  beginLogin(accountId = 'default', { signal } = {}) {
+    return this.runExclusive(accountId, async () => {
+      const id = safeAccountId(accountId);
+      let page;
+      try {
+        throwIfAborted(signal);
         page = await this._pageFor(id);
         await page.goto(LOGIN_PAGE_URL, { waitUntil: 'domcontentloaded' });
-      } catch {
+        throwIfAborted(signal);
+      } catch (error) {
+        if (signal?.aborted) throw cancelledRequestError();
+        await this._evictFatalContext(id, error, page);
         return this._setStatus(id, 'unavailable', { errorCode: 'LOGIN_OPEN_FAILED' });
       }
 
+      throwIfAborted(signal);
       if (!LOGIN_HOSTS.has(hostnameFor(page))) {
         return this._setStatus(id, 'unavailable', { errorCode: 'LOGIN_REDIRECTED' });
       }
 
       if (await findVisibleLocator(page, CHALLENGE_SELECTORS)) {
+        throwIfAborted(signal);
         return this._setStatus(id, 'challenge_required', { errorCode: 'CHALLENGE_REQUIRED' });
       }
       const qr = await findVisibleLocator(page, QR_SELECTORS);
+      throwIfAborted(signal);
       if (!qr) {
         await this._setStatus(id, 'logged_out', { errorCode: 'QR_UNAVAILABLE' });
         throw sessionError('QR_UNAVAILABLE', '未找到淘宝登录二维码');
@@ -154,68 +223,103 @@ class TaobaoSession {
       try {
         bytes = Buffer.from(await qr.screenshot({ type: 'png' }));
       } catch {
+        if (signal?.aborted) throw cancelledRequestError();
         await this._setStatus(id, 'logged_out', { errorCode: 'QR_UNAVAILABLE' });
         throw sessionError('QR_UNAVAILABLE', '无法读取淘宝登录二维码');
       }
+      throwIfAborted(signal);
       if (bytes.length === 0) {
         await this._setStatus(id, 'logged_out', { errorCode: 'QR_UNAVAILABLE' });
         throw sessionError('QR_UNAVAILABLE', '淘宝登录二维码为空');
       }
-      this._qrBytes.set(id, bytes);
+      this._qrBytes.set(id, { bytes, generation: `${Date.now()}-${Math.random()}`, expiresAt: Date.now() + QR_TTL_MS });
       return this._setStatus(id, 'waiting_for_scan');
-    });
+    }, { signal });
   }
 
-  qr(accountId = 'default') {
-    const id = safeAccountId(accountId);
-    const bytes = this._qrBytes.get(id);
-    if (!bytes) return Promise.reject(sessionError('QR_UNAVAILABLE', '当前没有可用的登录二维码'));
-    return Promise.resolve(Buffer.from(bytes));
-  }
-
-  verify(accountId = 'default') {
+  qr(accountId = 'default', { signal } = {}) {
     return this.runExclusive(accountId, async () => {
       const id = safeAccountId(accountId);
+      throwIfAborted(signal);
+      const qr = this._qrBytes.get(id);
+      if (!qr || qr.expiresAt <= Date.now()) { this._qrBytes.delete(id); throw sessionError('QR_UNAVAILABLE', '当前没有可用的登录二维码'); }
+      return Buffer.from(qr.bytes);
+    }, { signal });
+  }
+
+  verify(accountId = 'default', { signal } = {}) {
+    return this.runExclusive(accountId, async () => {
+      const id = safeAccountId(accountId);
+      throwIfAborted(signal);
       await this._setStatus(id, 'verifying');
+      let page;
       try {
-        const page = await this._pageFor(id);
-        await page.goto(PROTECTED_PAGE_URL, { waitUntil: 'domcontentloaded' });
-        const status = await this._setDetectedStatus(id, page, 'expired');
+        throwIfAborted(signal);
+        page = await this._pageFor(id);
+        const response = await page.goto(PROTECTED_PAGE_URL, { waitUntil: 'domcontentloaded' });
+        throwIfAborted(signal);
+        const status = await this._setDetectedStatus(id, page, 'expired', response, signal);
         if (status.status === 'ready') this._qrBytes.delete(id);
         return status;
-      } catch {
+      } catch (error) {
+        if (signal?.aborted) throw cancelledRequestError();
+        await this._evictFatalContext(id, error, page);
         return this._setStatus(id, 'unavailable', { errorCode: 'PROBE_FAILED' });
       }
-    });
+    }, { signal });
   }
 
-  clear(accountId = 'default') {
+  clear(accountId = 'default', { signal } = {}) {
     return this.runExclusive(accountId, async () => {
       const id = safeAccountId(accountId);
+      throwIfAborted(signal);
       const context = this._contexts.get(id);
+      if (context) {
+        try { await this._closeContext(context); } catch {
+          await this._setStatus(id, 'unavailable', { errorCode: 'CLEANUP_FAILED' });
+          throw sessionError('CLEANUP_FAILED', '账号清理失败');
+        }
+      }
       this._contexts.delete(id);
       this._qrBytes.delete(id);
-      if (context) await this._closeContext(context);
-      await fsp.rm(this._accountDir(id), { recursive: true, force: true });
+      try {
+        const accountDir = await this._validatedAccountDir(id, { allowMissing: true });
+        if (accountDir) {
+          await this._validatedAccountDir(id);
+          await fsp.rm(accountDir, { recursive: true, force: true });
+        }
+      } catch {
+        await this._setStatus(id, 'unavailable', { errorCode: 'CLEANUP_FAILED' });
+        throw sessionError('CLEANUP_FAILED', '账号清理失败');
+      }
       return this._setStatus(id, 'logged_out');
-    });
+    }, { signal });
   }
 
-  async _setDetectedStatus(accountId, page, loginStatus) {
+  async _setDetectedStatus(accountId, page, loginStatus, response, signal) {
+    throwIfAborted(signal);
     if (await findVisibleLocator(page, CHALLENGE_SELECTORS)) {
+      throwIfAborted(signal);
       return this._setStatus(accountId, 'challenge_required', { errorCode: 'CHALLENGE_REQUIRED' });
     }
     const host = hostnameFor(page);
     if (LOGIN_HOSTS.has(host) || await findVisibleLocator(page, LOGIN_SELECTORS)) {
+      throwIfAborted(signal);
       return this._setStatus(accountId, loginStatus);
     }
+    throwIfAborted(signal);
     if (host !== 'i.taobao.com') {
       return this._setStatus(accountId, 'unavailable', { errorCode: 'PROBE_REDIRECTED' });
+    }
+    const url = page.url();
+    if (!response || !(typeof response.ok === 'function' ? response.ok() : response.status?.() >= 200 && response.status?.() < 300) || url !== PROTECTED_PAGE_URL) {
+      return this._setStatus(accountId, 'unavailable', { errorCode: 'PROBE_FAILED' });
     }
     return this._setStatus(accountId, 'ready', { lastVerifiedAt: Date.now() });
   }
 
   async _setStatus(accountId, status, patch = {}) {
+    if (status !== 'waiting_for_scan') this._qrBytes.delete(accountId);
     const record = await this.statusStore.setStatus(PLATFORM, accountId, status, patch);
     this.emit('session.status', record);
     return record;
@@ -224,7 +328,11 @@ class TaobaoSession {
   async _pageFor(accountId) {
     const context = await this._contextFor(accountId);
     const pages = typeof context.pages === 'function' ? context.pages() : [];
-    if (pages && pages.length) return pages[0];
+    for (const page of pages || []) {
+      try {
+        if (typeof page?.isClosed !== 'function' || !page.isClosed()) return page;
+      } catch { /* 跳过已失效的 page */ }
+    }
     if (typeof context.newPage !== 'function') throw sessionError('PAGE_UNAVAILABLE', '淘宝浏览器页面不可用');
     return context.newPage();
   }
@@ -233,16 +341,29 @@ class TaobaoSession {
     const existing = this._contexts.get(accountId);
     if (existing) return existing;
 
-    await fsp.mkdir(this.dataDir, { recursive: true, mode: 0o700 });
-    const accountDir = this._accountDir(accountId);
-    await fsp.mkdir(accountDir, { recursive: true, mode: 0o700 });
-    await fsp.chmod(accountDir, 0o700);
+    const accountDir = await this._prepareAccountDir(accountId);
     const context = await this.chromium.launchPersistentContext(accountDir, {
       headless: true,
       viewport: { width: 1440, height: 1000 },
     });
     this._contexts.set(accountId, context);
+    const onClose = () => {
+      if (this._contexts.get(accountId) === context) this._contexts.delete(accountId);
+      this._qrBytes.delete(accountId);
+    };
+    if (typeof context.once === 'function') context.once('close', onClose);
+    else if (typeof context.on === 'function') context.on('close', onClose);
     return context;
+  }
+
+  async _evictFatalContext(accountId, error, page) {
+    if (!isFatalBrowserError(error, page)) return false;
+    const context = this._contexts.get(accountId);
+    if (!context) return true;
+    this._contexts.delete(accountId);
+    this._qrBytes.delete(accountId);
+    try { await this._closeContext(context); } catch { /* 死 context 只能尽力回收 */ }
+    return true;
   }
 
   _accountDir(accountId) {
@@ -254,12 +375,72 @@ class TaobaoSession {
     return accountDir;
   }
 
+  async _sessionRoot() {
+    await fsp.mkdir(this.dataDir, { recursive: true, mode: 0o700 });
+    const before = await fsp.lstat(this.dataDir);
+    if (before.isSymbolicLink() || !before.isDirectory()) {
+      throw sessionError('PROFILE_UNSAFE', '账号目录不安全');
+    }
+    const realPath = await fsp.realpath(this.dataDir);
+    if (this._rootIdentity && (
+      !sameFileIdentity(before, this._rootIdentity) || realPath !== this._rootIdentity.realPath
+    )) {
+      throw sessionError('PROFILE_UNSAFE', '账号目录不安全');
+    }
+    await fsp.chmod(this.dataDir, 0o700);
+    const after = await fsp.lstat(this.dataDir);
+    if (after.isSymbolicLink() || !after.isDirectory() || !sameFileIdentity(before, after)) {
+      throw sessionError('PROFILE_UNSAFE', '账号目录不安全');
+    }
+    const identity = { dev: after.dev, ino: after.ino, realPath };
+    if (!this._rootIdentity) this._rootIdentity = identity;
+    return this._rootIdentity;
+  }
+
+  async _validatedAccountDir(accountId, { allowMissing = false } = {}) {
+    const root = await this._sessionRoot();
+    const accountDir = this._accountDir(accountId);
+    const before = await lstatOrNull(accountDir);
+    if (!before) {
+      if (allowMissing) return null;
+      throw sessionError('PROFILE_UNSAFE', '账号目录不安全');
+    }
+    if (before.isSymbolicLink() || !before.isDirectory()) {
+      throw sessionError('PROFILE_UNSAFE', '账号目录不安全');
+    }
+    const realPath = await fsp.realpath(accountDir);
+    if (path.dirname(realPath) !== root.realPath) {
+      throw sessionError('PROFILE_UNSAFE', '账号目录不安全');
+    }
+    const after = await fsp.lstat(accountDir);
+    if (after.isSymbolicLink() || !after.isDirectory() || !sameFileIdentity(before, after)) {
+      throw sessionError('PROFILE_UNSAFE', '账号目录不安全');
+    }
+    await this._sessionRoot();
+    return accountDir;
+  }
+
+  async _prepareAccountDir(accountId) {
+    await this._sessionRoot();
+    const accountDir = this._accountDir(accountId);
+    const existing = await lstatOrNull(accountDir);
+    if (!existing) await fsp.mkdir(accountDir, { mode: 0o700 });
+    await this._validatedAccountDir(accountId);
+    await fsp.chmod(accountDir, 0o700);
+    return this._validatedAccountDir(accountId);
+  }
+
   async _closeContext(context) {
     const pages = typeof context.pages === 'function' ? context.pages() : [];
+    let pageFailure;
     for (const page of pages || []) {
-      try { await page.close?.(); } catch { /* 继续关闭其余页面和上下文 */ }
+      try { await page.close?.(); } catch (error) { pageFailure ||= error; }
     }
-    try { await context.close?.(); } catch { /* 关闭失败不扩大到相邻账号目录 */ }
+    if (typeof context.close === 'function') {
+      await context.close();
+      return;
+    }
+    if (pageFailure) throw pageFailure;
   }
 }
 

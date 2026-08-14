@@ -5,15 +5,26 @@ const childProcess = require('node:child_process');
 const path = require('node:path');
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-
-function safeMessage(value, fallback = '详情 Worker 请求失败') {
-  const firstLine = String(value || '').split(/\r?\n/, 1)[0].trim();
-  return (firstLine || fallback).slice(0, 500);
-}
+const PUBLIC_MESSAGES = Object.freeze({
+  WORKER_TIMEOUT: '详情处理超时',
+  WORKER_EXITED: '详情服务暂不可用',
+  WORKER_SEND_FAILED: '详情服务暂不可用',
+  WORKER_START_FAILED: '详情服务暂不可用',
+  WORKER_ERROR: '详情服务发生错误',
+  WORKER_CLOSED: '详情服务已关闭',
+  WORKER_REQUEST_INVALID: 'Worker 请求不合法',
+  WORKER_REQUEST_CANCELLED: '请求已取消',
+  ACCOUNT_BUSY: '该账号正忙',
+  CLEANUP_FAILED: '账号清理失败',
+  DETAIL_CANCELLED: '任务已取消',
+  DETAIL_UNAVAILABLE: '详情长图任务暂不可用',
+  QR_UNAVAILABLE: '登录二维码不可用',
+});
 
 function workerError(code, message) {
-  const error = new Error(safeMessage(message));
-  error.code = /^[A-Z][A-Z0-9_]{0,63}$/.test(String(code || '')) ? code : 'WORKER_ERROR';
+  const publicCode = /^[A-Z][A-Z0-9_]{0,63}$/.test(String(code || '')) ? code : 'WORKER_ERROR';
+  const error = new Error(PUBLIC_MESSAGES[publicCode] || '详情 Worker 请求失败');
+  error.code = publicCode;
   return error;
 }
 
@@ -59,11 +70,13 @@ class DetailWorkerClient extends EventEmitter {
     const onMessage = (message) => this._handleMessage(child, message);
     const onExit = (code, signal) => this._handleExit(child, code, signal);
     const onError = () => this._handleExit(child, null, null, '详情 Worker 通信失败');
+    const onDisconnect = () => this._handleExit(child, null, null, '详情 Worker 通信失败');
     this._child = child;
-    this._listeners = { child, onMessage, onExit, onError };
+    this._listeners = { child, onMessage, onExit, onError, onDisconnect };
     child.on('message', onMessage);
     child.on('exit', onExit);
     child.on('error', onError);
+    child.on('disconnect', onDisconnect);
     return child;
   }
 
@@ -86,16 +99,18 @@ class DetailWorkerClient extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this._handleTimeout(child, id);
+        if (this._settle(id, false, workerError('WORKER_TIMEOUT', '详情 Worker 请求超时'))) {
+          this._cancelRequest(child, id);
+        }
       }, timeoutMs);
       this._pending.set(id, { resolve, reject, timer });
 
       try {
         child.send(envelope, (error) => {
-          if (error) this._settle(id, false, workerError('WORKER_SEND_FAILED', '详情 Worker 通信失败'));
+          if (error) this._handleExit(child, null, null, '详情 Worker 通信失败');
         });
       } catch {
-        this._settle(id, false, workerError('WORKER_SEND_FAILED', '详情 Worker 通信失败'));
+        this._handleExit(child, null, null, '详情 Worker 通信失败');
       }
     });
   }
@@ -129,16 +144,21 @@ class DetailWorkerClient extends EventEmitter {
     this._detach(child);
     const reason = message || `详情 Worker 已退出${signal ? ` (${signal})` : code === null || code === undefined ? '' : ` (${code})`}`;
     this._rejectAll(workerError('WORKER_EXITED', reason));
+    if (message) {
+      try { child.disconnect?.(); } catch { /* IPC 可能已断开 */ }
+      try { child.kill?.(); } catch { /* 子进程可能已退出 */ }
+    }
   }
 
-  _handleTimeout(child, id) {
-    if (!this._settle(id, false, workerError('WORKER_TIMEOUT', '详情 Worker 请求超时'))) return;
+  _cancelRequest(child, id) {
     if (child !== this._child) return;
-    this._child = null;
-    this._detach(child);
-    this._rejectAll(workerError('WORKER_EXITED', '详情 Worker 超时后已重启'));
-    try { child.disconnect?.(); } catch { /* 子进程可能已经断开 */ }
-    try { child.kill?.(); } catch { /* 子进程可能已经退出 */ }
+    try {
+      child.send({ kind: 'cancel', id }, (error) => {
+        if (error) this._handleExit(child, null, null, '详情 Worker 通信失败');
+      });
+    } catch {
+      this._handleExit(child, null, null, '详情 Worker 通信失败');
+    }
   }
 
   _detach(child) {
@@ -147,6 +167,7 @@ class DetailWorkerClient extends EventEmitter {
     child.removeListener?.('message', listeners.onMessage);
     child.removeListener?.('exit', listeners.onExit);
     child.removeListener?.('error', listeners.onError);
+    child.removeListener?.('disconnect', listeners.onDisconnect);
     this._listeners = null;
   }
 
