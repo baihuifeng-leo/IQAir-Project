@@ -121,6 +121,7 @@ class DetailTaskStore {
 
   _sanitizeLoaded(item) {
     if (!item || typeof item !== 'object') return null;
+    const legacySensitive = hasSensitiveValue(item);
     const id = safeId(item.id, '任务');
     const userId = safeId(item.userId || item.ownerId, '用户');
     const platform = safeId(item.platform, '平台');
@@ -128,9 +129,9 @@ class DetailTaskStore {
     if (!PHASES.has(item.phase)) return null;
     const task = {
       id, userId, platform, accountId,
-      url: text(item.url, 4096),
+      url: legacySensitive ? '' : text(item.url, 4096),
       productId: text(item.productId, 128),
-      phase: item.phase,
+      phase: legacySensitive ? 'failed' : item.phase,
       progress: cleanProgress(item.progress),
       assets: cleanAssets(item.assets),
       createdAt: numberOr(item.createdAt),
@@ -138,7 +139,9 @@ class DetailTaskStore {
       resultPath: null,
       resultBytes: numberOr(item.resultBytes, 0),
       resultMime: text(item.resultMime, 80),
-      error: cleanError(item.error)
+      error: legacySensitive
+        ? { code: 'legacy_sensitive_data', message: '任务数据已清理' }
+        : cleanError(item.error)
     };
     if (item.resultPath != null) task.resultPath = this._safeResultPath(item.resultPath);
     return task;

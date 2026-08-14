@@ -139,3 +139,34 @@ test('cancelling a task deletes its result and clears result metadata while reta
   await assert.rejects(() => fsp.access(resultPath));
   assert.equal(tasks.listFor({ id: 'alice', admin: false }).length, 1);
 });
+
+test('loads legacy tasks with nested sensitive values without exposing or preserving them', async () => {
+  const root = await fixture();
+  const legacy = {
+    tasks: [{
+      id: 'dt_legacy_safe', userId: 'alice', platform: 'taobao', accountId: 'default',
+      phase: 'completed', progress: 100, assets: { total: 2, current: 2 },
+      createdAt: 10, updatedAt: 10,
+      url: 'https://detail.tmall.com/item.htm?id=123&session=secret',
+      productUrl: 'https://item.taobao.com/item.htm?id=123&access_token=secret',
+      error: { details: { Cookie: 'secret' }, candidates: [{ Authorization: 'Bearer secret' }] },
+      safeLabel: '保留字段'
+    }]
+  };
+  await fsp.writeFile(path.join(root, 'tasks.json'), JSON.stringify(legacy));
+  const tasks = new DetailTaskStore(root);
+  await tasks.load();
+
+  const loaded = tasks.getAuthorized('dt_legacy_safe', { id: 'alice', admin: false });
+  assert.equal(loaded.phase, 'failed');
+  assert.deepEqual(loaded.error, { code: 'legacy_sensitive_data', message: '任务数据已清理' });
+  assert.equal(loaded.url, '');
+  assert.equal(JSON.stringify(loaded).includes('secret'), false);
+  assert.equal(JSON.stringify(loaded).includes('access_token'), false);
+
+  const persisted = await fsp.readFile(path.join(root, 'tasks.json'), 'utf8');
+  assert.equal(persisted.includes('secret'), false);
+  assert.equal(persisted.includes('access_token'), false);
+  assert.equal(persisted.includes('Cookie'), false);
+  assert.equal(persisted.includes('保留字段'), false);
+});
