@@ -609,6 +609,12 @@ async function run() {
     assert.strictEqual(frontendIsDetectingRows([{ state: 'done' }, { state: 'needsPick' }, { state: 'cancelled' }]), false);
   });
 
+  t('检测加载条保持整行宽，未上传时由 hidden 完全隐藏', () => {
+    const css = fs.readFileSync(path.join(__dirname, 'public', 'styles.css'), 'utf8');
+    assert.match(css, /\.mc-progress\s*\{[^}]*width:\s*100%/s);
+    assert.match(css, /\.mc-progress\[hidden\]\s*\{\s*display:\s*none\s*;?\s*\}/);
+  });
+
   t('matchAgainstProduct 始终返回价格校验明细，明确区分未配置、通过与不一致', () => {
     const unconfigured = M.matchAgainstProduct('空气净化器 ￥299', { id: 'p0', name: '未配置', keywords: ['空气净化器'], price: null }, []);
     assert.deepStrictEqual(unconfigured.priceCheck, { status: 'unconfigured' });

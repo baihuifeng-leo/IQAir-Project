@@ -2161,7 +2161,8 @@ body.rpt-presenting .rpt-wm-note { grid-area: note; font-size: clamp(13px, 0.9vw
 .mc-platform-switch { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; margin-right: 10px; }
 .mc-library-switch { min-width: 140px; }
 
-.mc-progress { display: block; --height-of-loader: 4px; --loader-color: #0071e2; width: 130px; height: var(--height-of-loader); border-radius: 30px; background-color: rgba(0, 0, 0, 0.2); position: relative; margin: 8px 0 14px; }
+.mc-progress { display: block; --height-of-loader: 4px; --loader-color: #0071e2; width: 100%; height: var(--height-of-loader); border-radius: 30px; background-color: rgba(0, 0, 0, 0.2); position: relative; margin: 8px 0 14px; }
+.mc-progress[hidden] { display: none; }
 .mc-progress-bar { position: absolute; background: var(--loader-color); top: 0; left: 0; width: 0%; height: 100%; border-radius: 30px; animation: mc-progress-moving 1s ease-in-out infinite; }
 .mc-autobuild-progress { width: min(720px, 100%); height: 9px; margin: 6px 0 10px; background: var(--line-soft); }
 .mc-autobuild-progress .mc-progress-bar { position: static; width: auto; height: 100%; background: var(--mint); animation: none; }
