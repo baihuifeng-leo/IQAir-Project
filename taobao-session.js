@@ -115,6 +115,7 @@ class TaobaoSession {
     this.statusStore = statusStore;
     this.emit = typeof emit === 'function' ? emit : () => {};
     this._contexts = new Map();
+    this._poisonedContexts = new Map();
     this._qrBytes = new Map();
     this._active = new Set();
     this._waiters = new Map();
@@ -122,7 +123,7 @@ class TaobaoSession {
     this.maxQueue = 8;
   }
 
-  runExclusive(accountId, fn, { signal } = {}) {
+  runExclusive(accountId, fn, { signal, allowPoisoned = false } = {}) {
     let id;
     try {
       id = safeAccountId(accountId);
@@ -131,13 +132,16 @@ class TaobaoSession {
     }
     if (typeof fn !== 'function') return Promise.reject(new Error('账号操作必须是函数'));
     if (signal?.aborted) return Promise.reject(cancelledRequestError());
+    if (!allowPoisoned && this._poisonedContexts.has(id)) {
+      return Promise.reject(sessionError('CLEANUP_FAILED', '账号清理失败'));
+    }
     const waiters = this._waiters.get(id) || [];
     if (this._active.has(id) && waiters.length >= this.maxQueue) {
       return Promise.reject(sessionError('ACCOUNT_BUSY', '该账号正忙'));
     }
 
     return new Promise((resolve, reject) => {
-      const entry = { fn, resolve, reject, signal, onAbort: null };
+      const entry = { fn, resolve, reject, signal, allowPoisoned, onAbort: null };
       if (!this._active.has(id)) {
         this._startExclusive(id, entry);
         return;
@@ -161,6 +165,9 @@ class TaobaoSession {
     entry.signal?.removeEventListener?.('abort', entry.onAbort);
     Promise.resolve().then(() => {
       throwIfAborted(entry.signal);
+      if (!entry.allowPoisoned && this._poisonedContexts.has(accountId)) {
+        throw sessionError('CLEANUP_FAILED', '账号清理失败');
+      }
       return entry.fn();
     }).then(entry.resolve, entry.reject).finally(() => {
       const waiters = this._waiters.get(accountId);
@@ -273,14 +280,16 @@ class TaobaoSession {
     return this.runExclusive(accountId, async () => {
       const id = safeAccountId(accountId);
       throwIfAborted(signal);
-      const context = this._contexts.get(id);
+      const context = this._poisonedContexts.get(id) || this._contexts.get(id);
       if (context) {
         try { await this._closeContext(context); } catch {
+          if (this._contexts.get(id) === context) this._poisonedContexts.set(id, context);
           await this._setStatus(id, 'unavailable', { errorCode: 'CLEANUP_FAILED' });
           throw sessionError('CLEANUP_FAILED', '账号清理失败');
         }
       }
-      this._contexts.delete(id);
+      if (this._contexts.get(id) === context) this._contexts.delete(id);
+      if (this._poisonedContexts.get(id) === context) this._poisonedContexts.delete(id);
       this._qrBytes.delete(id);
       try {
         const accountDir = await this._validatedAccountDir(id, { allowMissing: true });
@@ -293,7 +302,7 @@ class TaobaoSession {
         throw sessionError('CLEANUP_FAILED', '账号清理失败');
       }
       return this._setStatus(id, 'logged_out');
-    }, { signal });
+    }, { signal, allowPoisoned: true });
   }
 
   async _setDetectedStatus(accountId, page, loginStatus, response, signal) {
@@ -338,6 +347,9 @@ class TaobaoSession {
   }
 
   async _contextFor(accountId) {
+    if (this._poisonedContexts.has(accountId)) {
+      throw sessionError('CLEANUP_FAILED', '账号清理失败');
+    }
     const existing = this._contexts.get(accountId);
     if (existing) return existing;
 
@@ -349,6 +361,7 @@ class TaobaoSession {
     this._contexts.set(accountId, context);
     const onClose = () => {
       if (this._contexts.get(accountId) === context) this._contexts.delete(accountId);
+      if (this._poisonedContexts.get(accountId) === context) this._poisonedContexts.delete(accountId);
       this._qrBytes.delete(accountId);
     };
     if (typeof context.once === 'function') context.once('close', onClose);
@@ -358,11 +371,19 @@ class TaobaoSession {
 
   async _evictFatalContext(accountId, error, page) {
     if (!isFatalBrowserError(error, page)) return false;
-    const context = this._contexts.get(accountId);
+    const context = this._poisonedContexts.get(accountId) || this._contexts.get(accountId);
     if (!context) return true;
-    this._contexts.delete(accountId);
     this._qrBytes.delete(accountId);
-    try { await this._closeContext(context); } catch { /* 死 context 只能尽力回收 */ }
+    try {
+      await this._closeContext(context);
+    } catch {
+      if (this._contexts.get(accountId) !== context) return true;
+      this._poisonedContexts.set(accountId, context);
+      await this._setStatus(accountId, 'unavailable', { errorCode: 'CLEANUP_FAILED' });
+      throw sessionError('CLEANUP_FAILED', '账号清理失败');
+    }
+    if (this._contexts.get(accountId) === context) this._contexts.delete(accountId);
+    if (this._poisonedContexts.get(accountId) === context) this._poisonedContexts.delete(accountId);
     return true;
   }
 

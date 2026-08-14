@@ -367,6 +367,77 @@ test('evicts and rebuilds a context after Playwright reports a crashed page', as
   await session.clear('default');
 });
 
+test('keeps a fatally broken context poisoned until clear confirms termination', async () => {
+  const dataDir = await fixture();
+  const fatal = Object.assign(new Error('Target page, context or browser has been closed'), {
+    name: 'TargetClosedError',
+  });
+  const page = new FakePage({ gotoError: fatal });
+  const context = new FakeContext(page);
+  let closeAttempts = 0;
+  context.close = async () => {
+    closeAttempts += 1;
+    if (closeAttempts <= 2) throw new Error('context still alive');
+    context.closed = true;
+    context.emit('close');
+  };
+  const launches = [];
+  const chromium = {
+    async launchPersistentContext(accountDir, options) {
+      launches.push({ accountDir, options, context });
+      return context;
+    },
+  };
+  const statusStore = fakeStatusStore();
+  const session = new TaobaoSession({ dataDir, chromium, statusStore, emit: () => {} });
+
+  await assert.rejects(() => session.status('default'), (error) => error.code === 'CLEANUP_FAILED');
+  const profilePath = path.join(dataDir, 'default', 'profile.txt');
+  await fsp.writeFile(profilePath, 'authenticated');
+  await assert.rejects(() => session.beginLogin('default'), (error) => error.code === 'CLEANUP_FAILED');
+  assert.equal(launches.length, 1);
+
+  await assert.rejects(() => session.clear('default'), (error) => error.code === 'CLEANUP_FAILED');
+  assert.equal(await fsp.readFile(profilePath, 'utf8'), 'authenticated');
+  assert.equal(statusStore.calls.some((record) => record.status === 'logged_out'), false);
+  assert.equal(launches.length, 1);
+
+  assert.equal((await session.clear('default')).status, 'logged_out');
+  await assert.rejects(() => fsp.access(path.join(dataDir, 'default')));
+  assert.equal(closeAttempts, 3);
+  assert.equal(launches.length, 1);
+});
+
+test('a poisoned context close event confirms termination and permits one fresh context', async () => {
+  const dataDir = await fixture();
+  const fatal = Object.assign(new Error('Target page, context or browser has been closed'), {
+    name: 'TargetClosedError',
+  });
+  const poisoned = new FakeContext(new FakePage({ gotoError: fatal }));
+  poisoned.close = async () => { throw new Error('context still alive'); };
+  const recovered = new FakeContext(new FakePage());
+  const contexts = [poisoned, recovered];
+  const launches = [];
+  const chromium = {
+    async launchPersistentContext(accountDir, options) {
+      const context = contexts[launches.length];
+      launches.push({ accountDir, options, context });
+      return context;
+    },
+  };
+  const session = new TaobaoSession({ dataDir, chromium, statusStore: fakeStatusStore(), emit: () => {} });
+
+  await assert.rejects(() => session.status('default'), (error) => error.code === 'CLEANUP_FAILED');
+  await assert.rejects(() => session.status('default'), (error) => error.code === 'CLEANUP_FAILED');
+  assert.equal(launches.length, 1);
+
+  poisoned.closed = true;
+  poisoned.emit('close');
+  assert.equal((await session.status('default')).status, 'ready');
+  assert.equal(launches.length, 2);
+  await session.clear('default');
+});
+
 test('evicts a cached context when Playwright reports its close event', async () => {
   const dataDir = await fixture();
   const { chromium, launches } = fakeChromium(() => new FakePage());
