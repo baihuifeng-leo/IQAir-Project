@@ -16,8 +16,10 @@ const {
   MAX_INPUT_PIXELS,
   MAX_OUTPUT_WIDTH,
   MAX_STRIP_BYTES,
+  MAX_TABLE_CELL_BYTES,
 } = require('./detail-png-composer');
 const { PngStreamWriter } = require('./png-stream-writer');
+const { createSharpOperationSession, MAX_CONCURRENT_SHARP_WORKERS } = require('./sharp-operation-runner');
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const ORANGE = [230, 126, 34, 255];
@@ -310,7 +312,7 @@ test('long text and tables serialize only intersecting bounded SVG elements per 
   ], {
     outputPath: path.join(workDir, 'bounded.png'),
     stripHeight: 64,
-    sharp: spyingSharp,
+    sharpOperationFactory: () => localSharpSession(spyingSharp),
   });
 
   assert.ok(svgInputs.length > 50);
@@ -318,6 +320,72 @@ test('long text and tables serialize only intersecting bounded SVG elements per 
   for (const svg of svgInputs) {
     assert.ok((svg.match(/<text /g) || []).length <= 6, 'only intersecting text/cells are serialized');
     assert.ok((svg.match(/<clipPath /g) || []).length <= 6, 'only intersecting table cells are serialized');
+  }
+});
+
+test('table cells preserve complete escaped content and reject cells over 64 KiB before temp creation', async (t) => {
+  assert.equal(MAX_TABLE_CELL_BYTES, 64 * 1024);
+  const workDir = await mkdtemp(path.join(tmpdir(), 'detail-composer-table-cell-'));
+  t.after(() => rm(workDir, { recursive: true, force: true }));
+  const media = await solidPng(800, 1, { r: 20, g: 90, b: 180, alpha: 1 });
+  const completeCell = `${'中<&>'.repeat(90)}-末尾`;
+  const svgInputs = [];
+
+  await composeDetailPng([
+    { kind: 'image', buffer: media, width: 800, height: 1 },
+    { kind: 'table', rows: [[completeCell]] },
+  ], {
+    outputPath: path.join(workDir, 'complete.png'),
+    stripHeight: 64,
+    sharpOperationFactory: () => recordingRawSession(svgInputs),
+  });
+  const escaped = completeCell.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  assert.ok(svgInputs.some((svg) => svg.includes(escaped)), 'the complete escaped cell reaches Sharp');
+
+  const aggregateCells = Array.from({ length: 5 }, (_, index) => `${index}-${'x'.repeat(60_000)}-end`);
+  await composeDetailPng([
+    { kind: 'image', buffer: media, width: 800, height: 1 },
+    { kind: 'table', rows: [aggregateCells] },
+  ], {
+    outputPath: path.join(workDir, 'aggregate.png'),
+    stripHeight: 64,
+    sharpOperationFactory: () => recordingRawSession(svgInputs),
+  });
+  for (const cell of aggregateCells) {
+    assert.ok(svgInputs.some((svg) => svg.includes(cell)), 'each valid cell is rasterized in full');
+  }
+
+  let tempCreates = 0;
+  await assert.rejects(composeDetailPng([
+    { kind: 'image', buffer: media, width: 800, height: 1 },
+    { kind: 'table', rows: [['x'.repeat(MAX_TABLE_CELL_BYTES + 1)]] },
+  ], {
+    outputPath: path.join(workDir, 'too-large.png'),
+    sharp,
+    operations: {
+      createWriteStream(...args) {
+        tempCreates += 1;
+        return fs.createWriteStream(...args);
+      },
+    },
+  }), /table cell exceeds the 64 KiB operational limit/);
+  assert.equal(tempCreates, 0);
+  assert.deepEqual((await readdir(workDir)).filter((name) => name.includes('.part-')), []);
+});
+
+test('a Sharp worker session rejects overlapping calls without overwriting its active operation', async () => {
+  const session = createSharpOperationSession();
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>');
+  const operation = { kind: 'svg', width: 1, height: 1, limitInputPixels: MAX_INPUT_PIXELS };
+  try {
+    const first = session.run(operation, svg);
+    await assert.rejects(session.run(operation, svg), /must be serial/);
+    const result = await first;
+    assert.equal(result.info.width, 1);
+    assert.equal(result.info.height, 1);
+    assert.equal(result.info.channels, 4);
+  } finally {
+    await session.close();
   }
 });
 
@@ -359,25 +427,42 @@ test('glyphs, table borders, and the video overlay remain continuous across stri
   }
 });
 
-test('abort destroys a pending Sharp pipeline and a pending writable before removing the part file', async (t) => {
+test('abort terminates and exits the real Sharp worker before rejection and partial-file removal', async (t) => {
   const workDir = await mkdtemp(path.join(tmpdir(), 'detail-composer-active-abort-'));
   t.after(() => rm(workDir, { recursive: true, force: true }));
   const tiny = await solidPng(2, 2, { r: 1, g: 2, b: 3, alpha: 1 });
 
+  assert.equal(MAX_CONCURRENT_SHARP_WORKERS, 4);
   const sharpController = new AbortController();
-  const pendingSharp = deferredPipeline();
   const sharpOutput = path.join(workDir, 'sharp.png');
+  const order = [];
+  const unhandled = [];
+  const onUnhandled = (error) => unhandled.push(error);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.removeListener('unhandledRejection', onUnhandled));
   const sharpCompose = composeDetailPng([
     { kind: 'image', buffer: tiny, width: 2, height: 2 },
-  ], { outputPath: sharpOutput, signal: sharpController.signal, sharp: () => pendingSharp.pipeline });
-  setImmediate(() => sharpController.abort());
-  try {
-    await assert.rejects(withTimeout(sharpCompose, 250), (error) => error?.code === 'DETAIL_CANCELLED');
-    assert.equal(pendingSharp.destroyCalls(), 1);
-  } finally {
-    pendingSharp.reject(new Error('test cleanup'));
-    await sharpCompose.catch(() => {});
-  }
+  ], {
+    outputPath: sharpOutput,
+    signal: sharpController.signal,
+    sharpOperationFactory: () => createSharpOperationSession({
+      onOperationStart() { sharpController.abort(); },
+      onWorkerExit() { order.push('worker-exit'); },
+    }),
+    operations: {
+      async unlink(filePath) {
+        order.push('unlink');
+        await fs.promises.unlink(filePath);
+      },
+    },
+  });
+  await assert.rejects(withTimeout(sharpCompose, 2_000), (error) => {
+    order.push('rejected');
+    return error?.code === 'DETAIL_CANCELLED';
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, ['worker-exit', 'unlink', 'rejected']);
+  assert.deepEqual(unhandled, []);
   assert.deepEqual(await readdir(workDir), []);
 
   const writeController = new AbortController();
@@ -487,6 +572,55 @@ function solidPng(width, height, background) {
   return sharp({ create: { width, height, channels: 4, background } }).png().toBuffer();
 }
 
+function localSharpSession(sharpImplementation) {
+  return {
+    async run(operation, input) {
+      let pipeline;
+      if (operation.kind === 'media') {
+        pipeline = sharpImplementation(input, {
+          animated: false,
+          page: 0,
+          pages: 1,
+          limitInputPixels: operation.limitInputPixels,
+          sequentialRead: true,
+        })
+          .resize(operation.width, operation.height, { fit: 'fill' })
+          .extract({
+            left: 0,
+            top: operation.top,
+            width: operation.width,
+            height: operation.fragmentHeight,
+          })
+          .ensureAlpha()
+          .raw();
+      } else {
+        pipeline = sharpImplementation(input, { limitInputPixels: operation.limitInputPixels })
+          .ensureAlpha()
+          .raw();
+      }
+      return pipeline.toBuffer({ resolveWithObject: true });
+    },
+    async close() {},
+  };
+}
+
+function recordingRawSession(svgInputs) {
+  return {
+    async run(operation, input) {
+      if (operation.kind === 'svg') svgInputs.push(Buffer.from(input).toString());
+      return {
+        data: Buffer.alloc(operation.width * (operation.fragmentHeight || operation.height) * 4),
+        info: {
+          width: operation.width,
+          height: operation.fragmentHeight || operation.height,
+          channels: 4,
+        },
+      };
+    },
+    async close() {},
+  };
+}
+
 function expectedPixel(y, x, positions, checkerReference) {
   if (y < positions.orange.top + positions.orange.height) return ORANGE;
   if (y >= positions.checker.top && y < positions.checker.top + positions.checker.height) {
@@ -521,30 +655,6 @@ function countPixels(buffer, width, region, predicate) {
     }
   }
   return count;
-}
-
-function deferredPipeline() {
-  let rejectPromise;
-  let destroyed = 0;
-  const result = new Promise((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  const pipeline = {
-    resize() { return this; },
-    extract() { return this; },
-    ensureAlpha() { return this; },
-    raw() { return this; },
-    toBuffer() { return result; },
-    destroy(error) {
-      destroyed += 1;
-      rejectPromise(error || new Error('pipeline destroyed'));
-    },
-  };
-  return {
-    pipeline,
-    destroyCalls: () => destroyed,
-    reject: (error) => rejectPromise(error),
-  };
 }
 
 function pendingFileWriteStream(filePath, options) {
