@@ -27,13 +27,12 @@ function frontendAutobuildGroups(entries, reviewState) {
   return context.__materialcheck.autobuildGroups(entries, reviewState);
 }
 
-function frontendDetectProgressState(rows) {
+function frontendIsDetectingRows(rows) {
   const source = fs.readFileSync(path.join(__dirname, 'public', 'materialcheck.js'), 'utf8')
-    .replace('return { init };', 'return { detectProgressState, createQueuedProgressWarmup };');
+    .replace('return { init };', 'return { isDetectingRows };');
   const context = { console, window: {}, document: {}, setTimeout, clearTimeout, requestAnimationFrame: (fn) => fn() };
   vm.runInNewContext(source + '\nthis.__materialcheck = MaterialCheck;', context, { filename: 'public/materialcheck.js' });
-  const frontend = context.__materialcheck;
-  return rows ? frontend.detectProgressState(rows) : frontend;
+  return context.__materialcheck.isDetectingRows(rows);
 }
 
 // 伪造一个 child_process 长得像的对象：stdout/stdin/exit 都能模拟，
@@ -605,41 +604,9 @@ async function run() {
     assert.strictEqual(rOk.status, 'pass');
   });
 
-  t('detectProgressState 准备阶段结束后以30%为基线，其余进度按完成数填满', () => {
-    const active = frontendDetectProgressState([{ state: 'done' }, { state: 'processing' }, { state: 'needsPick' }, { state: 'cancelled' }]);
-    assert.ok(Math.abs(active.ratio - 0.65) < 1e-9);
-    assert.strictEqual(active.text, '65%');
-    assert.strictEqual(active.active, true);
-
-    const settled = frontendDetectProgressState([{ state: 'done' }, { state: 'needsPick' }, { state: 'cancelled' }]);
-    assert.ok(Math.abs(settled.ratio - (0.3 + 0.7 * (2 / 3))) < 1e-9);
-    assert.strictEqual(settled.text, '77%');
-    assert.strictEqual(settled.active, false);
-
-    const justSubmitted = frontendDetectProgressState([{ state: 'processing' }, { state: 'processing' }]);
-    assert.strictEqual(justSubmitted.ratio, 0.3);
-    assert.strictEqual(justSubmitted.text, '30%');
-  });
-
-  t('createQueuedProgressWarmup 从1%按固定节奏平滑增长到30%，不会直接跳到30%', () => {
-    const queued = [];
-    const scheduled = [];
-    const delays = [];
-    let completed = 0;
-    const warmup = frontendDetectProgressState().createQueuedProgressWarmup({
-      schedule: (fn, delay) => { scheduled.push({ fn, delay }); delays.push(delay); return scheduled.length; },
-      clearSchedule: () => {},
-      onProgress: (value) => queued.push(value),
-      onComplete: () => { completed++; }
-    });
-
-    assert.deepStrictEqual(queued, [1]);
-    while (scheduled.length) scheduled.shift().fn();
-    assert.strictEqual(queued.at(-1), 30);
-    assert.strictEqual(completed, 1);
-    assert.ok(queued.every((value, index) => index === 0 || value - queued[index - 1] === 2 || value === 30));
-    assert.ok(delays.every((delay) => delay === 200));
-    warmup.stop();
+  t('isDetectingRows 只在仍有素材实际检测时显示循环加载动画', () => {
+    assert.strictEqual(frontendIsDetectingRows([{ state: 'done' }, { state: 'processing' }, { state: 'needsPick' }]), true);
+    assert.strictEqual(frontendIsDetectingRows([{ state: 'done' }, { state: 'needsPick' }, { state: 'cancelled' }]), false);
   });
 
   t('matchAgainstProduct 始终返回价格校验明细，明确区分未配置、通过与不一致', () => {
