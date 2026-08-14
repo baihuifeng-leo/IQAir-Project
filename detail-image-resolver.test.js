@@ -122,3 +122,48 @@ test('abort wins over exhausted candidates and emit errors are non-fatal', async
   const result = await resolveAllImages([image([FIRST])], options({ emit: () => { throw new Error('observer failed'); } }));
   assert.equal(result[0].buffer.toString(), 'image');
 });
+
+test('aborts promptly even when iterator return never settles', async () => {
+  const controller = new AbortController(); let returned = false;
+  const iterator = { next: () => new Promise(() => {}), return: () => { returned = true; return new Promise(() => {}); } };
+  const run = resolveAllImages([image([FIRST])], options({ signal: controller.signal, request: async () => ({ ok: true, status: 200, headers: Promise.resolve({ 'content-type': 'image/png' }), stream: { [Symbol.asyncIterator]: () => iterator } }) }));
+  setImmediate(() => controller.abort()); await assert.rejects(promptly(run), { code: 'DETAIL_CANCELLED' }); assert.equal(returned, true);
+});
+
+function trackedReply({ ok = true, status = 200, headers = Promise.resolve({ 'content-type': 'image/png' }), next } = {}) {
+  let closed = false;
+  const iterator = { next: next || (async () => ({ done: true })), return: () => { closed = true; return Promise.resolve({ done: true }); } };
+  return { response: { ok, status, headers, stream: { [Symbol.asyncIterator]: () => iterator } }, closed: () => closed };
+}
+
+test('closes every acquired stream on status, type, limit, read, and decode early exits', async () => {
+  const cases = [
+    () => trackedReply({ ok: false, status: 404 }),
+    () => trackedReply({ headers: Promise.resolve({ 'content-type': 'text/html' }) }),
+    () => trackedReply({ next: async () => ({ value: Buffer.alloc(11), done: false }) }),
+    () => trackedReply({ next: async () => { throw new Error('read failed'); } }),
+    () => trackedReply({ next: (() => { let sent = false; return async () => sent ? { done: true } : (sent = true, { value: Buffer.from('bad'), done: false }); })() }),
+  ];
+  for (let index = 0; index < cases.length; index += 1) {
+    const tracked = cases[index]();
+    await assert.rejects(resolveAllImages([image([FIRST])], options({ limits: { perAssetBytes: 10, totalBytes: 100 }, request: async () => tracked.response, sharp: index === 4 ? fakeSharp({ fail: true }).sharp : fakeSharp().sharp })), { code: 'ASSET_UNAVAILABLE' });
+    assert.equal(tracked.closed(), true);
+  }
+});
+
+test('requires Promise headers and restores transient retry success plus the 50 MiB cap', async () => {
+  await assert.rejects(resolveAllImages([image([FIRST])], options({ request: async () => ({ ok: true, status: 200, headers: { 'content-type': 'image/png' }, stream: stream() }) })), { code: 'ASSET_UNAVAILABLE' });
+  let attempts = 0;
+  await resolveAllImages([image([FIRST])], options({ request: async () => { attempts += 1; if (attempts === 1) throw new Error('reset'); return reply(); } }));
+  assert.equal(attempts, 2);
+  await assert.rejects(resolveAllImages([image([FIRST])], options({ request: async () => reply({ chunks: [Buffer.alloc(49 * 1024 * 1024), Buffer.alloc(2 * 1024 * 1024)] }) })), { code: 'ASSET_UNAVAILABLE' });
+});
+
+test('Sharp decode fallback and all-candidate failure release every earlier resolved buffer atomically', async () => {
+  const decoded = fakeSharp({ fail: true });
+  const result = await resolveAllImages([image([FIRST, SECOND])], options({ sharp: (buffer, opts) => buffer.toString() === 'bad' ? decoded.sharp(buffer, opts) : fakeSharp().sharp(buffer, opts), request: async (url) => reply({ chunks: [Buffer.from(url === FIRST ? 'bad' : 'good')] }) }));
+  assert.equal(result[0].sourceUrl, SECOND);
+  const firstDecoder = fakeSharp();
+  await assert.rejects(resolveAllImages([image([FIRST]), image([SECOND], 1)], options({ sharp: firstDecoder.sharp, request: async (url) => url === FIRST ? reply({ chunks: [Buffer.from('first')] }) : reply({ ok: false, status: 404 }) })), { code: 'ASSET_UNAVAILABLE' });
+  assert.ok(firstDecoder.calls[0].buffer.every((byte) => byte === 0));
+});

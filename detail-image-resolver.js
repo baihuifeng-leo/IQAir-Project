@@ -38,12 +38,14 @@ function raceAbort(promise, signal, onAbort) {
   });
 }
 function validateResponse(response) {
-  if (!response || typeof response.ok !== 'boolean' || !Number.isInteger(response.status) || !response.stream || !response.headers || typeof response.stream[Symbol.asyncIterator] !== 'function') throw new CandidateUnavailable('INVALID_RESPONSE');
+  if (!response || typeof response.ok !== 'boolean' || !Number.isInteger(response.status) || !response.stream || !(response.headers instanceof Promise) || typeof response.stream[Symbol.asyncIterator] !== 'function') throw new CandidateUnavailable('INVALID_RESPONSE');
   const iterator = response.stream[Symbol.asyncIterator]();
   if (!iterator || typeof iterator.next !== 'function' || typeof iterator.return !== 'function') throw new CandidateUnavailable('INVALID_RESPONSE');
   return iterator;
 }
-async function close(iterator) { try { await iterator?.return?.(); } catch {} }
+// Stream teardown is a best-effort signal, never part of the resolver's
+// completion path: an untrusted return() is allowed to hang forever.
+function close(iterator) { try { Promise.resolve(iterator?.return?.()).catch(() => {}); } catch {} }
 
 async function download(url, { request, sharp, signal, limits, budget }) {
   aborted(signal);
@@ -79,7 +81,7 @@ async function download(url, { request, sharp, signal, limits, budget }) {
         aborted(signal); return { buffer, width: metadata.width, height: metadata.height };
       } catch (error) { clear(buffer); if (error?.code === 'DETAIL_CANCELLED' || signal?.aborted) throw cancelled(); throw new CandidateUnavailable('DECODE_FAILED'); }
     } catch (error) { chunks.forEach(clear); if (error?.code === 'DETAIL_CANCELLED' || signal?.aborted) throw cancelled(); if (error instanceof CandidateUnavailable) throw error; throw new CandidateUnavailable('READ_FAILED', { retryable: true }); }
-  } finally { if (signal?.aborted) await close(iterator); }
+  } finally { close(iterator); }
 }
 
 async function resolveMedia(block, assetIndex, options, budget) {
