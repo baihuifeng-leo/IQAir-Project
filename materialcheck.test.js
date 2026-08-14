@@ -604,16 +604,20 @@ async function run() {
     assert.strictEqual(rOk.status, 'pass');
   });
 
-  t('detectProgressState 以真实完成数驱动进度，并在检测结束后停止动效', () => {
+  t('detectProgressState 素材进入检测先显示30%，其余进度按完成数填满', () => {
     const active = frontendDetectProgressState([{ state: 'done' }, { state: 'processing' }, { state: 'needsPick' }, { state: 'cancelled' }]);
-    assert.strictEqual(active.ratio, 0.5);
-    assert.strictEqual(active.text, '50%');
+    assert.ok(Math.abs(active.ratio - 0.65) < 1e-9);
+    assert.strictEqual(active.text, '65%');
     assert.strictEqual(active.active, true);
 
     const settled = frontendDetectProgressState([{ state: 'done' }, { state: 'needsPick' }, { state: 'cancelled' }]);
-    assert.strictEqual(settled.ratio, 2 / 3);
-    assert.strictEqual(settled.text, '67%');
+    assert.ok(Math.abs(settled.ratio - (0.3 + 0.7 * (2 / 3))) < 1e-9);
+    assert.strictEqual(settled.text, '77%');
     assert.strictEqual(settled.active, false);
+
+    const justSubmitted = frontendDetectProgressState([{ state: 'processing' }, { state: 'processing' }]);
+    assert.strictEqual(justSubmitted.ratio, 0.3);
+    assert.strictEqual(justSubmitted.text, '30%');
   });
 
   t('matchAgainstProduct 始终返回价格校验明细，明确区分未配置、通过与不一致', () => {

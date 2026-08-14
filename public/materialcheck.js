@@ -168,7 +168,8 @@ const MaterialCheck = (() => {
     const pendingPick = rows.filter((r) => r.state === 'needsPick').length;
     const cancelled = rows.filter((r) => r.state === 'cancelled').length;
     const processing = rows.length - done - pendingPick - cancelled;
-    const ratio = rows.length ? (done + pendingPick) / rows.length : 0;
+    // 前 30% 表示素材已进入本次检测队列；之后才按 OCR/判定已完成的素材逐步填满。
+    const ratio = rows.length ? 0.3 + 0.7 * ((done + pendingPick) / rows.length) : 0;
     return { ratio, text: `${Math.round(ratio * 100)}%`, active: processing > 0 };
   }
 
