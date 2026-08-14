@@ -17,19 +17,48 @@ const ROOT_SELECTORS = Object.freeze({
   ]),
 });
 
-const LAZY_ATTRIBUTES = Object.freeze([
-  'data-ks-lazyload',
-  'data-lazyload',
-  'data-src',
-  'data-original',
-  'data-url',
-]);
+const EXTRACTION_POLICY = Object.freeze({
+  lazyAttributes: Object.freeze([
+    'data-ks-lazyload',
+    'data-lazyload',
+    'data-src',
+    'data-original',
+    'data-url',
+  ]),
+  excludedAncestorTags: Object.freeze(['NAV', 'HEADER', 'FOOTER', 'ASIDE']),
+  excludedMarkerTerms: Object.freeze([
+    'review',
+    'reviews',
+    'rating',
+    'rate',
+    'recommend',
+    'recommendation',
+    'related',
+    'guess you like',
+    'shop',
+    'store',
+    'navigation',
+    'overlay',
+    'modal',
+    'main image',
+    'main gallery',
+    'product image',
+    'product gallery',
+    'image gallery',
+    'gallery',
+    'carousel',
+    'swiper',
+    '评价',
+    '推荐',
+    '猜你喜欢',
+    '主图',
+    '轮播',
+  ]),
+});
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const OBSERVATION_DELAY_MS = 100;
 const REQUIRED_STABLE_OBSERVATIONS = 3;
-const EXCLUDED_ANCESTOR_TAGS = new Set(['NAV', 'HEADER', 'FOOTER', 'ASIDE']);
-const EXCLUDED_ANCESTOR_MARKER = /(?:^|[\s_-])(?:reviews?|rate|recommend(?:ed|ation|ations)?|related|guess[\s_-]*you[\s_-]*like|shop|store|navigation|overlay|modal)(?=$|[\s_-])/i;
 
 function detailError(code, message) {
   const error = new Error(message);
@@ -101,7 +130,37 @@ function isKnownPlaceholder(url) {
   return /^(?:transparent|spaceball|spacer|blank|pixel|1x1)\.(?:gif|png|webp)$/.test(filename);
 }
 
-function normalizeCandidates(rawBlock) {
+function normalizeMarker(value) {
+  return String(value == null ? '' : value)
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .toLowerCase()
+    .trim();
+}
+
+function markerHasExcludedTerm(marker, policy) {
+  const normalized = normalizeMarker(marker);
+  if (!normalized) return false;
+  const padded = ` ${normalized} `;
+  return policy.excludedMarkerTerms.some((term) => {
+    const normalizedTerm = normalizeMarker(term);
+    if (!normalizedTerm) return false;
+    if (/[^\x00-\x7f]/.test(normalizedTerm)) return normalized.includes(normalizedTerm);
+    return padded.includes(` ${normalizedTerm} `);
+  });
+}
+
+function isExcludedContext(ancestorTags, ancestorMarkers, policy) {
+  const tags = Array.isArray(ancestorTags) ? ancestorTags : [];
+  if (tags.some((tag) => policy.excludedAncestorTags.includes(String(tag).toUpperCase()))) {
+    return true;
+  }
+  const markers = Array.isArray(ancestorMarkers) ? ancestorMarkers : [];
+  return markers.some((marker) => markerHasExcludedTerm(marker, policy));
+}
+
+function normalizeCandidates(rawBlock, policy = EXTRACTION_POLICY) {
   const inputs = [];
   if (rawBlock.kind === 'video') {
     inputs.push(rawBlock.currentSrc, rawBlock.poster, rawBlock.src);
@@ -111,7 +170,7 @@ function normalizeCandidates(rawBlock) {
     inputs.push(rawBlock.src);
   }
   const lazy = rawBlock.lazy && typeof rawBlock.lazy === 'object' ? rawBlock.lazy : {};
-  for (const attribute of LAZY_ATTRIBUTES) inputs.push(lazy[attribute]);
+  for (const attribute of policy.lazyAttributes) inputs.push(lazy[attribute]);
 
   const candidates = [];
   const seen = new Set();
@@ -136,19 +195,14 @@ function cleanText(value) {
   return String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
 }
 
-function isExcludedBlock(block) {
-  const tags = Array.isArray(block.ancestorTags) ? block.ancestorTags : [];
-  if (tags.some((tag) => EXCLUDED_ANCESTOR_TAGS.has(String(tag).toUpperCase()))) return true;
-  const markers = Array.isArray(block.ancestorMarkers) ? block.ancestorMarkers : [];
-  return markers.some((marker) => (
-    EXCLUDED_ANCESTOR_MARKER.test(String(marker)) || /推荐|评价|猜你喜欢/.test(String(marker))
-  ));
+function isExcludedBlock(block, policy = EXTRACTION_POLICY) {
+  return isExcludedContext(block.ancestorTags, block.ancestorMarkers, policy);
 }
 
-function serializeBlocks(rawBlocks) {
+function serializeBlocks(rawBlocks, policy = EXTRACTION_POLICY) {
   if (!Array.isArray(rawBlocks)) return [];
   const ordered = rawBlocks
-    .filter((block) => block && typeof block === 'object' && !isExcludedBlock(block))
+    .filter((block) => block && typeof block === 'object' && !isExcludedBlock(block, policy))
     .map((block, order) => ({ block, order }))
     .sort((left, right) => {
       const leftIndex = Number.isInteger(left.block.domIndex) ? left.block.domIndex : left.order;
@@ -162,7 +216,8 @@ function serializeBlocks(rawBlocks) {
       ? block.domIndex
       : order;
     if (block.kind === 'image' || block.kind === 'video') {
-      blocks.push({ kind: block.kind, candidates: normalizeCandidates(block), domIndex });
+      const candidates = normalizeCandidates(block, policy);
+      if (candidates.length) blocks.push({ kind: block.kind, candidates, domIndex });
       continue;
     }
     if (block.kind === 'text') {
@@ -180,23 +235,52 @@ function serializeBlocks(rawBlocks) {
   return blocks;
 }
 
-function pageOperation({ operation, rootSelector }) {
+function pageOperation({ operation, rootSelector, extractionPolicy }) {
   const roots = Array.from(document.querySelectorAll(rootSelector));
   if (roots.length !== 1) return null;
   const root = roots[0];
+  const policy = extractionPolicy || {};
+  const lazyAttributes = Array.isArray(policy.lazyAttributes) ? policy.lazyAttributes : [];
+  const excludedAncestorTags = new Set(Array.isArray(policy.excludedAncestorTags)
+    ? policy.excludedAncestorTags.map((tag) => String(tag).toUpperCase())
+    : []);
+  const excludedMarkerTerms = Array.isArray(policy.excludedMarkerTerms)
+    ? policy.excludedMarkerTerms.map((term) => String(term))
+    : [];
 
   function markerFor(element) {
-    const className = typeof element.className === 'string'
-      ? element.className
-      : element.className && element.className.baseVal;
-    return [
-      element.id,
-      className,
-      element.getAttribute && element.getAttribute('data-module'),
-      element.getAttribute && element.getAttribute('data-section'),
-      element.getAttribute && element.getAttribute('aria-label'),
-      element.getAttribute && element.getAttribute('role'),
-    ].filter(Boolean).join(' ');
+    const values = [];
+    if (element.id) values.push(element.id);
+    if (typeof element.className === 'string') values.push(element.className);
+    else if (element.className && element.className.baseVal) values.push(element.className.baseVal);
+    if (element.getAttribute && element.getAttribute('role')) values.push(element.getAttribute('role'));
+    for (const attribute of Array.from(element.attributes || [])) {
+      if (/^(?:data-|aria-)/i.test(attribute.name)) {
+        values.push(attribute.name, attribute.value);
+      }
+    }
+    return values.filter(Boolean).join(' ');
+  }
+
+  function normalizeBrowserMarker(value) {
+    return String(value == null ? '' : value)
+      .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .toLowerCase()
+      .trim();
+  }
+
+  function hasExcludedMarker(marker) {
+    const normalized = normalizeBrowserMarker(marker);
+    if (!normalized) return false;
+    const padded = ` ${normalized} `;
+    return excludedMarkerTerms.some((term) => {
+      const normalizedTerm = normalizeBrowserMarker(term);
+      if (!normalizedTerm) return false;
+      if (/[^\x00-\x7f]/.test(normalizedTerm)) return normalized.includes(normalizedTerm);
+      return padded.includes(` ${normalizedTerm} `);
+    });
   }
 
   function contextFor(element) {
@@ -211,19 +295,15 @@ function pageOperation({ operation, rootSelector }) {
     return { ancestorTags, ancestorMarkers };
   }
 
-  function isExcluded(element) {
-    const excludedTags = new Set(['NAV', 'HEADER', 'FOOTER', 'ASIDE']);
-    const excludedMarker = /(?:^|[\s_-])(?:reviews?|rate|recommend(?:ed|ation|ations)?|related|guess[\s_-]*you[\s_-]*like|shop|store|navigation|overlay|modal)(?=$|[\s_-])/i;
-    const context = contextFor(element);
+  function isExcluded(context) {
     for (let index = 0; index < context.ancestorTags.length; index += 1) {
-      if (excludedTags.has(context.ancestorTags[index])) return true;
-      const marker = context.ancestorMarkers[index];
-      if (excludedMarker.test(marker) || /推荐|评价|猜你喜欢/.test(marker)) return true;
+      if (excludedAncestorTags.has(String(context.ancestorTags[index]).toUpperCase())) return true;
+      if (hasExcludedMarker(context.ancestorMarkers[index])) return true;
     }
     return false;
   }
 
-  const stateKey = '__ecWorkbenchDetailObservation_v1__';
+  const stateKey = '__ecWorkbenchDetailObservation_v2__';
   function observationState() {
     let state = window[stateKey];
     if (!state || state.root !== root) {
@@ -240,93 +320,138 @@ function pageOperation({ operation, rootSelector }) {
       });
       window[stateKey] = state;
     }
-    const pending = state.observer.takeRecords();
-    state.mutationCount += pending.length;
+    state.mutationCount += state.observer.takeRecords().length;
     return state;
+  }
+
+  function viewportHeight() {
+    return Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+  }
+
+  function rootIsScrollable() {
+    return (root.scrollHeight || 0) > (root.clientHeight || 0) + 1;
+  }
+
+  function rootIsAtScrollEnd() {
+    return !rootIsScrollable()
+      || (root.scrollTop || 0) + (root.clientHeight || 0) >= (root.scrollHeight || 0) - 1;
   }
 
   if (operation === 'snapshot') {
     const state = observationState();
     const rect = root.getBoundingClientRect();
+    const height = viewportHeight();
     const rootHeight = Math.max(root.scrollHeight || 0, root.offsetHeight || 0, Math.ceil(rect.height));
-    const imageCount = Array.from(root.querySelectorAll('img')).filter((image) => !isExcluded(image)).length;
+    const imageCount = Array.from(root.querySelectorAll('img')).filter((image) => !isExcluded(contextFor(image))).length;
+    const rootVisible = rect.top <= height + 1 && rect.bottom >= -1;
     return {
       rootHeight,
       imageCount,
       mutationCount: state.mutationCount,
-      atEnd: rect.bottom <= window.innerHeight + 1,
+      atEnd: rootIsScrollable()
+        ? rootIsAtScrollEnd() && rootVisible
+        : rect.bottom <= height + 1 && rect.bottom >= -1,
     };
   }
 
   if (operation === 'scroll') {
     observationState();
     const rect = root.getBoundingClientRect();
-    const step = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
-    if (rect.top > window.innerHeight) {
-      window.scrollBy({ top: rect.top, left: 0, behavior: 'auto' });
-    } else {
-      window.scrollBy({ top: step, left: 0, behavior: 'auto' });
+    const height = viewportHeight();
+    const step = height;
+
+    if (rootIsScrollable()) {
+      if (rect.top >= height) {
+        window.scrollBy({ top: Math.min(step, rect.top), left: 0, behavior: 'auto' });
+      } else if (rect.bottom <= 0) {
+        window.scrollBy({ top: Math.max(-step, rect.bottom - height), left: 0, behavior: 'auto' });
+      } else if (!rootIsAtScrollEnd()) {
+        root.scrollTop = Math.min(root.scrollHeight - root.clientHeight, root.scrollTop + step);
+      }
+      return null;
+    }
+
+    if (rect.top > height) {
+      window.scrollBy({ top: Math.min(step, rect.top), left: 0, behavior: 'auto' });
+    } else if (rect.bottom > height + 1) {
+      window.scrollBy({ top: Math.min(step, rect.bottom - height), left: 0, behavior: 'auto' });
     }
     return null;
   }
 
   if (operation !== 'extract') return null;
 
-  const lazyAttributes = [
-    'data-ks-lazyload',
-    'data-lazyload',
-    'data-src',
-    'data-original',
-    'data-url',
-  ];
-  const elements = Array.from(root.querySelectorAll('img, video, table, p, h2, h3, h4, h5, h6, li'));
+  const ignoredTags = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT', 'SVG']);
   const blocks = [];
+  let domIndex = 0;
 
-  for (let domIndex = 0; domIndex < elements.length; domIndex += 1) {
-    const element = elements[domIndex];
-    const context = contextFor(element);
+  function pushBlock(block) {
+    blocks.push({ ...block, domIndex });
+    domIndex += 1;
+  }
+
+  function lazyValues(element) {
     const lazy = {};
     for (const attribute of lazyAttributes) {
       const value = element.getAttribute(attribute);
       if (value) lazy[attribute] = value;
     }
+    return lazy;
+  }
 
-    if (element.tagName === 'IMG') {
-      blocks.push({
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const element = node.parentElement;
+      if (!element) return;
+      const context = contextFor(element);
+      const text = node.nodeValue || '';
+      if (!isExcluded(context) && text.trim()) pushBlock({ kind: 'text', ...context, text });
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const element = node;
+    const context = contextFor(element);
+    if (isExcluded(context)) return;
+    const tagName = element.tagName;
+    if (ignoredTags.has(tagName)) return;
+
+    if (tagName === 'IMG') {
+      pushBlock({
         kind: 'image',
-        domIndex,
         ...context,
         currentSrc: element.currentSrc || '',
         srcset: element.getAttribute('srcset') || '',
         src: element.getAttribute('src') || element.src || '',
-        lazy,
+        lazy: lazyValues(element),
       });
-    } else if (element.tagName === 'VIDEO') {
-      blocks.push({
+      return;
+    }
+    if (tagName === 'VIDEO') {
+      pushBlock({
         kind: 'video',
-        domIndex,
         ...context,
+        currentSrc: element.currentSrc || '',
         poster: element.poster || element.getAttribute('poster') || '',
-        lazy,
+        src: element.getAttribute('src') || element.src || '',
+        lazy: lazyValues(element),
       });
-    } else if (element.tagName === 'TABLE') {
-      blocks.push({
+      return;
+    }
+    if (tagName === 'TABLE') {
+      pushBlock({
         kind: 'table',
-        domIndex,
         ...context,
         rows: Array.from(element.rows || []).map((row) => (
           Array.from(row.cells || []).map((cell) => cell.textContent || '')
         )),
       });
-    } else {
-      blocks.push({
-        kind: 'text',
-        domIndex,
-        ...context,
-        text: element.textContent || '',
-      });
+      return;
     }
+    for (const child of Array.from(element.childNodes)) walk(child);
   }
+
+  for (const child of Array.from(root.childNodes)) walk(child);
 
   const metaTitle = document.querySelector('meta[property="og:title"]');
   const heading = document.querySelector('h1');
@@ -341,6 +466,7 @@ function snapshotIsStable(previous, current) {
     current
     && current.atEnd
     && previous
+    && previous.atEnd
     && previous.rootHeight === current.rootHeight
     && previous.imageCount === current.imageCount
     && previous.mutationCount === current.mutationCount
@@ -365,9 +491,13 @@ function safeEmit(emit, snapshot, stableObservations) {
   }
 }
 
+function pageInput(operation, rootSelector) {
+  return { operation, rootSelector, extractionPolicy: EXTRACTION_POLICY };
+}
+
 async function waitForStableDetail(page, rootSelector, timeoutMs, emit) {
   const deadline = Date.now() + timeoutMs;
-  let previous = await page.evaluate(pageOperation, { operation: 'snapshot', rootSelector });
+  let previous = await page.evaluate(pageOperation, pageInput('snapshot', rootSelector));
   if (!previous) throw detailError('DETAIL_ROOT_NOT_FOUND', '商品详情区域已消失');
   let stableObservations = 0;
   safeEmit(emit, previous, stableObservations);
@@ -377,9 +507,9 @@ async function waitForStableDetail(page, rootSelector, timeoutMs, emit) {
     if (remaining <= 0) {
       throw detailError('DETAIL_INCOMPLETE', '商品详情在限定时间内未达到完整稳定状态');
     }
-    await page.evaluate(pageOperation, { operation: 'scroll', rootSelector });
+    await page.evaluate(pageOperation, pageInput('scroll', rootSelector));
     await delay(Math.min(OBSERVATION_DELAY_MS, remaining));
-    const current = await page.evaluate(pageOperation, { operation: 'snapshot', rootSelector });
+    const current = await page.evaluate(pageOperation, pageInput('snapshot', rootSelector));
     if (!current) throw detailError('DETAIL_ROOT_NOT_FOUND', '商品详情区域已消失');
     stableObservations = snapshotIsStable(previous, current) ? stableObservations + 1 : 0;
     safeEmit(emit, current, stableObservations);
@@ -406,12 +536,12 @@ async function extractDetail(page, { timeoutMs = DEFAULT_TIMEOUT_MS, emit = () =
   if (rootCount !== 1) throw detailError('DETAIL_ROOT_AMBIGUOUS', '商品详情区域不唯一');
 
   await waitForStableDetail(page, rootSelector, timeoutMs, emit);
-  const extracted = await page.evaluate(pageOperation, { operation: 'extract', rootSelector });
+  const extracted = await page.evaluate(pageOperation, pageInput('extract', rootSelector));
   if (!extracted) throw detailError('DETAIL_ROOT_NOT_FOUND', '商品详情区域已消失');
   return {
     title: cleanText(extracted.title),
     productId,
-    blocks: serializeBlocks(extracted.blocks),
+    blocks: serializeBlocks(extracted.blocks, EXTRACTION_POLICY),
   };
 }
 

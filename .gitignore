@@ -1,5 +1,6 @@
 .superpowers/
 .worktrees/
+node_modules/
 venv
 data/
 data/platform-sessions/
