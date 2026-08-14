@@ -167,3 +167,29 @@ test('Sharp decode fallback and all-candidate failure release every earlier reso
   await assert.rejects(resolveAllImages([image([FIRST]), image([SECOND], 1)], options({ sharp: firstDecoder.sharp, request: async (url) => url === FIRST ? reply({ chunks: [Buffer.from('first')] }) : reply({ ok: false, status: 404 }) })), { code: 'ASSET_UNAVAILABLE' });
   assert.ok(firstDecoder.calls[0].buffer.every((byte) => byte === 0));
 });
+
+test('aborting while the second image stream is pending immediately rejects and zeroes the first decoded buffer', async () => {
+  const controller = new AbortController();
+  const decoded = fakeSharp();
+  const secondIterator = { next: () => new Promise(() => {}), return: () => Promise.resolve({ done: true }) };
+  const run = resolveAllImages([image([FIRST]), image([SECOND], 1)], options({
+    signal: controller.signal,
+    sharp: decoded.sharp,
+    request: async (url) => url === FIRST
+      ? reply({ chunks: [Buffer.from('first-image')] })
+      : { ok: true, status: 200, headers: Promise.resolve({ 'content-type': 'image/png' }), stream: { [Symbol.asyncIterator]: () => secondIterator } },
+  }));
+  setImmediate(() => controller.abort());
+  await assert.rejects(promptly(run), { code: 'DETAIL_CANCELLED' });
+  assert.ok(decoded.calls[0].buffer.every((byte) => byte === 0));
+});
+
+test('crossing the shared task budget in a second otherwise-decodable image clears the first buffer', async () => {
+  const decoded = fakeSharp();
+  await assert.rejects(resolveAllImages([image([FIRST]), image([SECOND], 1)], options({
+    limits: { perAssetBytes: 10, totalBytes: 7 },
+    sharp: decoded.sharp,
+    request: async (url) => reply({ chunks: [Buffer.from(url === FIRST ? '1234' : '5678')] }),
+  })), (error) => error.code === 'ASSET_UNAVAILABLE' && error.lastError.code === 'TASK_SIZE_LIMIT');
+  assert.ok(decoded.calls[0].buffer.every((byte) => byte === 0));
+});
