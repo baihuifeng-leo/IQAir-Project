@@ -80,3 +80,17 @@ DONE
 - jsdom is a test-only `devDependency` (`jsdom@26.1.0`); no production code
   imports it. The fixtures exercise the browser function but cannot detect live
   Taobao/Tmall selector or lazy-loader changes, which remain end-to-end risks.
+
+---
+
+## Re-review Round 1 Fix — 2026-08-14
+
+- Added `recommended` and `recommendations` to the shared exclusion policy;
+  that policy continues to be supplied to every browser evaluation and to the
+  Node serialization boundary.
+- Added a real jsdom browser-function regression fixture covering class, id,
+  `data-*`, and `aria-*` ancestry, including plain and camel-case variants. It
+  also proves an adjacent legitimate detail text/image pair remains present.
+- RED: the new fixture failed with all four recommendation subtrees serialized.
+- GREEN: `node --test taobao-detail-adapter.test.js detail-url.test.js` — 17
+  passed, 0 failed.

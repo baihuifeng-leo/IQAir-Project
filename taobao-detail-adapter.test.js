@@ -273,6 +273,34 @@ test('uses the Taobao root, excludes data/aria camel-case decoys, and drops medi
   ]);
 });
 
+test('excludes recommended and recommendations ancestry variants without losing legitimate detail content', async () => {
+  const page = new FakePage({
+    url: 'https://detail.tmall.com/item.htm?id=998877',
+    rootSelector: '#description',
+    html: fixture('推荐排除', `
+      <main id="description">
+        <p>保留的详情文案</p>
+        <img src="https://img.alicdn.com/detail/kept.jpg">
+        <section class="recommended"><p>class singular decoy</p></section>
+        <section id="recommendations"><p>id plural decoy</p></section>
+        <section data-module="recommendedProducts"><p>data camel-case decoy</p></section>
+        <section aria-label="recommendationsList"><p>aria camel-case decoy</p></section>
+      </main>
+    `),
+  });
+
+  const detail = await extractDetail(page, { timeoutMs: 1000, emit: () => {} });
+
+  assert.deepEqual(detail.blocks, [
+    { kind: 'text', text: '保留的详情文案', domIndex: 0 },
+    {
+      kind: 'image',
+      candidates: ['https://img.alicdn.com/detail/kept.jpg'],
+      domIndex: 1,
+    },
+  ]);
+});
+
 test('clamps page scrolling at the visible detail bottom before collecting three stable observations', async () => {
   const page = new FakePage({
     url: 'https://detail.tmall.com/item.htm?id=3',
