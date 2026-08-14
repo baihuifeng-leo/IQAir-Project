@@ -148,7 +148,12 @@ test('loads legacy tasks with nested sensitive values without exposing or preser
       phase: 'completed', progress: 100, assets: { total: 2, current: 2 },
       createdAt: 10, updatedAt: 10,
       url: 'https://detail.tmall.com/item.htm?id=123&session=secret',
+      productId: 'token=secret',
       productUrl: 'https://item.taobao.com/item.htm?id=123&access_token=secret',
+      resultMime: 'image/png; Cookie=secret',
+      resultPath: 'results/authorization-secret.png',
+      resultBytes: 99,
+      assets: { total: 2, current: 2, candidates: ['session=secret'] },
       error: { details: { Cookie: 'secret' }, candidates: [{ Authorization: 'Bearer secret' }] },
       safeLabel: '保留字段'
     }]
@@ -161,6 +166,12 @@ test('loads legacy tasks with nested sensitive values without exposing or preser
   assert.equal(loaded.phase, 'failed');
   assert.deepEqual(loaded.error, { code: 'legacy_sensitive_data', message: '任务数据已清理' });
   assert.equal(loaded.url, '');
+  assert.equal(loaded.productId, '');
+  assert.equal(loaded.resultPath, null);
+  assert.equal(loaded.resultBytes, 0);
+  assert.equal(loaded.resultMime, '');
+  assert.deepEqual(loaded.progress, 0);
+  assert.deepEqual(loaded.assets, { total: 0, current: 0 });
   assert.equal(JSON.stringify(loaded).includes('secret'), false);
   assert.equal(JSON.stringify(loaded).includes('access_token'), false);
 

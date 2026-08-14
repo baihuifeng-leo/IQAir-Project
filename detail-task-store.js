@@ -127,6 +127,16 @@ class DetailTaskStore {
     const platform = safeId(item.platform, '平台');
     const accountId = safeId(item.accountId, '账号');
     if (!PHASES.has(item.phase)) return null;
+    if (legacySensitive) {
+      return {
+        id, userId, platform, accountId,
+        url: '', productId: '', phase: 'failed', progress: 0,
+        assets: { total: 0, current: 0 },
+        createdAt: numberOr(item.createdAt), updatedAt: numberOr(item.updatedAt),
+        resultPath: null, resultBytes: 0, resultMime: '',
+        error: { code: 'legacy_sensitive_data', message: '任务数据已清理' }
+      };
+    }
     const task = {
       id, userId, platform, accountId,
       url: legacySensitive ? '' : text(item.url, 4096),
