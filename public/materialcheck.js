@@ -106,7 +106,7 @@ const MaterialCheck = (() => {
     const batch = document.createElement('details');
     batch.className = 'mc-detect-batch';
     batch.open = !restored;
-    const label = restored ? `最近 24 小时 · ${new Date(batchData.createdAt).toLocaleString('zh-CN', { hour12: false })}` : '本次上传';
+    const label = `上传时间 · ${new Date(batchData.createdAt).toLocaleString('zh-CN', { hour12: false })}`;
     batch.innerHTML = `<summary><span class="mc-history-batch-title">${label}</span><span class="mc-history-batch-count">${batchData.results.length} 张素材</span></summary><div class="mc-detect-batch-rows"></div>`;
     list.prepend(batch);
     return batch.querySelector('.mc-detect-batch-rows');
@@ -527,12 +527,33 @@ const MaterialCheck = (() => {
       <span class="mc-row-name">${escapeHtml(result.filename)}</span>
       <span class="mc-row-status">${meta.badge} · ${escapeHtml(result.productName || '')}${result.ratio ? ' · ' + result.ratio + ' 素材' : ''}${methodLabel ? ' · 匹配方式：' + methodLabel : ''}${failed ? ' <button class="mc-btn mc-row-retry">重试</button>' : ''}</span>
       ${sourcePreviewHtml(result.imagePath, result.filename, { hover: true })}
+      ${!failed && result.id && result.productId ? `<label class="mc-result-product"><span>产品型号</span><select aria-label="更正「${escapeHtml(result.filename)}」的产品型号">${products.map((p) => `<option value="${escapeHtml(p.id)}" ${p.id === result.productId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}</select></label>` : ''}
       ${detail}`;
 
     wireSourcePreviews(row);
 
     if (failed) {
       row.querySelector('.mc-row-retry').onclick = () => { if (ctx.onRetry) ctx.onRetry(); };
+    }
+    const productSelect = row.querySelector('.mc-result-product select');
+    if (productSelect) {
+      productSelect.onchange = async () => {
+        const productId = productSelect.value;
+        if (productId === result.productId) return;
+        productSelect.disabled = true;
+        try {
+          const updated = await call('/api/materialcheck/records/reassign', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recordId: result.id, productId })
+          });
+          renderResult(row, updated, ctx);
+          A.toast(`已按「${updated.productName}」词库刷新检测结果`);
+        } catch (e) {
+          productSelect.value = result.productId;
+          productSelect.disabled = false;
+          A.toast(`切换产品失败：${e.message}`, 'bad');
+        }
+      };
     }
   }
 
