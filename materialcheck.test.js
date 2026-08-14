@@ -29,10 +29,11 @@ function frontendAutobuildGroups(entries, reviewState) {
 
 function frontendDetectProgressState(rows) {
   const source = fs.readFileSync(path.join(__dirname, 'public', 'materialcheck.js'), 'utf8')
-    .replace('return { init };', 'return { detectProgressState };');
+    .replace('return { init };', 'return { detectProgressState, createQueuedProgressWarmup };');
   const context = { console, window: {}, document: {}, setTimeout, clearTimeout, requestAnimationFrame: (fn) => fn() };
   vm.runInNewContext(source + '\nthis.__materialcheck = MaterialCheck;', context, { filename: 'public/materialcheck.js' });
-  return context.__materialcheck.detectProgressState(rows);
+  const frontend = context.__materialcheck;
+  return rows ? frontend.detectProgressState(rows) : frontend;
 }
 
 // 伪造一个 child_process 长得像的对象：stdout/stdin/exit 都能模拟，
@@ -604,7 +605,7 @@ async function run() {
     assert.strictEqual(rOk.status, 'pass');
   });
 
-  t('detectProgressState 素材进入检测先显示30%，其余进度按完成数填满', () => {
+  t('detectProgressState 准备阶段结束后以30%为基线，其余进度按完成数填满', () => {
     const active = frontendDetectProgressState([{ state: 'done' }, { state: 'processing' }, { state: 'needsPick' }, { state: 'cancelled' }]);
     assert.ok(Math.abs(active.ratio - 0.65) < 1e-9);
     assert.strictEqual(active.text, '65%');
@@ -618,6 +619,26 @@ async function run() {
     const justSubmitted = frontendDetectProgressState([{ state: 'processing' }, { state: 'processing' }]);
     assert.strictEqual(justSubmitted.ratio, 0.3);
     assert.strictEqual(justSubmitted.text, '30%');
+  });
+
+  t('createQueuedProgressWarmup 从1%随机小步增长到30%，不会直接跳到30%', () => {
+    const queued = [];
+    const scheduled = [];
+    let completed = 0;
+    const warmup = frontendDetectProgressState().createQueuedProgressWarmup({
+      random: () => 0,
+      schedule: (fn) => { scheduled.push(fn); return scheduled.length; },
+      clearSchedule: () => {},
+      onProgress: (value) => queued.push(value),
+      onComplete: () => { completed++; }
+    });
+
+    assert.deepStrictEqual(queued, [1]);
+    while (scheduled.length) scheduled.shift()();
+    assert.strictEqual(queued.at(-1), 30);
+    assert.strictEqual(completed, 1);
+    assert.ok(queued.every((value, index) => index === 0 || value - queued[index - 1] >= 1 && value - queued[index - 1] <= 3));
+    warmup.stop();
   });
 
   t('matchAgainstProduct 始终返回价格校验明细，明确区分未配置、通过与不一致', () => {

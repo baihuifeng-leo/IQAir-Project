@@ -173,6 +173,32 @@ const MaterialCheck = (() => {
     return { ratio, text: `${Math.round(ratio * 100)}%`, active: processing > 0 };
   }
 
+  // 上传刚进入队列时，真实 OCR 尚未返回完成数。用一个短暂的准备阶段表达
+  // “素材已接收、正在派发”，避免视觉上从 0% 突跳到 30%。
+  function createQueuedProgressWarmup({ random = Math.random, schedule = setTimeout, clearSchedule = clearTimeout, onProgress, onComplete }) {
+    let value = 1;
+    let timer = null;
+    let stopped = false;
+    const tick = () => {
+      if (stopped) return;
+      value = Math.min(30, value + 1 + Math.floor(random() * 3));
+      onProgress(value);
+      if (value === 30) {
+        onComplete();
+        return;
+      }
+      timer = schedule(tick, 100 + Math.floor(random() * 121));
+    };
+    onProgress(value);
+    timer = schedule(tick, 130 + Math.floor(random() * 121));
+    return {
+      stop() {
+        stopped = true;
+        if (timer !== null) clearSchedule(timer);
+      }
+    };
+  }
+
   function renderCheckView() {
     const el = A.$('#mc-check-view');
     el.innerHTML = `
@@ -217,7 +243,7 @@ const MaterialCheck = (() => {
     const progressText = A.$('#mc-progress-text');
     progressBar.dataset.progress = '0%';
     const batchRows = addDetectBatch(list, { id: batchId, createdAt: Date.now(), results: fileList }, {});
-    const batchControl = { cancelled: false, controllers: new Set() };
+    const batchControl = { cancelled: false, controllers: new Set(), warmupDone: false, warmup: null };
     activeDetectBatch = batchControl;
 
     const rows = fileList.map((file) => {
@@ -228,6 +254,16 @@ const MaterialCheck = (() => {
       return { file, row, state: 'processing' }; // state: processing | needsPick | done
     });
 
+    const updateProgress = (text) => {
+      const previous = progressBar.dataset.progress || '0%';
+      progressBar.style.setProperty('--mc-progress-from', previous);
+      progressBar.style.setProperty('--mc-progress', text);
+      progressBar.dataset.progress = text;
+      progressText.textContent = text;
+      progressBar.classList.remove('mc-progress-growing');
+      void progressBar.offsetWidth;
+      progressBar.classList.add('mc-progress-growing');
+    };
     const updateSummary = () => {
       const done = rows.filter((r) => r.state === 'done').length;
       const pendingPick = rows.filter((r) => r.state === 'needsPick').length;
@@ -238,14 +274,7 @@ const MaterialCheck = (() => {
       summaryText.textContent = `本次上传 ${rows.length} 张 · 已完成 ${done} · 待选择 ${pendingPick} · 处理中 ${processing}${cancelled ? ` · 已取消 ${cancelled}` : ''}`;
       // 整批总进度条：按"识别/判定已经跑完"算进度，待人工选择也算跑完了自己那部分，只是还差人点一下
       progress.hidden = false;
-      const previous = progressBar.dataset.progress || '0%';
-      progressBar.style.setProperty('--mc-progress-from', previous);
-      progressBar.style.setProperty('--mc-progress', progressState.text);
-      progressBar.dataset.progress = progressState.text;
-      progressText.textContent = progressState.text;
-      progressBar.classList.remove('mc-progress-growing');
-      void progressBar.offsetWidth;
-      progressBar.classList.add('mc-progress-growing');
+      if (batchControl.warmupDone) updateProgress(progressState.text);
     };
     const markCancelled = (entry) => {
       if (entry.state !== 'processing') return;
@@ -258,12 +287,18 @@ const MaterialCheck = (() => {
     cancelBtn.onclick = () => {
       if (batchControl.cancelled) return;
       batchControl.cancelled = true;
+      batchControl.warmup.stop();
+      batchControl.warmupDone = true;
       batchControl.controllers.forEach((controller) => controller.abort());
       rows.forEach(markCancelled);
       cancelBtn.disabled = true;
       updateSummary();
       A.toast('已取消本次检测；未开始的素材不会继续上传');
     };
+    batchControl.warmup = createQueuedProgressWarmup({
+      onProgress: (value) => updateProgress(`${value}%`),
+      onComplete: () => { batchControl.warmupDone = true; updateSummary(); }
+    });
     updateSummary();
 
     async function runOne(entry) {
