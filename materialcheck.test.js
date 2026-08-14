@@ -621,23 +621,24 @@ async function run() {
     assert.strictEqual(justSubmitted.text, '30%');
   });
 
-  t('createQueuedProgressWarmup 从1%随机小步增长到30%，不会直接跳到30%', () => {
+  t('createQueuedProgressWarmup 从1%按固定节奏平滑增长到30%，不会直接跳到30%', () => {
     const queued = [];
     const scheduled = [];
+    const delays = [];
     let completed = 0;
     const warmup = frontendDetectProgressState().createQueuedProgressWarmup({
-      random: () => 0,
-      schedule: (fn) => { scheduled.push(fn); return scheduled.length; },
+      schedule: (fn, delay) => { scheduled.push({ fn, delay }); delays.push(delay); return scheduled.length; },
       clearSchedule: () => {},
       onProgress: (value) => queued.push(value),
       onComplete: () => { completed++; }
     });
 
     assert.deepStrictEqual(queued, [1]);
-    while (scheduled.length) scheduled.shift()();
+    while (scheduled.length) scheduled.shift().fn();
     assert.strictEqual(queued.at(-1), 30);
     assert.strictEqual(completed, 1);
-    assert.ok(queued.every((value, index) => index === 0 || value - queued[index - 1] >= 1 && value - queued[index - 1] <= 3));
+    assert.ok(queued.every((value, index) => index === 0 || value - queued[index - 1] === 2 || value === 30));
+    assert.ok(delays.every((delay) => delay === 200));
     warmup.stop();
   });
 

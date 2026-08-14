@@ -175,22 +175,22 @@ const MaterialCheck = (() => {
 
   // 上传刚进入队列时，真实 OCR 尚未返回完成数。用一个短暂的准备阶段表达
   // “素材已接收、正在派发”，避免视觉上从 0% 突跳到 30%。
-  function createQueuedProgressWarmup({ random = Math.random, schedule = setTimeout, clearSchedule = clearTimeout, onProgress, onComplete }) {
+  function createQueuedProgressWarmup({ schedule = setTimeout, clearSchedule = clearTimeout, onProgress, onComplete }) {
     let value = 1;
     let timer = null;
     let stopped = false;
     const tick = () => {
       if (stopped) return;
-      value = Math.min(30, value + 1 + Math.floor(random() * 3));
+      value = Math.min(30, value + 2);
       onProgress(value);
       if (value === 30) {
         onComplete();
         return;
       }
-      timer = schedule(tick, 100 + Math.floor(random() * 121));
+      timer = schedule(tick, 200);
     };
     onProgress(value);
-    timer = schedule(tick, 130 + Math.floor(random() * 121));
+    timer = schedule(tick, 200);
     return {
       stop() {
         stopped = true;
