@@ -15,6 +15,7 @@ const SESSION_STATES = new Set([
 ]);
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const SENSITIVE = /cookie|token|secret|password|authorization|credential|qr|browser|context|html/i;
+const RESERVED_IDS = new Set(['__proto__', 'prototype', 'constructor', 'toString', 'valueOf', 'hasOwnProperty']);
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -22,7 +23,7 @@ function clone(value) {
 
 function safeId(value, name) {
   const id = String(value || '');
-  if (!SAFE_ID.test(id)) throw new Error(`${name}标识不安全`);
+  if (!SAFE_ID.test(id) || RESERVED_IDS.has(id)) throw new Error(`${name}标识不安全`);
   return id;
 }
 
@@ -63,7 +64,7 @@ class PlatformSessionStore {
     this.rootDir = path.resolve(rootDir);
     this.file = path.join(this.rootDir, 'sessions.json');
     this.now = typeof now === 'function' ? now : () => Number(now);
-    this.sessions = {};
+    this.sessions = Object.create(null);
     this._writeChain = Promise.resolve();
   }
 
@@ -77,7 +78,7 @@ class PlatformSessionStore {
     } catch { /* 首次运行或损坏文件按空存储启动 */ }
 
     const source = Array.isArray(raw) ? raw : [];
-    this.sessions = {};
+    this.sessions = Object.create(null);
     if (Array.isArray(raw)) {
       for (const item of source) {
         try {
@@ -105,7 +106,7 @@ class PlatformSessionStore {
   }
 
   _put(record) {
-    if (!this.sessions[record.platform]) this.sessions[record.platform] = {};
+    if (!this.sessions[record.platform]) this.sessions[record.platform] = Object.create(null);
     this.sessions[record.platform][record.accountId] = record;
   }
 

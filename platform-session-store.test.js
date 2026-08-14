@@ -73,3 +73,14 @@ test('returns null for an unknown account and rejects unsafe identifiers', async
   assert.throws(() => sessions.get('../escape', 'default'), /参数|标识/);
   assert.throws(() => sessions.get('taobao', '../escape'), /参数|标识/);
 });
+
+test('rejects prototype-reserved platform and account identifiers', async () => {
+  const root = await fixture();
+  const sessions = new PlatformSessionStore(root);
+  await sessions.load();
+  for (const reserved of ['__proto__', 'prototype', 'constructor', 'toString']) {
+    assert.throws(() => sessions.get(reserved, 'default'), /参数|标识/);
+    assert.throws(() => sessions.get('taobao', reserved), /参数|标识/);
+    await assert.rejects(() => sessions.setStatus(reserved, 'default', 'ready'), /参数|标识/);
+  }
+});

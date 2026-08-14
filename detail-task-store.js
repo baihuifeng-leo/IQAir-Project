@@ -4,11 +4,13 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
+const { normalizeProductUrl } = require('./detail-url');
 
 const PHASES = new Set(['queued', 'opening', 'detecting', 'resolving', 'composing', 'completed', 'failed', 'cancelled']);
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const SENSITIVE = /cookie|token|secret|password|authorization|credential|qr|browser|context|html/i;
+const RESERVED_IDS = new Set(['__proto__', 'prototype', 'constructor', 'toString', 'valueOf', 'hasOwnProperty']);
 const DEFAULT_RETENTION_MS = 86_400_000;
 const NEXT_PHASES = {
   queued: new Set(['queued', 'opening', 'failed', 'cancelled']),
@@ -23,7 +25,7 @@ function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
 function safeId(value, name) {
   const id = String(value || '');
-  if (!SAFE_ID.test(id)) throw new Error(`${name}标识不安全`);
+  if (!SAFE_ID.test(id) || RESERVED_IDS.has(id)) throw new Error(`${name}标识不安全`);
   return id;
 }
 
@@ -57,9 +59,20 @@ function cleanProgress(value) {
 
 function cleanError(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (hasSensitiveValue(value)) return null;
   const code = text(value.code, 80);
   const message = text(value.message, 500);
   return code || message ? { code, message } : null;
+}
+
+function hasSensitiveValue(value, key = '') {
+  if (SENSITIVE.test(key)) return true;
+  if (typeof value === 'string') return SENSITIVE.test(value);
+  if (Array.isArray(value)) return value.some((item) => hasSensitiveValue(item));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([childKey, childValue]) => hasSensitiveValue(childValue, childKey));
+  }
+  return false;
 }
 
 async function writeAtomic(file, value) {
@@ -168,12 +181,21 @@ class DetailTaskStore {
     for (const key of Object.keys(input)) {
       if (SENSITIVE.test(key)) throw new Error('敏感字段不允许持久化');
     }
+    if (hasSensitiveValue(input.error) || hasSensitiveValue(input.url || input.normalizedUrl)) {
+      throw new Error('敏感字段不允许持久化');
+    }
     const platform = safeId(input.platform, '平台');
     const accountId = safeId(input.accountId, '账号');
     const stamp = numberOr(this.now());
+    const rawUrl = text(input.url || input.normalizedUrl, 4096);
+    let canonicalUrl = rawUrl;
+    if (rawUrl) {
+      try { canonicalUrl = normalizeProductUrl(rawUrl).url; }
+      catch { throw new Error('商品 URL 不合法'); }
+    }
     const task = {
       id: this._newId(), userId: owner, platform, accountId,
-      url: text(input.url || input.normalizedUrl, 4096),
+      url: canonicalUrl,
       productId: text(input.productId, 128),
       phase: 'queued', progress: 0, assets: { total: 0, current: 0 },
       createdAt: stamp, updatedAt: stamp,
@@ -192,6 +214,7 @@ class DetailTaskStore {
     for (const key of Object.keys(patch)) {
       if (SENSITIVE.test(key)) throw new Error('敏感字段不允许持久化');
     }
+    if (hasSensitiveValue(patch.error)) throw new Error('敏感字段不允许持久化');
     if (Object.prototype.hasOwnProperty.call(patch, 'resultPath')) {
       task.resultPath = patch.resultPath == null ? null : this._safeResultPath(patch.resultPath);
     }
@@ -215,7 +238,7 @@ class DetailTaskStore {
 
   listFor(user) {
     if (!user || typeof user !== 'object') throw new Error('用户身份不合法');
-    if (user.admin) return [...this.tasks.values()].map(clone);
+    if (user.admin === true) return [...this.tasks.values()].map(clone);
     const id = safeId(user.id, '用户');
     return [...this.tasks.values()].filter((task) => task.userId === id).map(clone);
   }
@@ -223,7 +246,7 @@ class DetailTaskStore {
   getAuthorized(id, user) {
     const task = this._task(id);
     if (!user || typeof user !== 'object') throw new Error('无权访问任务');
-    if (!user.admin && task.userId !== user.id) throw new Error('无权访问任务');
+    if (user.admin !== true && task.userId !== user.id) throw new Error('无权访问任务');
     return clone(task);
   }
 
@@ -234,6 +257,9 @@ class DetailTaskStore {
     task.phase = 'cancelled';
     task.updatedAt = numberOr(this.now());
     if (task.resultPath) await fsp.rm(task.resultPath, { force: true });
+    task.resultPath = null;
+    task.resultBytes = 0;
+    task.resultMime = '';
     await this._persist();
     return clone(task);
   }
@@ -243,15 +269,8 @@ class DetailTaskStore {
     let changed = false;
     for (const [id, task] of this.tasks) {
       if (!TERMINAL.has(task.phase)) continue;
-      let fileExpired = false;
-      if (task.resultPath) {
-        try {
-          const stat = await fsp.stat(task.resultPath);
-          fileExpired = stat.mtimeMs <= cutoff;
-        } catch { fileExpired = true; }
-      }
-      const taskExpired = task.updatedAt <= cutoff && !task.resultPath;
-      if (!fileExpired && !taskExpired) continue;
+      const taskExpired = task.updatedAt <= cutoff;
+      if (!taskExpired) continue;
       if (task.resultPath) await fsp.rm(task.resultPath, { force: true });
       this.tasks.delete(id);
       changed = true;
