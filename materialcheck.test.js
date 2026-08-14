@@ -27,6 +27,14 @@ function frontendAutobuildGroups(entries, reviewState) {
   return context.__materialcheck.autobuildGroups(entries, reviewState);
 }
 
+function frontendDetectProgressState(rows) {
+  const source = fs.readFileSync(path.join(__dirname, 'public', 'materialcheck.js'), 'utf8')
+    .replace('return { init };', 'return { detectProgressState };');
+  const context = { console, window: {}, document: {}, setTimeout, clearTimeout, requestAnimationFrame: (fn) => fn() };
+  vm.runInNewContext(source + '\nthis.__materialcheck = MaterialCheck;', context, { filename: 'public/materialcheck.js' });
+  return context.__materialcheck.detectProgressState(rows);
+}
+
 // 伪造一个 child_process 长得像的对象：stdout/stdin/exit 都能模拟，
 // 用来测试 PaddleOcrWorker 的 stdin/stdout 按行 JSON 协议，不需要真的起进程。
 function makeFakeProc() {
@@ -594,6 +602,18 @@ async function run() {
     const rOk = M.matchAgainstProduct('空气净化器 促销价￥399', p, [p]);
     assert.strictEqual(rOk.priceIssue, null);
     assert.strictEqual(rOk.status, 'pass');
+  });
+
+  t('detectProgressState 以真实完成数驱动进度，并在检测结束后停止动效', () => {
+    const active = frontendDetectProgressState([{ state: 'done' }, { state: 'processing' }, { state: 'needsPick' }, { state: 'cancelled' }]);
+    assert.strictEqual(active.ratio, 0.5);
+    assert.strictEqual(active.text, '50%');
+    assert.strictEqual(active.active, true);
+
+    const settled = frontendDetectProgressState([{ state: 'done' }, { state: 'needsPick' }, { state: 'cancelled' }]);
+    assert.strictEqual(settled.ratio, 2 / 3);
+    assert.strictEqual(settled.text, '67%');
+    assert.strictEqual(settled.active, false);
   });
 
   t('matchAgainstProduct 始终返回价格校验明细，明确区分未配置、通过与不一致', () => {

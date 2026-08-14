@@ -163,13 +163,25 @@ const MaterialCheck = (() => {
   // 统一入口由服务端根据图片真实尺寸归为 1:1 或 3:4，再使用对应的关键词子集。
   let activeDetectBatch = null;
 
+  function detectProgressState(rows) {
+    const done = rows.filter((r) => r.state === 'done').length;
+    const pendingPick = rows.filter((r) => r.state === 'needsPick').length;
+    const cancelled = rows.filter((r) => r.state === 'cancelled').length;
+    const processing = rows.length - done - pendingPick - cancelled;
+    const ratio = rows.length ? (done + pendingPick) / rows.length : 0;
+    return { ratio, text: `${Math.round(ratio * 100)}%`, active: processing > 0 };
+  }
+
   function renderCheckView() {
     const el = A.$('#mc-check-view');
     el.innerHTML = `
       <div class="mc-upload-zone" id="mc-upload-zone"><strong>上传待检测素材</strong><br>点击选择图片，或拖进这个区域（支持多选；系统自动识别 1:1 或 3:4）</div>
       <input type="file" id="mc-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
       <div class="mc-batch-summary" id="mc-batch-summary" hidden><span data-role="summary-text"></span><button type="button" class="mc-btn mc-btn-danger mc-btn-mini" id="mc-detect-cancel" hidden>取消本次检测</button></div>
-      <div class="mc-progress" id="mc-progress" hidden><div class="mc-progress-bar" id="mc-progress-bar"></div></div>
+      <div class="mc-progress" id="mc-progress" hidden>
+        <div class="mc-progress-bar" id="mc-progress-bar"><div class="mc-particles" aria-hidden="true"><i class="mc-particle"></i><i class="mc-particle"></i><i class="mc-particle"></i><i class="mc-particle"></i><i class="mc-particle"></i></div></div>
+        <span class="mc-progress-text" id="mc-progress-text">0%</span>
+      </div>
       <div id="mc-result-list"></div>`;
 
     const zone = A.$('#mc-upload-zone');
@@ -201,6 +213,8 @@ const MaterialCheck = (() => {
     const cancelBtn = A.$('#mc-detect-cancel');
     const progress = A.$('#mc-progress');
     const progressBar = A.$('#mc-progress-bar');
+    const progressText = A.$('#mc-progress-text');
+    progressBar.dataset.progress = '0%';
     const batchRows = addDetectBatch(list, { id: batchId, createdAt: Date.now(), results: fileList }, {});
     const batchControl = { cancelled: false, controllers: new Set() };
     activeDetectBatch = batchControl;
@@ -218,13 +232,19 @@ const MaterialCheck = (() => {
       const pendingPick = rows.filter((r) => r.state === 'needsPick').length;
       const cancelled = rows.filter((r) => r.state === 'cancelled').length;
       const processing = rows.length - done - pendingPick - cancelled;
+      const progressState = detectProgressState(rows);
       summary.hidden = false;
       summaryText.textContent = `本次上传 ${rows.length} 张 · 已完成 ${done} · 待选择 ${pendingPick} · 处理中 ${processing}${cancelled ? ` · 已取消 ${cancelled}` : ''}`;
       // 整批总进度条：按"识别/判定已经跑完"算进度，待人工选择也算跑完了自己那部分，只是还差人点一下
       progress.hidden = false;
-      progressBar.style.setProperty('--mc-progress', String(rows.length ? (done + pendingPick) / rows.length : 0));
-      // 只在实际请求尚未完成时流动；完成、待人工选择或取消后保留进度但静止，避免误以为后台仍在跑。
-      progress.classList.toggle('mc-progress-active', processing > 0);
+      const previous = progressBar.dataset.progress || '0%';
+      progressBar.style.setProperty('--mc-progress-from', previous);
+      progressBar.style.setProperty('--mc-progress', progressState.text);
+      progressBar.dataset.progress = progressState.text;
+      progressText.textContent = progressState.text;
+      progressBar.classList.remove('mc-progress-growing');
+      void progressBar.offsetWidth;
+      progressBar.classList.add('mc-progress-growing');
     };
     const markCancelled = (entry) => {
       if (entry.state !== 'processing') return;
