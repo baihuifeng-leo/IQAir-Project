@@ -30,16 +30,25 @@ case "$SRC_DIR" in
 esac
 
 # ── 1. Node ────────────────────────────────────────────────
-if command -v node >/dev/null 2>&1 && [[ "$(node -p 'process.versions.node.split(".")[0]')" -ge 18 ]]; then
+node_meets_requirement() {
+  local version="${1#v}" major minor
+  IFS=. read -r major minor _ <<< "$version"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  (( major > 20 || (major == 20 && minor >= 9) ))
+}
+
+if command -v node >/dev/null 2>&1 && node_meets_requirement "$(node -v)"; then
   info "Node 已就绪：$(node -v)"
 else
-  info "安装 Node.js…"
+  if command -v node >/dev/null 2>&1; then
+    warn "当前 Node 版本为 $(node -v)，详情长图需要 Node.js >=20.9.0，准备安装/检查兼容版本…"
+  else
+    info "安装 Node.js…"
+  fi
   apt-get update -qq
   apt-get install -y -qq nodejs >/dev/null
-  MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-  [[ "$MAJOR" -ge 18 ]] || die "仓库里的 Node 太旧（$(node -v 2>/dev/null || echo 无)）。装 NodeSource 的 22.x 再来：
-  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-  sudo apt-get install -y nodejs"
+  NODE_VERSION="$(node -v 2>/dev/null || echo 无)"
+  node_meets_requirement "$NODE_VERSION" || die "Node.js 版本过旧（$NODE_VERSION），详情长图需要 Node.js >=20.9.0。请安装 NodeSource 22.x 后重试。"
   info "Node 安装完成：$(node -v)"
 fi
 

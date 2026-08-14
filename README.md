@@ -72,7 +72,7 @@ data/
 
 ## 本地运行
 
-前提：Node.js 18 或更高版本。素材质检还需要 Python 3、`paddlepaddle` 与 `paddleocr`；首次执行安装脚本会自动创建专用虚拟环境。
+前提：Node.js 20.9 或更高版本。素材质检还需要 Python 3、`paddlepaddle` 与 `paddleocr`；首次执行安装脚本会自动创建专用虚拟环境。
 
 ```bash
 git clone <repository-url>

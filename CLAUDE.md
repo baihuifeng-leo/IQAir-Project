@@ -44,6 +44,8 @@ Not tracked in git (gitignored, real runtime/tooling state):
 
 No install step, no build step, no linter config, no `package.json`. Run these from inside `EC-Workbench/`.
 
+Runtime requirement: Node.js 20.9.0 or newer. The pinned Playwright and Sharp dependencies require this runtime floor.
+
 ```bash
 node server.js                 # run the server directly, no extraction/build step needed
 node merge.test.js             # run the 3-way merge unit tests (custom, zero-framework: prints ✓/✗ per case)
