@@ -276,6 +276,33 @@ class TaobaoSession {
     }, { signal });
   }
 
+  // 详情长图专用：打开商品详情页并返回 Page 供调用方提取内容。
+  // 调用方必须已经持有该 accountId 的独占锁（例如 detail-worker.js 的
+  // withAccountLock），本方法不会再次调用 runExclusive——那样会对同一个
+  // accountId 重入排队，永久死锁。
+  async pageForDetail(accountId, url, { signal } = {}) {
+    const id = safeAccountId(accountId);
+    let page;
+    try {
+      throwIfAborted(signal);
+      page = await this._pageFor(id);
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
+      throwIfAborted(signal);
+      if (LOGIN_HOSTS.has(hostnameFor(page))) {
+        await this._setStatus(id, 'expired', { errorCode: 'LOGIN_REDIRECTED' });
+        throw sessionError('DETAIL_UNAVAILABLE', '账号会话已失效');
+      }
+      if (!response || response.status() >= 400) {
+        throw sessionError('PAGE_UNAVAILABLE', '详情页打开失败');
+      }
+      return page;
+    } catch (error) {
+      if (signal?.aborted) throw cancelledRequestError();
+      await this._evictFatalContext(id, error, page);
+      throw error?.code ? error : sessionError('PAGE_UNAVAILABLE', '详情页打开失败');
+    }
+  }
+
   clear(accountId = 'default', { signal } = {}) {
     return this.runExclusive(accountId, async () => {
       const id = safeAccountId(accountId);

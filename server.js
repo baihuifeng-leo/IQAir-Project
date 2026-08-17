@@ -16,6 +16,8 @@ const { ReportNewsStore } = require('./report-news-store.js');
 const { ReportNewsAi } = require('./report-news-ai.js');
 const { MaterialCheckStore, PLATFORMS: MATERIALCHECK_PLATFORMS } = require('./materialcheck-store.js');
 const materialcheckOcr = require('./materialcheck-ocr.js');
+const { DetailJobRunner } = require('./detail-job-runner.js');
+const { handleDetailApi } = require('./detail-api.js');
 const { pipeline } = require('stream/promises');
 
 const PORT = Number(process.env.PORT || 8080);
@@ -396,6 +398,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/api/me') return json(res, 200, pubUser(me));
+
+    if (p === '/api/platform-accounts' || p.startsWith('/api/platform-accounts/') || p === '/api/detail-jobs' || p.startsWith('/api/detail-jobs/')) {
+      if (await handleDetailApi(req, res, { p, me, json, body, runner: detailJobs })) return;
+    }
 
     /* ── 用户管理 ────────────────────────────────────── */
     if (p === '/api/users' && req.method === 'GET') return json(res, 200, users.map(pubUser));
@@ -993,6 +999,7 @@ const preview3d = new Preview3DStore(PRODUCTS3D_DIR);
 const reports = new ReportStore(REPORTS_DIR, sharedReportOwnerId);
 const reportNews = new ReportNewsStore(REPORT_NEWS_DIR, undefined, new ReportNewsAi(), sharedReportOwnerId);
 const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UPLOAD_DIR);
+const detailJobs = new DetailJobRunner({ dataDir: DATA_DIR, broadcast: (event, data) => broadcast(event, data) });
 
 (async () => {
   for (const d of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, REVIEWS_DIR, PRODUCTS3D_DIR, REPORTS_DIR, REPORT_NEWS_DIR]) await fsp.mkdir(d, { recursive: true });
@@ -1004,6 +1011,7 @@ const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UP
   await preview3d.load();
   await materialcheck.load();
   await materialcheckOcr.checkAvailable();
+  await detailJobs.start();
   scheduleNightly();
   scheduleWeeklyNews();
   const reportOwners = [...new Set(users.map((user) => sharedReportOwnerId(user.id)))];
@@ -1016,3 +1024,11 @@ const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UP
   }));
   server.listen(PORT, '0.0.0.0', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
 })();
+
+process.on('SIGTERM', () => {
+  // 停止接收新的详情长图任务，关闭 Worker（内部会取消在途的浏览器/合成操作），
+  // 再关 HTTP server；不改动 materialcheck OCR 的启动/关闭行为。
+  detailJobs.stop()
+    .catch((error) => console.error('[detail-jobs] 关闭时出错：' + error.message))
+    .finally(() => server.close(() => process.exit(0)));
+});

@@ -644,3 +644,55 @@ test('clearing closes pages and deletes only the exact account directory', async
   await assert.rejects(() => session.clear('../other'), /标识/);
   assert.equal(await fsp.readFile(path.join(dataDir, 'other', 'profile.txt'), 'utf8'), 'other');
 });
+
+const DETAIL_URL = 'https://detail.tmall.com/item.htm?id=123';
+
+test('pageForDetail navigates and returns the page for a logged-in account', async () => {
+  const dataDir = await fixture();
+  const { chromium } = fakeChromium(() => new FakePage({ afterGoto: DETAIL_URL }));
+  const session = new TaobaoSession({ dataDir, chromium, statusStore: fakeStatusStore(), emit: () => {} });
+
+  const page = await session.pageForDetail('default', DETAIL_URL);
+
+  assert.ok(page);
+  assert.deepEqual(page.gotoCalls, [DETAIL_URL]);
+});
+
+test('pageForDetail treats a login redirect as an expired session, not a valid page', async () => {
+  const dataDir = await fixture();
+  const { chromium } = fakeChromium(() => new FakePage({ afterGoto: 'https://login.taobao.com/member/login.jhtml' }));
+  const statusStore = fakeStatusStore();
+  const session = new TaobaoSession({ dataDir, chromium, statusStore, emit: () => {} });
+
+  await assert.rejects(
+    () => session.pageForDetail('default', DETAIL_URL),
+    (error) => error.code === 'DETAIL_UNAVAILABLE',
+  );
+  assert.deepEqual(statusStore.calls.map((call) => call.status), ['expired']);
+});
+
+test('pageForDetail rejects an already-aborted signal without navigating', async () => {
+  const dataDir = await fixture();
+  const { chromium } = fakeChromium(() => new FakePage({ afterGoto: DETAIL_URL }));
+  const session = new TaobaoSession({ dataDir, chromium, statusStore: fakeStatusStore(), emit: () => {} });
+  const controller = new AbortController();
+  controller.abort();
+
+  await assert.rejects(
+    () => session.pageForDetail('default', DETAIL_URL, { signal: controller.signal }),
+    (error) => error.code === 'WORKER_REQUEST_CANCELLED',
+  );
+});
+
+test('pageForDetail does not re-acquire the account lock, so it is safe to call from inside runExclusive', async () => {
+  const dataDir = await fixture();
+  const { chromium } = fakeChromium(() => new FakePage({ afterGoto: DETAIL_URL }));
+  const session = new TaobaoSession({ dataDir, chromium, statusStore: fakeStatusStore(), emit: () => {} });
+
+  const page = await Promise.race([
+    session.runExclusive('default', () => session.pageForDetail('default', DETAIL_URL)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('deadlocked')), 2000)),
+  ]);
+
+  assert.ok(page);
+});

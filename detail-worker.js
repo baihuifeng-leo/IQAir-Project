@@ -1,8 +1,13 @@
 'use strict';
 
+const https = require('node:https');
 const path = require('node:path');
 const { PlatformSessionStore } = require('./platform-session-store');
 const { TaobaoSession } = require('./taobao-session');
+const { assertAllowedNavigation } = require('./detail-url');
+const { extractDetail } = require('./taobao-detail-adapter');
+const { resolveAllImages } = require('./detail-image-resolver');
+const { composeDetailPng } = require('./detail-png-composer');
 
 function safeCode(value, fallback = 'WORKER_ERROR') {
   return /^[A-Z][A-Z0-9_]{0,63}$/.test(String(value || '')) ? value : fallback;
@@ -32,6 +37,66 @@ function serializeError(error) {
 
 function accountIdFrom(payload) {
   return payload && Object.prototype.hasOwnProperty.call(payload, 'accountId') ? payload.accountId : 'default';
+}
+
+// resolveAllImages() 需要一个 (url, {signal}) => Promise<{ok, status, headers: Promise, stream}>
+// 形状的下载器；alicdn.com 上的详情图是公开资源，不需要携带登录态 cookie，
+// 用零依赖的 node:https 实现即可，不需要引入完整的 HTTP 客户端库。
+function httpsImageRequest(url, { signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { signal }, (res) => {
+      resolve({
+        ok: res.statusCode >= 200 && res.statusCode < 300,
+        status: res.statusCode,
+        headers: Promise.resolve(res.headers),
+        stream: res,
+      });
+    });
+    req.on('error', reject);
+  });
+}
+
+function createDetailRunner(session, {
+  request = httpsImageRequest,
+  sharp = require('sharp'),
+  extract = extractDetail,
+  resolve = resolveAllImages,
+  compose = composeDetailPng,
+} = {}) {
+  return {
+    async run(payload, { signal, emit = () => {} } = {}) {
+      const { accountId = 'default', url, outputPath } = payload || {};
+      if (typeof outputPath !== 'string' || !outputPath) {
+        throw Object.assign(new Error('输出路径不合法'), { code: 'DETAIL_UNAVAILABLE' });
+      }
+      const target = assertAllowedNavigation(url);
+
+      emit('phase', { phase: 'opening' });
+      const page = await session.pageForDetail(accountId, target.toString(), { signal });
+
+      emit('phase', { phase: 'detecting' });
+      const { blocks } = await extract(page, {
+        emit: (event) => emit('phase', { phase: 'detecting', ...event }),
+      });
+      if (signal?.aborted) throw Object.assign(new Error('任务已取消'), { code: 'DETAIL_CANCELLED' });
+
+      const assetTotal = blocks.filter((block) => block?.kind === 'image' || block?.kind === 'video').length;
+      emit('phase', { phase: 'resolving', assets: { total: assetTotal, current: 0 } });
+      const resolved = await resolve(blocks, {
+        request, sharp, signal,
+        emit: (event) => emit('phase', {
+          phase: 'resolving',
+          assets: { total: assetTotal, current: Number.isInteger(event?.assetIndex) ? event.assetIndex + 1 : 0 },
+        }),
+      });
+
+      emit('phase', { phase: 'composing' });
+      return compose(resolved, {
+        outputPath, signal,
+        emit: (event) => emit('phase', { phase: 'composing', ...event }),
+      });
+    },
+  };
 }
 
 function unavailableDetailCommand() {
@@ -77,8 +142,10 @@ function createWorkerRouter({ session, detail, send }) {
     return withAccountLock(session, payload, async () => {
       if (!detail?.run) unavailableDetailCommand();
       if (controller.signal.aborted) throw cancelledDetailCommand();
+      const taskId = payload && Object.prototype.hasOwnProperty.call(payload, 'taskId') ? payload.taskId : null;
+      const emit = (type, data) => send({ kind: 'event', type, payload: { ...data, taskId, accountId: accountIdFrom(payload) } });
       try {
-        return await detail.run(payload || {}, { signal: controller.signal });
+        return await detail.run(payload || {}, { signal: controller.signal, emit });
       } catch (error) {
         if (controller.signal.aborted) throw cancelledDetailCommand();
         throw error;
@@ -152,7 +219,7 @@ async function startWorker({ dataDir = process.env.DATA_DIR || path.join(__dirna
     statusStore,
     emit: (type, payload) => send({ kind: 'event', type, payload }),
   });
-  const route = createWorkerRouter({ session, detail, send });
+  const route = createWorkerRouter({ session, detail: detail || createDetailRunner(session), send });
   process.on('message', route);
   return { session, route };
 }
@@ -164,4 +231,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createWorkerRouter, serializeError, startWorker };
+module.exports = { createWorkerRouter, serializeError, startWorker, createDetailRunner, httpsImageRequest };
