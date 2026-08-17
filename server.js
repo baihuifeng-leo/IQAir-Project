@@ -1025,5 +1025,7 @@ const materialcheck = new MaterialCheckStore(MATERIALCHECK_DIR, MATERIALCHECK_UP
       catch (e) { console.error('[report-news] 共享报告账户启动抓取失败：' + e.message); }
     }
   }));
-  server.listen(PORT, '0.0.0.0', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
+  // 测试环境通过 localhost 访问时，浏览器可能优先走 IPv6 的 ::1；监听 :: 会同时
+  // 接收 IPv6 与 IPv4 连接，避免 localhost:9090 因仅绑定 0.0.0.0 而打不开。
+  server.listen(PORT, '::', () => console.log(`电商工作台已启动 → 端口 ${PORT}，数据目录 ${DATA_DIR}`));
 })();
