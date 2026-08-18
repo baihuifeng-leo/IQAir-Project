@@ -381,9 +381,15 @@ class TaobaoSession {
     if (existing) return existing;
 
     const accountDir = await this._prepareAccountDir(accountId);
+    // --no-sandbox：systemd 单元用 NoNewPrivileges/RestrictNamespaces 做了加固，
+    // Chromium 自带的 setuid/命名空间沙箱会跟这些冲突而启动失败；容器隔离本来就靠
+    // systemd 这层做，不依赖 Chromium 自己的沙箱。--disable-dev-shm-usage：服务用户
+    // 没有大的 /dev/shm 配额，避免共享内存不足导致渲染进程崩溃（headless 场景下
+    // 唯一的副作用是退化成走磁盘，不影响正确性）。
     const context = await this.chromium.launchPersistentContext(accountDir, {
       headless: true,
       viewport: { width: 1440, height: 1000 },
+      args: ['--no-sandbox', '--disable-dev-shm-usage'],
     });
     this._contexts.set(accountId, context);
     const onClose = () => {

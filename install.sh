@@ -78,16 +78,39 @@ fi
 info "部署代码到 $APP_DIR"
 mkdir -p "$APP_DIR"
 rm -rf "$APP_DIR/public"
-for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js preview3d-store.js report-store.js report-news-store.js report-news-ai.js materialcheck-ocr.js materialcheck-match.js materialcheck-store.js materialcheck-paddleocr-worker.py; do
+for f in server.js merge.js audit.js xlsx-lite.js reviews-nlp.js reviews-ingest.js reviews-store.js preview3d-store.js report-store.js report-news-store.js report-news-ai.js materialcheck-ocr.js materialcheck-match.js materialcheck-store.js materialcheck-paddleocr-worker.py \
+  detail-task-store.js detail-worker.js detail-worker-client.js detail-url.js detail-image-resolver.js detail-png-composer.js detail-job-runner.js detail-api.js png-stream-writer.js sharp-operation-runner.js sharp-operation-child.js platform-session-store.js taobao-session.js taobao-detail-adapter.js; do
   [[ -f "$SRC_DIR/$f" ]] || die "源码目录里缺少 $f"
   install -m 0644 "$SRC_DIR/$f" "$APP_DIR/"
 done
 [[ -f "$SRC_DIR/README.md" ]] && install -m 0644 "$SRC_DIR/README.md" "$APP_DIR/"
+install -m 0644 "$SRC_DIR/package.json" "$APP_DIR/"
+install -m 0644 "$SRC_DIR/package-lock.json" "$APP_DIR/"
 cp -r "$SRC_DIR/public" "$APP_DIR/public"
+
+# 详情长图：Sharp 图片合成 + Playwright 受控浏览器。npm 依赖锁定在刚拷贝的
+# package.json/package-lock.json 里；--omit=dev 跳过只有测试用得到的 jsdom。
+info "安装 Node 依赖（sharp / playwright / fflate）…"
+(cd "$APP_DIR" && npm ci --omit=dev --no-audit --no-fund)
+
+# Chromium 的二进制默认会下到 $HOME/.cache；这里显式钉到数据目录下（跟
+# workbench.service 里同名的环境变量必须一致），装完后服务用户只需要读权限，
+# 不需要在生产环境里自己再下一次。中文字体是给素材质检/详情长图两处的
+# 图片文字渲染用的（这台安装机上如果没有 fontconfig+CJK 字体，Sharp 合成出的
+# 长图里的中文会整段渲染不出来，不是崩溃，是静默空白，容易被忽略）。
+info "安装 Chromium 与操作系统依赖（含中文字体，第一次装体积较大）…"
+apt-get install -y -qq fonts-noto-cjk >/dev/null
+export PLAYWRIGHT_BROWSERS_PATH="$DATA_DIR/browser-cache"
+mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
+(cd "$APP_DIR" && PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" npx --yes playwright install --with-deps chromium)
+info "Chromium 安装完成"
+
 chown -R root:root "$APP_DIR"
 chmod -R a+rX "$APP_DIR"
 # venv 是装机时生成的运行环境，不是代码，跳过上面这次 chown/chmod 遗留的所有权问题：
-# 一起 chown/chmod 没关系，重新走一遍权限（world-readable+execute）venv 也能正常跑。
+# 一起 chown/chmod 没关系，重新走一遍权限（world-readable+execute）venv 和刚装的
+# node_modules 也都能正常跑（npm ci/playwright install 在这一步之前跑完，所以
+# 这次 chmod 会正确覆盖到它们，不会漏掉）。
 
 info "预热 PaddleOCR 模型（第一次跑要下载模型文件，需要联网，可能要一两分钟）…"
 if "$APP_DIR/venv/bin/python3" "$APP_DIR/materialcheck-paddleocr-worker.py" --warmup >/dev/null 2>&1; then
@@ -97,8 +120,13 @@ else
 fi
 
 # ── 5. 数据目录（服务唯一可写的地方）─────────────────────
+# platform-sessions：淘宝/天猫受控浏览器的持久登录态（每个账号一个子目录）。
+# detail-jobs：详情长图任务记录 + 拼好的 PNG 结果，按任务 id 分子目录。
+# browser-cache：上一步装好的 Chromium 二进制，重复执行本脚本不会重新下载
+# （目录已存在时 playwright install 会跳过）。这三个目录都不会被本脚本删除，
+# 重复安装不丢登录态、不丢历史任务结果。
 info "准备数据目录 $DATA_DIR"
-mkdir -p "$DATA_DIR" "$DATA_DIR/reviews" "$DATA_DIR/products3d" "$DATA_DIR/reports" "$DATA_DIR/report-news" "$DATA_DIR/materialcheck" "$DATA_DIR/uploads/materialcheck"
+mkdir -p "$DATA_DIR" "$DATA_DIR/reviews" "$DATA_DIR/products3d" "$DATA_DIR/reports" "$DATA_DIR/report-news" "$DATA_DIR/materialcheck" "$DATA_DIR/uploads/materialcheck" "$DATA_DIR/platform-sessions" "$DATA_DIR/detail-jobs" "$DATA_DIR/browser-cache"
 chown -R "$SVC_USER:$SVC_USER" "$DATA_DIR"
 chmod 750 "$DATA_DIR"
 

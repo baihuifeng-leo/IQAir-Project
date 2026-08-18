@@ -138,6 +138,7 @@ test('reuses exactly one persistent context for an account directory', async (t)
   assert.deepEqual(launches[0].options, {
     headless: true,
     viewport: { width: 1440, height: 1000 },
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
   assert.ok(launches[0].page.gotoCalls.every((url) => url === 'https://i.taobao.com/my_taobao.htm'));
   assert.deepEqual(statusStore.calls.map((call) => call.status), ['ready', 'ready']);
