@@ -26,6 +26,7 @@ echo
 echo "即将同步以下改动到 /opt/workbench："
 rsync -avn --delete \
   --exclude='.git' --exclude='data' --exclude='venv' --exclude='*.log' \
+  --exclude='.worktrees' --exclude='node_modules' \
   ./ /opt/workbench/
 echo
 read -r -p "确认执行以上同步到生产 /opt/workbench？(y/N) " CONFIRM
@@ -36,6 +37,7 @@ fi
 
 rsync -av --delete \
   --exclude='.git' --exclude='data' --exclude='venv' --exclude='*.log' \
+  --exclude='.worktrees' --exclude='node_modules' \
   ./ /opt/workbench/
 
 echo "已同步到 /opt/workbench。如涉及依赖/服务变更，记得手动重启 workbench.service。"
