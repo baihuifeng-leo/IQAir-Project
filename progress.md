@@ -332,4 +332,32 @@
 | 我做了什么？ | 见上方"实现"小节；改了 `public/index.html`、`public/report.js`、`public/styles.css` 三个前端文件，新增 `report-news-target-ui.test.js`，均已 commit + push + 部署上生产和测试环境 |
 
 ---
+
+## 会话：2026-08-18（续）：深浅主题切换按钮改图标
+
+### 状态：complete
+
+用户反馈顶栏"切到浅色/切到深色"纯文字按钮显得不够专业，要求换成图标。
+
+### 实现
+- `public/core.js`：新增 `THEME_ICON`（`light`/`dark` 两个内联 SVG 字符串常量——`dark` 是月亮，`light` 是太阳+8条光线），复用 `materialcheck.js` 卡片操作按钮那套 feather 风格线条（`viewBox="0 0 24 24"`、`stroke:currentColor`、`stroke-width:1.8`、圆头圆角）。`applyTheme(t)` 从 `b.textContent = ...` 改成按当前主题切换 `b.innerHTML` 为对应图标，并同步设置 `title`/`aria-label` 为"切到浅色"/"切到深色"（无障碍语义不变，只是不再在按钮上直接显示文字）。
+- `public/index.html`：`#btn-theme` 从纯文字按钮改成空壳（图标由 JS 注入），保留 `title` 属性作为初始状态占位。
+- `public/styles.css`：新增 `#btn-theme` 的 flex 居中布局和 `svg` 尺寸/线条样式，让图标在按钮里对齐。
+
+### 验证
+真机 Playwright 验证（headless Chromium，scratch 环境）：登录后截图深色模式（月亮图标）和点击切换后的浅色模式（太阳图标），确认图标正确切换、按钮 `title` 属性同步更新、全程 0 个 console error。
+
+### 部署
+已提交 `main`（commit `a3c08c6`）、部署到生产（8090，服务重启，健康检查通过，首次 curl 因服务刚重启短暂连接失败属正常启动时序、重试即通）、9090 测试环境已同步到同一 commit 并重启，启动日志确认干净无报错。
+
+### 五问重启检查
+| 问题 | 答案 |
+|------|------|
+| 我在哪里？ | 图标已上线生产和 9090 测试环境，本次会话（本轮"续"）所有请求都已处理完 |
+| 我要去哪里？ | 用户即将执行收工同步（EC-Workbench git push + 顶层 sync-push.sh），之后没有已知的待办 |
+| 目标是什么？ | 一个纯样式/交互一致性的小改动，让按钮观感专业，不改变任何功能语义 |
+| 我学到了什么？ | 没有新的踩坑教训——照搬已有的图标风格惯例（materialcheck.js）即可保持视觉一致性，不需要引入新的图标系统 |
+| 我做了什么？ | 改了 `public/core.js`、`public/index.html`、`public/styles.css` 三个前端文件，均已 commit + push + 部署上生产和测试环境；本次一并清理了 Patchright 实验遗留的 `node_modules/`（未纳入任何分支的 `package.json`，纯本地实验残留，已删除） |
+
+---
 *每个阶段完成后或遇到错误时更新此文件*
