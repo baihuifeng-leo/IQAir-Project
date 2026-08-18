@@ -32,6 +32,11 @@
 const Report = (() => {
   let A, sub = 'personal', data = null, news = null, selectedNewsIds = new Set(), newsPickerOpen = false, chart = null, wmChart = null, ro = null;
   let archives = [], archiveView = null;
+  // null＝生成给本周（默认，走原来的实时新闻流程）；非空＝一个已归档周的 weekStart，
+  // 生成后直接绑定进那份归档，不经过实时新闻工作区中转——这是为了修
+  // "回头给上周补录新闻却顺手覆盖了本周刚生成的内容" 这类问题：以前只能靠
+  // 本周入口生成再手动搬，现在生成时就明确选目标，不用再猜。
+  let newsTarget = null;
   const archiveParams = new URLSearchParams(window.location.search);
   const archiveWindow = archiveParams.get('archive') === '1';
   const archiveWeek = archiveParams.get('weekStart');
@@ -812,8 +817,17 @@ const Report = (() => {
       host.appendChild(box);
     });
   }
-  function openNewsPicker() { newsPickerOpen = true; renderNewsDraft(); }
-  function closeNewsPicker() { newsPickerOpen = false; A.$('#rpt-news-editor').hidden = true; }
+  function renderNewsTargetSelect() {
+    const select = A.$('#rpt-news-target'); if (!select) return;
+    const options = [{ value: '', label: `本周（${archiveLabel(news?.weekStart || todayStr())}）` }]
+      .concat(archives.map((item) => ({ value: item.weekStart, label: `${archivePeriodLabel(item.weekStart)} · ${archiveLabel(item.weekStart)}（已归档）` })));
+    select.replaceChildren(...options.map((opt) => { const o = document.createElement('option'); o.value = opt.value; o.textContent = opt.label; return o; }));
+    select.value = newsTarget || '';
+    const title = A.$('#rpt-news-picker-title');
+    title.textContent = newsTarget ? `选择 ${archivePeriodLabel(newsTarget)} 两条 AI 新闻` : '选择本周两条 AI 新闻';
+  }
+  async function openNewsPicker() { newsPickerOpen = true; newsTarget = null; await loadArchives(); renderNewsTargetSelect(); renderNewsDraft(); }
+  function closeNewsPicker() { newsPickerOpen = false; newsTarget = null; A.$('#rpt-news-editor').hidden = true; }
   async function refreshNews() {
     const btn = A.$('#rpt-news-collect'); btn.disabled = true; btn.textContent = '收集中…';
     try { await call('/api/reports/news/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rotate: true }) }); selectedNewsIds.clear(); await loadNews(); A.toast('已换一批中文候选，请选择两条'); }
@@ -824,17 +838,37 @@ const Report = (() => {
     const input = A.$('#rpt-news-url'); const url = input.value.trim();
     if (!url) return A.toast('先粘贴原始新闻链接', 'bad');
     const btn = A.$('#rpt-news-import-url'); btn.disabled = true; btn.textContent = '读取中…';
-    try { await call('/api/reports/news/import-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: news.weekStart, url }) }); input.value = ''; await loadNews(); A.toast('已加入候选，请勾选它'); }
+    try { await call('/api/reports/news/import-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: newsTarget || news.weekStart, url }) }); input.value = ''; await loadNews(); A.toast('已加入候选，请勾选它'); }
     catch (e) { A.toast(e.message, 'bad'); }
     finally { btn.disabled = false; btn.textContent = '添加新闻链接'; }
   }
+  // 目标选了已归档周：生成完不进本周的实时工作区中转，直接绑定进那份归档
+  // （复用归档已有的 archive/save 接口，只替换 news、report 原样保留），
+  // 绑完立刻把选择器复位到"本周"，不留可能被误用的残留状态。
+  async function bindNewsToArchive(targetWeek, generatedNews) {
+    const archive = archives.find((item) => item.weekStart === targetWeek);
+    if (!archive) throw new Error('找不到这一期归档，先刷新一下试试');
+    const current = await call(`/api/reports/personal/archive?weekStart=${encodeURIComponent(targetWeek)}&versionId=${encodeURIComponent(archive.officialVersionId)}`);
+    await call('/api/reports/personal/archive/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weekStart: targetWeek, versionId: archive.officialVersionId, snapshot: { report: current.version.snapshot.report, news: generatedNews } })
+    });
+  }
   async function saveNewsDraft() {
     const btn = A.$('#rpt-news-publish');
+    const targetWeek = newsTarget;
+    if (targetWeek && !confirm(`确认生成并绑定进 ${archivePeriodLabel(targetWeek)} 归档？如果这一期已经有新闻会被覆盖。`)) return;
     try {
       if (selectedNewsIds.size !== 2) return A.toast('请选择两条新闻', 'bad');
       btn.disabled = true; btn.textContent = 'AI 正在整理与排版…';
-      await call('/api/reports/news/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: news.weekStart, ids: [...selectedNewsIds] }) });
-      await loadNews(); closeNewsPicker(); A.toast('AI 新闻页已生成，放映模式已同步');
+      const generated = await call('/api/reports/news/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart: targetWeek || news.weekStart, ids: [...selectedNewsIds] }) });
+      if (targetWeek) {
+        await bindNewsToArchive(targetWeek, generated);
+        newsTarget = null; closeNewsPicker(); await loadArchives();
+        A.toast(`AI 新闻已生成并绑定进 ${archivePeriodLabel(targetWeek)} 归档`);
+      } else {
+        await loadNews(); closeNewsPicker(); A.toast('AI 新闻页已生成，放映模式已同步');
+      }
     } catch (e) { A.toast(e.message, 'bad'); }
     finally { btn.disabled = false; btn.textContent = '确认两条并生成'; }
   }
@@ -1192,6 +1226,7 @@ const Report = (() => {
     A.$('#rpt-news-collect').onclick = refreshNews;
     A.$('#rpt-news-publish').onclick = saveNewsDraft;
     A.$('#rpt-news-import-url').onclick = importNewsUrl;
+    A.$('#rpt-news-target').onchange = (e) => { newsTarget = e.target.value || null; renderNewsTargetSelect(); };
     A.$('#rpt-news-picker-close').onclick = closeNewsPicker;
     A.$('#rpt-news-editor').addEventListener('click', (e) => { if (e.target.id === 'rpt-news-editor') closeNewsPicker(); });
     A.$('#rpt-exit-present').onclick = exitPresent;

@@ -1688,7 +1688,11 @@ body.readonly .line.good .markdot, body.readonly .line.bad .markdot { opacity: 1
 .rpt-news-cover-actions .ghost:hover { color: var(--mint); border-color: color-mix(in srgb, var(--mint) 50%, var(--line)); }
 .rpt-news-cover-actions .ghost:disabled { opacity: .55; cursor: wait; }
 .rpt-news-editor { position: fixed; z-index: 50; inset: 0; overflow: auto; box-sizing: border-box; padding: clamp(22px, 4vw, 64px); background: color-mix(in srgb, var(--surface) 94%, #000); }
-.rpt-news-editor > .rpt-sec-head, .rpt-news-editor > .rpt-news-import, .rpt-news-editor > .rpt-news-draft-fields { width: min(1180px, 100%); margin-left: auto; margin-right: auto; }
+.rpt-news-editor > .rpt-sec-head, .rpt-news-editor > .rpt-news-import, .rpt-news-editor > .rpt-news-draft-fields, .rpt-news-editor > .rpt-news-target-row { width: min(1180px, 100%); margin-left: auto; margin-right: auto; }
+.rpt-news-target-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.rpt-news-target-row label { font-size: 13px; color: var(--dim); }
+.rpt-news-target-row select { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font: inherit; }
+.rpt-news-target-row .rv-sub { flex-basis: 100%; margin: 2px 0 0; }
 .rpt-news-editor-actions { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
 .rpt-news-editor-actions .solid { width: auto; margin-top: 0; padding: 7px 12px; font-size: 13.5px; white-space: nowrap; }
 .rpt-news-editor-actions .kill { opacity: 1; background: var(--overlay-weak); color: var(--dim); }

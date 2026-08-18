@@ -341,6 +341,7 @@
   <!-- 置于页面根节点：不能嵌在带 transform 动画的报告视图里，否则 fixed 会只覆盖局部。 -->
   <section class="rpt-news-editor" id="rpt-news-editor" hidden aria-modal="true" role="dialog" aria-labelledby="rpt-news-picker-title">
     <div class="rpt-sec-head"><div><h2 id="rpt-news-picker-title">选择本周两条 AI 新闻</h2><p class="rv-sub">候选优先推荐中文 AI、电商与空气品质相关内容；确认后自动生成摘要和汇报版式。</p></div><div class="rpt-news-editor-actions"><button class="ghost" id="rpt-news-collect">↻ 换一批</button><button class="solid" id="rpt-news-publish">确认两条并生成</button><button class="kill" id="rpt-news-picker-close" aria-label="关闭">✕</button></div></div>
+    <div class="rpt-news-target-row"><label for="rpt-news-target">生成给</label><select id="rpt-news-target"></select><p class="rv-sub">默认是本周；回头给已归档的某一期补录新闻时，选那一期——生成后会直接绑定进那份归档，不会残留在"本周"里。</p></div>
     <div class="rpt-news-import"><input id="rpt-news-url" type="url" placeholder="粘贴原始中文新闻链接，自动读取标题、摘要与封面"><button class="ghost" id="rpt-news-import-url">添加新闻链接</button></div>
     <div id="rpt-news-draft-fields" class="rpt-news-draft-fields"></div>
   </section>
