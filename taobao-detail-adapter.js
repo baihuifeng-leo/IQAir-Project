@@ -519,6 +519,24 @@ async function waitForStableDetail(page, rootSelector, timeoutMs, emit) {
   }
 }
 
+// 天猫/淘宝详情页的 #description 常常是页面基础 HTML 解析完（domcontentloaded）之后，
+// 由异步 JS/XHR 再渲染进来的——实测发现如果一进页面就同步查一次数量为 0 就直接判定
+// "找不到详情区域"，会把"内容还没渲染出来"误判成"这个页面真的没有详情区域"，
+// 而真人在浏览器里多等一两秒就能正常看到内容。所以这里要在 timeoutMs 预算内轮询等待
+// 根节点出现，而不是查一次就下结论；但如果一出现就是多个（结构性歧义），不需要等它自己
+// 消失，直接判定 AMBIGUOUS。
+async function waitForRootLocator(page, rootSelector, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const rootCount = await page.locator(rootSelector).count();
+    if (rootCount === 1) return;
+    if (rootCount > 1) throw detailError('DETAIL_ROOT_AMBIGUOUS', '商品详情区域不唯一');
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw detailError('DETAIL_ROOT_NOT_FOUND', '找不到可信的商品详情区域');
+    await delay(Math.min(OBSERVATION_DELAY_MS, remaining));
+  }
+}
+
 async function extractDetail(page, { timeoutMs = DEFAULT_TIMEOUT_MS, emit = () => {} } = {}) {
   if (!page || typeof page.locator !== 'function' || typeof page.evaluate !== 'function') {
     throw new TypeError('extractDetail 需要受控浏览器 Page');
@@ -533,9 +551,7 @@ async function extractDetail(page, { timeoutMs = DEFAULT_TIMEOUT_MS, emit = () =
   if (!selectors) throw detailError('DETAIL_SITE_UNSUPPORTED', '不支持的商品详情网站');
   const productId = productIdFrom(pageUrl);
   const rootSelector = selectors.join(', ');
-  const rootCount = await page.locator(rootSelector).count();
-  if (rootCount === 0) throw detailError('DETAIL_ROOT_NOT_FOUND', '找不到可信的商品详情区域');
-  if (rootCount !== 1) throw detailError('DETAIL_ROOT_AMBIGUOUS', '商品详情区域不唯一');
+  await waitForRootLocator(page, rootSelector, timeoutMs);
 
   await waitForStableDetail(page, rootSelector, timeoutMs, emit);
   const extracted = await page.evaluate(pageOperation, pageInput('extract', rootSelector));
