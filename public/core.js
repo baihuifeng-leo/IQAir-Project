@@ -386,8 +386,14 @@ const App = (() => {
   }
 
   /* ── 主题 ───────────────────────────────────────────── */
+  // 按钮图标永远表示"点了会切到哪个主题"（跟以前的文案 "切到深色"/"切到浅色" 语义一致），
+  // 不是表示当前主题本身。
+  const THEME_ICON = {
+    light: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>',
+    dark: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg>'
+  };
   /**
-   * 只管本地生效（属性 + localStorage 缓存 + 按钮文案），不碰网络。
+   * 只管本地生效（属性 + localStorage 缓存 + 按钮图标），不碰网络。
    * localStorage 只是同一台设备下次打开页面时避免闪烁的缓存，不是
    * 偏好的存储来源——存储来源是服务端的 users.json（见 setTheme）。
    */
@@ -396,7 +402,9 @@ const App = (() => {
     localStorage.setItem('wb.theme', t);
     const b = $('#btn-theme');
     if (b) {
-      b.textContent = t === 'light' ? '切到深色' : '切到浅色';
+      const label = t === 'light' ? '切到深色' : '切到浅色';
+      b.innerHTML = THEME_ICON[t === 'light' ? 'dark' : 'light'];
+      b.title = label; b.setAttribute('aria-label', label);
       b.classList.toggle('is-on', t === 'light');
     }
     // 画布类组件（报告页 ECharts）拿不到 CSS 级联，靠这个事件重读令牌重绘

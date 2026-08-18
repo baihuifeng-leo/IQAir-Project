@@ -1149,6 +1149,8 @@ kbd {
   box-shadow: 0 0 0 3px var(--mint-dim);
 }
 #btn-theme.is-on { border-color: var(--mint); color: var(--mint); background: var(--mint-dim); }
+#btn-theme { display: flex; align-items: center; justify-content: center; padding: 7px 9px; }
+#btn-theme svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 body.readonly .chip { cursor: default; }
 body.readonly .chip input,
