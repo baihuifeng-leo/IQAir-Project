@@ -36,7 +36,15 @@ const clean = (s = '') => String(s).replace(/<!\[CDATA\[|\]\]>/g, '')
   .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
   .replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 const textOf = (xml, tag) => clean((new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i').exec(xml) || [])[1] || '');
-const mondayOf = (d = new Date()) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+// 字符串输入（比如客户端传来的 weekStart）要强制按本地日期解析，不能走 `new Date('2026-08-10')`
+// 那种 UTC 解析——服务器时区在 UTC 之前（比如美东）时会把日期解析成前一天，
+// 算出来的周一整整错一周。生产环境时区是 UTC+8，这个 bug 目前不会触发，但同一份坑
+// report-store.js 的 mondayOf() 已经踩过并修过，这里用同样的办法防一下。
+const mondayOf = (d = new Date()) => {
+  const x = typeof d === 'string' ? new Date(d.trim() + 'T00:00:00') : new Date(d);
+  x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+};
 const countHits = (s, words) => words.reduce((n, w) => n + (s.includes(w) ? 1 : 0), 0);
 
 function parseFeed(xml, feed) {
@@ -181,12 +189,17 @@ class ReportNewsStore {
     } catch { return { weeks: {}, drafts: {}, candidates: {}, lastAttempt: null }; }
   }
   async save(userId, data) { await fsp.mkdir(this.dir, { recursive: true }); await fsp.writeFile(this.file(userId), JSON.stringify(data, null, 1)); }
-  async clearLiveNews(userId) {
+  // 只清空刚归档完的那一周，不能像以前那样把整个 weeks/drafts 全清空——
+  // 归档是按周单独进行的，清空时如果还有其它未归档周的新闻（比如用户当天
+  // 刚为本周生成了新闻，紧接着才去补归档上一周），全量清空会把那些还没
+  // 归档、本该保留的新闻一起误删。
+  async clearLiveNews(userId, weekStartInput) {
+    const weekStart = mondayOf(weekStartInput);
     const data = await this.load(userId);
-    data.weeks = {};
-    data.drafts = {};
+    delete data.weeks[weekStart];
+    delete data.drafts[weekStart];
     await this.save(userId, data);
-    return { cleared: true };
+    return { cleared: true, weekStart };
   }
   async summary(userId) { const data = await this.load(userId); const key = mondayOf(); return { weekStart: key, news: data.weeks[key] || null, candidates: data.candidates[key] || [], lastAttempt: data.lastAttempt || null }; }
   async refresh(userId, options = {}) {

@@ -54,10 +54,15 @@ assert.deepEqual(coverOptions.map((item) => item.url), ['https://example.com/ai-
       [nextWeek]: [{ id: 'next-candidate', ...card(8), tags: ['电商相关'] }]
     }
   });
-  await archiveResetStore.clearLiveNews('u_owner');
+  // 只归档 currentWeek：clearLiveNews 必须只清空这一周，不能像以前那样把
+  // 还没归档的 nextWeek 也一起清空——这个场景在真实生产环境里发生过：用户当天
+  // 先为本周生成了新闻，紧接着才去补归档上一周，结果本周刚生成的新闻被误删。
+  await archiveResetStore.clearLiveNews('u_owner', currentWeek);
   const afterArchiveReset = await archiveResetStore.load('u_owner');
-  assert.deepEqual(afterArchiveReset.weeks, {}, '归档后所有实时已发布新闻应清空');
-  assert.deepEqual(afterArchiveReset.drafts, {}, '归档后所有实时新闻草稿应清空');
+  assert.equal(afterArchiveReset.weeks[currentWeek], undefined, '刚归档的这一周应从实时新闻里清空');
+  assert.equal(afterArchiveReset.drafts[currentWeek], undefined, '刚归档的这一周应从实时草稿里清空');
+  assert.equal(afterArchiveReset.weeks[nextWeek]?.pages.global.length, 2, '未归档的其它周实时新闻不应被清空');
+  assert.equal(afterArchiveReset.drafts[nextWeek]?.pages.global.length, 2, '未归档的其它周实时草稿不应被清空');
   assert.equal(afterArchiveReset.candidates[currentWeek].length, 1, '归档后新闻候选应保留供新周重新选择');
   assert.equal(afterArchiveReset.candidates[nextWeek].length, 1, '归档后其它周新闻候选也应保留');
   fs.rmSync(archiveResetDir, { recursive: true, force: true });

@@ -24,6 +24,7 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const MATERIALCHECK_DIR = path.join(DATA_DIR, 'materialcheck');
 const MATERIALCHECK_UPLOAD_DIR = path.join(UPLOAD_DIR, 'materialcheck');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const REPORTS_BACKUP_DIR = path.join(BACKUP_DIR, 'reports-snapshots');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SECRET_FILE = path.join(DATA_DIR, '.session-secret');
@@ -256,6 +257,23 @@ async function rotateBackup(tag = '') {
   }
   return file;
 }
+/** reports/report-news 是按用户拆成多个文件的目录，不是单个 db 对象，
+ * 备份方式跟 rotateBackup() 不一样：整目录复制到一个按时间戳命名的子目录里，
+ * 而不是序列化成一个 JSON 文件。滚动保留策略跟 db 备份保持一致（MAX_BACKUPS 份）。
+ */
+async function rotateReportsBackup(tag = '') {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const name = `${stamp}${tag ? '-' + tag : ''}`;
+  const dest = path.join(REPORTS_BACKUP_DIR, name);
+  await fsp.mkdir(dest, { recursive: true });
+  await fsp.cp(REPORTS_DIR, path.join(dest, 'reports'), { recursive: true });
+  await fsp.cp(REPORT_NEWS_DIR, path.join(dest, 'report-news'), { recursive: true });
+  const entries = (await fsp.readdir(REPORTS_BACKUP_DIR)).sort();
+  for (const e of entries.slice(0, Math.max(0, entries.length - MAX_BACKUPS))) {
+    await fsp.rm(path.join(REPORTS_BACKUP_DIR, e), { recursive: true, force: true }).catch(() => {});
+  }
+  return name;
+}
 /** 每天本地时间 00:00 自动备份一次，滚动保留 30 份 */
 function scheduleNightly() {
   const now = new Date();
@@ -265,8 +283,9 @@ function scheduleNightly() {
   setTimeout(async () => {
     try {
       const file = await rotateBackup();
-      await audit(null, 'backup.auto', { file });
-      console.log('[backup] 每日自动备份完成：' + file);
+      const reportsSnapshot = await rotateReportsBackup();
+      await audit(null, 'backup.auto', { file, detail: [`reports 快照：${reportsSnapshot}`] });
+      console.log('[backup] 每日自动备份完成：' + file + '，reports/report-news 快照：' + reportsSnapshot);
     } catch (e) { console.error('[backup]', e.message); }
     scheduleNightly();
   }, wait).unref?.();
@@ -539,8 +558,9 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/snapshot' && req.method === 'POST') {
       const file = await rotateBackup('manual');
-      audit(me, 'backup.manual', { detail: [file] });
-      return json(res, 200, { ok: true, file });
+      const reportsSnapshot = await rotateReportsBackup('manual');
+      audit(me, 'backup.manual', { detail: [file, `reports 快照：${reportsSnapshot}`] });
+      return json(res, 200, { ok: true, file, reportsSnapshot });
     }
 
     /* ── 变更日志（仅管理员）───────────────────────────── */
@@ -694,7 +714,7 @@ const server = http.createServer(async (req, res) => {
         const newsData = await reportNews.load(me.id);
         const currentNews = newsData.weeks[input.weekStart] || null;
         const archive = await reports.archiveCreate(me.id, input.weekStart, currentNews);
-        await reportNews.clearLiveNews(me.id);
+        await reportNews.clearLiveNews(me.id, archive.weekStart);
         audit(me, 'reports.archive.create', { detail: [`归档 ${archive.weekStart} 个人周报`] });
         return json(res, 200, archive);
       } catch (e) { return json(res, 400, { error: e.message }); }
