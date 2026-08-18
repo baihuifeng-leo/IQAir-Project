@@ -164,4 +164,38 @@
 - **五问重启检查更新**：「我在哪里」→ v2 分支已实际跑在 8080，用户可以直接用浏览器测；「我要去哪里」→ 等用户实测反馈，反馈后再决定是否需要改代码/合并到 `feature/materialcheck-paddleocr-ocr`/进而合并 `main`；生产发布（8090/`/opt/workbench`）依然需要用户明确指令，本次未触碰
 
 ---
+
+## 会话：2026-08-18（`feature/material-center-detail-long-image` 真机测试踩坑修复 + 测试环境回退到生产基线）
+
+### 状态：complete（本次会话范围内）
+
+### 背景
+用户在 codex-lxc 上用 `/root/IQAir-Project/EC-Workbench-test-9090`（worktree，分支曾是 `test/9090-combined-preview`——把 `feature/report-slides-editor` 和 `feature/material-center-detail-long-image` 临时合到一起方便一次性测试的一次性分支）跑 9090 端口做真机测试，测出两个真 bug：
+
+1. **淘宝扫码登录成功但前端一直显示未登录**：`taobao-session.js` 用精确字符串比较探测是否登录成功，写死判断落地页是 `https://i.taobao.com/my_taobao.htm`；实测淘宝真实站点登录成功后会把这个 URL 服务端跳转到 `https://i.taobao.com/my_itaobao`（无 `.htm` 后缀的新版个人中心），精确匹配失败导致真实登录成功被误判成 `unavailable/PROBE_FAILED`。修复：改成 host+protocol 精确匹配、pathname 放宽到接受这两个已知的真实落地路径。补了回归测试。
+2. **详情长图提交天猫链接后报错，但手动打开链接内容正常**：`taobao-detail-adapter.js` 的 `extractDetail()` 原来是导航到详情页后**立刻同步查一次**根选择器（`#description`/`.tm-detail-desc`/`#J_DivItemDesc`/`[data-module="detail-content"]`）有没有匹配到元素，查到 0 个就直接判 `DETAIL_ROOT_NOT_FOUND` 失败——完全没给"详情区域由异步 JS/XHR 渲染进来"这个真实存在的时序留时间。修复：改成在 `timeoutMs` 预算内轮询等待根节点出现（出现即为多个/结构性歧义，仍然立刻判 `DETAIL_ROOT_AMBIGUOUS`，不等它自己消失）。补了回归测试模拟"根节点异步出现"的场景。
+
+两个修复都先提交到 `test/9090-combined-preview` 验证，再各自 cherry-pick 回真正归属的 `feature/material-center-detail-long-image`（commit `cfc1cfd` 淘宝登录探测修复、`76f81d1` 详情根节点轮询修复）并 push，两个分支都同步了。
+
+### 遗留发现：真实反爬风控问题（未解决，已暂停）
+即使代码逻辑修对了，拿实际 IQAir 天猫旗舰店链接（`detail.tmall.com/item.htm?id=550555337975`）实测，"图文详情"内容区域（新版 SSR 模板下容器 ID 是 `#imageTextInfo-content`，跟当前代码里写的旧版选择器完全不是一套）本身在我们的 headless 自动化会话下就是空的——抓到过天猫风控下发的验证码 iframe（`action=captcha`），基本可以确定是风控针对性地不下发这块内容，不是我们代码能修的选择器问题。跟用户讨论后调研了开源方案（[Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-nodejs)，Playwright 的反检测分支，drop-in replacement，只需要把 `require('playwright')` 换成 `require('patchright')`），试装到 9090 worktree 的 `node_modules`（`npm install patchright --no-save`，没有改 `package.json`，没有提交），跑了一次真实探测——结果这次连登录态都没识别出来，直接跳去登录页。这不能算 patchright 无效的证据：当天已经用同一个账号连续跑了七八轮自动化探测（原生 playwright 若干次 + patchright 一次），高频访问本身就是风控最敏感的信号，且换驱动等于换设备指纹，登录态被要求重新验证是预期内行为，两者都足以单独解释这次失败，样本被污染，得不出干净结论。用户决定"先放一放回头再说"，本次会话未继续深挖，也没有把 patchright 正式接入任何分支的 `package.json`。
+
+**下次要验证详情长图/patchright 相关的功能之前，务必先重新扫码登录一次淘宝账号**（当前登录态已经失效），并且尽量集中在一次会话里测完、别隔几个动作就探测一次，减少触发风控的噪音。
+
+### 测试环境（9090）状态回退到生产基线
+用户要求"先把测试环境状态回退到和生产环境一样，可能要再做一些别的更新"，明确选择了"代码 + 数据都回退"（不只是代码）：
+
+- **代码**：`EC-Workbench-test-9090` worktree 从 `test/9090-combined-preview`（一次性分支，两个 feature 分支合在一起测的临时产物）切到跟 `origin/main` 完全一致的 commit `7d6b12b`（detached HEAD，因为 `main` 这个分支名已经被 codex-lxc 上的主 checkout `/root/IQAir-Project/EC-Workbench` 占用，两个 worktree 不能同时签出同一个分支名，所以用具体 commit 而不是分支名）。这台 Claude Code 机器（192.168.2.8）自己的主 checkout 也同步切到了 `main`，跟测试环境保持一致的干净基线。
+- **数据**：`/root/IQAir-Project/EC-Workbench/data`（两台机器共享的 dev/test 数据目录，这个目录同时也是常规 `node server.js` 本地开发用的那份）整个用 `sudo rsync -a /var/lib/workbench/ ...` 换成了生产的真实数据（437M，含 `db.json`/`users.json`/`audit.log`/`materialcheck`/`reviews`/`reports`/`backups`/`.session-secret`/`.paddlex` 等，`chown` 成 `root:root`）。旧的测试数据目录**没有删除**，改名备份在 codex-lxc 上的 `/root/IQAir-Project/EC-Workbench/data.bak-before-prod-reset-20260818T143151`（里面有淘宝登录态 `platform-sessions/`、详情长图任务记录 `detail-jobs/`、素材质检测试用的 `materialcheck-inbox/` 等这两个 feature 分支专属的测试数据，main 里没有这些目录是正常的，不是数据丢失，只是功能还没合并进 main）。这次数据回退已经通过 `sync-pull.sh` 同步到这台机器（192.168.2.8）本地。
+
+### 五问重启检查
+| 问题 | 答案 |
+|------|------|
+| 我在哪里？ | `feature/material-center-detail-long-image` 上的两个真机测试 bug 已修复并 push；测试环境（9090）代码和数据都已回退到跟生产一致的干净基线；淘宝登录态失效，反爬风控问题未解决，patchright 探索暂停 |
+| 我要去哪里？ | 等用户下一步指示做"其它更新"（用户原话，未展开细节）；如果要继续测天猫详情长图，先提醒重新扫码登录；如果要继续 patchright 方向，建议隔一天等风控冷却后再干净地单独测一轮 |
+| 目标是什么？ | 保持测试环境随时可用、状态透明，为用户后续任意方向的新开发提供干净起点 |
+| 我学到了什么？ | 淘宝/天猫真实站点的 DOM 结构和登录跳转目标会变，写死的字符串/选择器要么改成宽松匹配已知的多个变体，要么在超时预算内轮询而不是查一次就下结论；但选择器再怎么完善也解决不了风控主动屏蔽内容这类问题——这是网络对抗层面的限制，不是代码 bug；同一账号短时间内高频自动化探测本身会加重风控怀疑，诊断时要控制探测频率 |
+| 我做了什么？ | 见上方两条 bug 修复 + 测试环境回退记录；改了 `taobao-session.js`/`taobao-session.test.js`/`taobao-detail-adapter.js`/`taobao-detail-adapter.test.js` 四个文件，`node --test *.test.js` 159 个用例只有 1 个跟本次改动无关的既有失败（`report-news-store.test.js`，之前会话已确认过） |
+
+---
 *每个阶段完成后或遇到错误时更新此文件*
