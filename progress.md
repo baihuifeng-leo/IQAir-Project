@@ -198,4 +198,39 @@
 | 我做了什么？ | 见上方两条 bug 修复 + 测试环境回退记录；改了 `taobao-session.js`/`taobao-session.test.js`/`taobao-detail-adapter.js`/`taobao-detail-adapter.test.js` 四个文件，`node --test *.test.js` 159 个用例只有 1 个跟本次改动无关的既有失败（`report-news-store.test.js`，之前会话已确认过） |
 
 ---
+
+## 会话：2026-08-18（续）：生产环境 Q3W07（2026-08-10 周）AI 周报归档后消失，数据修复
+
+### 状态：complete
+
+### 问题
+用户反馈生产环境"个人报告 → 报告归档"里 Q3W07（周期 `2026-08-10`）的 AI 周报不见了。排查（直接读生产 `/var/lib/workbench/reports/u_fb623958.json` 和 `report-news/`，未改动任何代码，纯数据取证）确认：`archives` 里 `weekStart=2026-08-10` 的版本 `v_msy57yeq`，`snapshot.news` 是 `null`，而同一用户另外两周（`2026-07-27`、`2026-08-03`）的归档 `news` 字段都正常。
+
+### 根因（时间线，靠 `audit.log` 逐条核对）
+1. `2026-08-10`：当天正常生成了这周的 AI 新闻并编辑好封面，此时数据完好。
+2. `2026-08-11`：生产 `report-news/`、`reports/` 目录下留有一批命名为 `*.archive-news-repair-backup.json`/`*.archive-news-restore-backup.json`/`*.archive-news-reset-backup.json` 的备份文件——这是**更早一次 agent 会话**手动修复 `2026-07-27` 那周类似问题时留下的，`audit.log` 在这天完全没有对应的应用层操作记录（只有登录记录），说明那次修复是直接改数据文件、绕过了应用本身，且没有记录在任何 `progress.md`/规划文档里。推断那次操作把当时还没归档、活着的 `2026-08-10` 周新闻当垃圾一并清空了，属于误伤。
+3. `2026-08-18` 凌晨：用户先生成了新一周（`2026-08-17`）的 AI 新闻，然后才点了"归档 `2026-08-10`"——归档时代码去读"当前活跃这周的新闻"（`reportNews.load` 的 `weeks[weekStart]`），此时已经是空的（第 2 步已清空），归档快照里 `news` 自然是 `null`。**不是这次归档操作本身的 bug**，`archiveCreate`/`archiveSave` 的代码逻辑本身没问题（已读代码确认），是历史遗留的数据损坏在这次归档时才被"发现"。
+
+### 修复
+在 `report-news/u_fb623958.json.2026-08-11.archive-news-reset-backup.json`（那次误伤操作自己留下的"操作前备份"，讽刺地成了唯一的恢复来源）里找到了完整的 `2026-08-10` 周新闻内容（含用户后来手动调整过的封面图，2 条全屏稿），跟另外两周正常归档的数据形状（`weekStart`/`publishedAt`/`pages`/`sourceCount`）完全一致。用一次性 Python 脚本：
+1. 先把生产 `reports/u_fb623958.json` 原样备份成 `u_fb623958.json.bak-before-q3w07-news-restore-20260818T074621Z`（没删旧文件）；
+2. 把恢复的新闻内容写入 `v_msy57yeq` 版本的 `snapshot.news`；
+3. 用 `node -e "JSON.parse(...)"` 校验写回后的文件仍是合法 JSON，跟 `report-store.js` 的 `_load()`（每次请求都直接 `readFile`，无内存缓存）行为一致，不需要重启生产服务即可生效。
+验证：写回后三周归档的 `news` 字段全部 `present: true`，`pages.global` 均为 2 条，跟归档前后 `pages`/`sourceCount` 完全对得上。
+
+### 发现的系统性缺口（未处理，仅记录）
+- `reports/`、`report-news/` 这两个目录**不在**现有的每日自动备份范围内（`[backup]` 日志只提到 `db.json`），一旦被误操作没有自动快照可回滚，这次全靠上一次误伤操作自己留下的备份才侥幸能修。
+- 未归档周的 AI 新闻目前没有任何防丢机制——只要在归档前对 `report-news` 存储做了范围不对的写操作，就会无声丢失，`archiveCreate` 也不会报错（`currentNews` 为 `null` 是合法输入）。
+- 这两点都还没改代码，只是记录下来；如果用户后续想加固（比如把 `reports`/`report-news` 也纳入自动备份，或者归档前后加一致性校验/告警），需要用户明确要不要做。
+
+### 五问重启检查
+| 问题 | 答案 |
+|------|------|
+| 我在哪里？ | 生产环境 Q3W07 AI 周报数据已恢复并校验通过；未改动任何代码 |
+| 我要去哪里？ | 等用户在生产环境前端确认归档页面显示正常；是否要加固 `reports`/`report-news` 的备份覆盖率，等用户明确指示 |
+| 目标是什么？ | 定位并修复用户报告的具体数据缺失问题，同时留痕方便后续排查同类问题不用重新翻审计日志 |
+| 我学到了什么？ | 直接改数据文件绕过应用层做"修复"时，一定要留下可追溯的操作记录（哪怕只是给这份 `progress.md` 写一笔），否则下次同类问题排查要靠猜文件名后缀去拼时间线；`report-store.js` 的 store 无内存缓存、每次读写都落盘，这类直接编辑数据文件的热修复对这个项目是安全的（不需要重启进程） |
+| 我做了什么？ | 见上方"修复"小节；只改了生产 `/var/lib/workbench/reports/u_fb623958.json` 一个文件（改前已备份），没有改任何仓库里的代码 |
+
+---
 *每个阶段完成后或遇到错误时更新此文件*
