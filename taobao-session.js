@@ -6,6 +6,10 @@ const path = require('node:path');
 
 const PLATFORM = 'taobao';
 const PROTECTED_PAGE_URL = 'https://i.taobao.com/my_taobao.htm';
+// 淘宝登录成功后会把 my_taobao.htm 服务端跳转到 my_itaobao（无 .htm 后缀的新版个人中心）；
+// 真实站点已实测确认这个跳转，用精确字符串比较会把货真价实的登录成功误判成失败，
+// 所以校验时接受这两个已知的落地路径，而不是只认最初导航目标那一个 URL。
+const PROTECTED_PAGE_PATHS = new Set(['/my_taobao.htm', '/my_itaobao']);
 const LOGIN_PAGE_URL = 'https://login.taobao.com/member/login.jhtml';
 const LOGIN_HOSTS = new Set(['login.taobao.com', 'login.tmall.com']);
 const SAFE_ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
@@ -347,8 +351,14 @@ class TaobaoSession {
     if (host !== 'i.taobao.com') {
       return this._setStatus(accountId, 'unavailable', { errorCode: 'PROBE_REDIRECTED' });
     }
-    const url = page.url();
-    if (!response || !(typeof response.ok === 'function' ? response.ok() : response.status?.() >= 200 && response.status?.() < 300) || url !== PROTECTED_PAGE_URL) {
+    const ok = response && (typeof response.ok === 'function' ? response.ok() : response.status?.() >= 200 && response.status?.() < 300);
+    let parsed = null;
+    try { parsed = new URL(page.url()); } catch { /* parsed 保持 null，走下面的失败分支 */ }
+    // host（含端口）+ protocol 仍然要求精确匹配，只放宽 pathname——防止非常规端口/http
+    // 明文伪造 i.taobao.com 时被误判为已登录；pathname 放宽是因为淘宝真实站点会把
+    // my_taobao.htm 跳到 my_itaobao，两者都是合法的"已登录个人中心"落地页。
+    const validOrigin = !!parsed && parsed.protocol === 'https:' && parsed.host === 'i.taobao.com';
+    if (!ok || !validOrigin || !PROTECTED_PAGE_PATHS.has(parsed.pathname)) {
       return this._setStatus(accountId, 'unavailable', { errorCode: 'PROBE_FAILED' });
     }
     return this._setStatus(accountId, 'ready', { lastVerifiedAt: Date.now() });

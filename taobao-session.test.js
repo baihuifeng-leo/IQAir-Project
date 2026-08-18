@@ -468,6 +468,16 @@ test('requires exact HTTPS protected URL and a successful response before ready'
   }
 });
 
+test('treats the real my_itaobao landing page as a valid logged-in probe', async () => {
+  // 实测淘宝真实站点：my_taobao.htm 登录成功后服务端会跳到 my_itaobao（无 .htm），
+  // 之前用精确字符串比较导致这种货真价实的登录被误判成 unavailable/PROBE_FAILED。
+  const dataDir = await fixture();
+  const { chromium } = fakeChromium(() => new FakePage({ afterGoto: 'https://i.taobao.com/my_itaobao', responseStatus: 200 }));
+  const session = new TaobaoSession({ dataDir, chromium, statusStore: fakeStatusStore(), emit: () => {} });
+  assert.equal((await session.status('default')).status, 'ready');
+  await session.clear('default');
+});
+
 test('does not trust a protected-page probe redirected to an unapproved host', async (t) => {
   const dataDir = await fixture();
   const { chromium } = fakeChromium(() => new FakePage({ afterGoto: 'https://example.invalid/interstitial' }));
