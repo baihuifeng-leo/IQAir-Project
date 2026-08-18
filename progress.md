@@ -163,5 +163,13 @@
 - 创建/修改的文件：无代码改动，仅运维操作（起停进程、建软链）
 - **五问重启检查更新**：「我在哪里」→ v2 分支已实际跑在 8080，用户可以直接用浏览器测；「我要去哪里」→ 等用户实测反馈，反馈后再决定是否需要改代码/合并到 `feature/materialcheck-paddleocr-ocr`/进而合并 `main`；生产发布（8090/`/opt/workbench`）依然需要用户明确指令，本次未触碰
 
+## 会话：2026-08-17（另一条工作线：详情长图，跟上面的素材质检历史无关）
+
+**注意**：这个 worktree（`feature/material-center-detail-long-image`）此后被复用来做一个完全不同的功能——"详情长图"（天猫/淘宝商品详情页抓取拼接成满宽 PNG）。上面这些记录是素材质检功能的历史，跟这条工作线无关，留着是因为文件是从公共祖先继承下来的。**这条功能的权威进度记录在 `.superpowers/sdd/2026-08-14-material-center-detail-long-image/progress.md` 和同目录下的 `task-N-*.md`，任务计划在 `docs/superpowers/plans/2026-08-14-material-center-detail-long-image.md`，设计文档在 `docs/superpowers/specs/2026-08-14-material-center-detail-long-image-design.md`——要了解这条功能的进度请先看那三份，这里只留一句指路。**
+
+- 2026-08-14：Codex 在这条分支上做到 Task 6（满宽条带 PNG 合成器）第三轮修复复审途中，token 用尽中断，commit `051f775` 后没有留下 round 3 复审记录。
+- 2026-08-17：Claude Code 接手，确认 `051f775` 其实已经把 round 2 复审的三条 Important 问题全部修好了（真取消用子进程+SIGKILL、SVG 字节预算按转义后真实大小预检查、close/run 状态机重写消除竞态），补了 round 3 复审记录标记 Task 6 完成；随后按计划文档做完 Task 7（详情任务编排/API/权限）、Task 8+9（素材中心导航下拉 + 平台账号页面 + 详情长图前端，合并成一个提交）、Task 10（install.sh/workbench.service/README/CLAUDE.md，含 Chromium 安装、`--no-sandbox` 免与 systemd 加固冲突、中文字体）。10 个任务全部完成，分支已推送 GitHub（不合并 main，等用户自己测试决定）。
+- 本机环境本身缺 Node/fontconfig+CJK字体，过程中顺手装好并写进了 install.sh；Playwright 的 Chromium 二进制在这个沙箱里下不下来（`npx playwright install` 网络超时），所以计划里 Task 10 Step 6 要求的"管理员真实扫码登录淘宝+人工检查生成的长图"这一步做不了，需要用户在有真实 Chromium 和外网访问的机器上验证。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*
