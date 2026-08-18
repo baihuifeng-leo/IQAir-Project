@@ -1,0 +1,183 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const fsp = fs.promises;
+const os = require('node:os');
+const path = require('node:path');
+
+const { DetailTaskStore } = require('./detail-task-store');
+
+async function fixture() {
+  return fsp.mkdtemp(path.join(os.tmpdir(), 'detail-task-store-'));
+}
+
+const input = {
+  platform: 'taobao',
+  accountId: 'default',
+  url: 'https://detail.tmall.com/item.htm?id=123',
+  productId: '123'
+};
+
+test('creates a queued task, persists safe fields, and enforces legal phase transitions', async () => {
+  const root = await fixture();
+  const tasks = new DetailTaskStore(root, { now: () => 1_700_000_000_000 });
+  await tasks.load();
+  await assert.rejects(() => tasks.create('alice', { ...input, cookie: 'secret' }), /敏感/);
+  const task = await tasks.create('alice', input);
+
+  assert.equal(task.userId, 'alice');
+  assert.equal(task.phase, 'queued');
+  assert.equal(task.progress, 0);
+  assert.deepEqual(task.assets, { total: 0, current: 0 });
+  assert.equal(task.cookie, undefined);
+
+  await assert.rejects(() => tasks.transition(task.id, 'composing'), /阶段|转换/);
+  const opening = await tasks.transition(task.id, 'opening', { progress: 10 });
+  assert.equal(opening.progress, 10);
+  const detecting = await tasks.transition(task.id, 'detecting', { assets: { total: 4, current: 1 } });
+  assert.deepEqual(detecting.assets, { total: 4, current: 1 });
+  await tasks.transition(task.id, 'resolving');
+  await tasks.transition(task.id, 'composing');
+  const completed = await tasks.transition(task.id, 'completed', { progress: 100 });
+  assert.equal(completed.phase, 'completed');
+  assert.equal(completed.progress, 100);
+  await assert.rejects(() => tasks.transition(task.id, 'failed'), /终态|阶段/);
+
+  const raw = JSON.parse(await fsp.readFile(path.join(root, 'tasks.json'), 'utf8'));
+  assert.equal(raw.tasks[0].cookie, undefined);
+  await assert.rejects(() => fsp.access(path.join(root, 'tasks.json.tmp')));
+});
+
+test('restricts task visibility to its owner while admins can access all tasks', async () => {
+  const root = await fixture();
+  const tasks = new DetailTaskStore(root);
+  await tasks.load();
+  const own = await tasks.create('alice', input);
+  await tasks.create('bob', { ...input, productId: '456' });
+
+  assert.equal(tasks.listFor({ id: 'alice', admin: false }).length, 1);
+  assert.equal(tasks.listFor({ id: 'admin', admin: true }).length, 2);
+  assert.throws(() => tasks.getAuthorized(own.id, { id: 'other', admin: false }), /无权/);
+  assert.equal(tasks.getAuthorized(own.id, { id: 'admin', admin: true }).id, own.id);
+  for (const fakeAdmin of ['true', 1, {}, []]) {
+    assert.equal(tasks.listFor({ id: 'other', admin: fakeAdmin }).length, 0);
+    assert.throws(() => tasks.getAuthorized(own.id, { id: 'other', admin: fakeAdmin }), /无权/);
+  }
+});
+
+test('contains result files under the configured root and permits owner cancellation', async () => {
+  const root = await fixture();
+  const tasks = new DetailTaskStore(root);
+  await tasks.load();
+  const task = await tasks.create('alice', input);
+  const resultPath = path.join(root, 'results', `${task.id}.png`);
+  await fsp.mkdir(path.dirname(resultPath), { recursive: true });
+  await fsp.writeFile(resultPath, 'png');
+
+  await assert.rejects(
+    () => tasks.transition(task.id, 'opening', { resultPath: path.join(root, '..', 'secret.png') }),
+    /路径|目录/
+  );
+  await tasks.cancel(task.id, { id: 'alice', admin: false });
+  assert.equal(tasks.getAuthorized(task.id, { id: 'alice', admin: false }).phase, 'cancelled');
+  await assert.rejects(() => tasks.cancel(task.id, { id: 'alice', admin: false }), /终态|取消/);
+});
+
+test('cleans result files and terminal task metadata older than the retention window', async () => {
+  let now = 1_700_000_000_000 - 86_400_002;
+  const root = await fixture();
+  const tasks = new DetailTaskStore(root, { now: () => now, retentionMs: 86_400_000 });
+  await tasks.load();
+  const task = await tasks.create('alice', input);
+  const resultPath = path.join(root, 'results', `${task.id}.png`);
+  await fsp.mkdir(path.dirname(resultPath), { recursive: true });
+  await fsp.writeFile(resultPath, 'png');
+  await tasks.transition(task.id, 'opening');
+  await tasks.transition(task.id, 'detecting');
+  await tasks.transition(task.id, 'resolving');
+  await tasks.transition(task.id, 'composing');
+  await tasks.transition(task.id, 'completed', { resultPath });
+
+  now += 86_400_002;
+  await tasks.cleanupExpired();
+  await assert.rejects(() => fsp.access(resultPath));
+  assert.equal(tasks.listFor({ id: 'alice', admin: false }).length, 0);
+});
+
+test('rejects nested sensitive error values and does not persist token-bearing URLs', async () => {
+  const root = await fixture();
+  const tasks = new DetailTaskStore(root);
+  await tasks.load();
+  await assert.rejects(() => tasks.create('alice', {
+    ...input,
+    url: 'https://detail.tmall.com/item.htm?id=123&access_token=secret'
+  }), /敏感|URL/);
+  const task = await tasks.create('alice', input);
+  await assert.rejects(() => tasks.transition(task.id, 'failed', {
+    error: { code: 'worker_failed', message: 'Cookie: secret', details: { token: 'secret' }, candidates: ['authorization: secret'] }
+  }), /敏感/);
+  const raw = JSON.parse(await fsp.readFile(path.join(root, 'tasks.json'), 'utf8'));
+  assert.equal(JSON.stringify(raw).includes('secret'), false);
+});
+
+test('cancelling a task deletes its result and clears result metadata while retaining the recent row', async () => {
+  const root = await fixture();
+  const tasks = new DetailTaskStore(root);
+  await tasks.load();
+  const task = await tasks.create('alice', input);
+  const resultPath = path.join(root, 'results', `${task.id}.png`);
+  await fsp.mkdir(path.dirname(resultPath), { recursive: true });
+  await fsp.writeFile(resultPath, 'png');
+  await tasks.transition(task.id, 'opening', { resultPath, resultBytes: 3, resultMime: 'image/png' });
+  const cancelled = await tasks.cancel(task.id, { id: 'alice', admin: false });
+  assert.equal(cancelled.phase, 'cancelled');
+  assert.equal(cancelled.resultPath, null);
+  assert.equal(cancelled.resultBytes, 0);
+  assert.equal(cancelled.resultMime, '');
+  await assert.rejects(() => fsp.access(resultPath));
+  assert.equal(tasks.listFor({ id: 'alice', admin: false }).length, 1);
+});
+
+test('loads legacy tasks with nested sensitive values without exposing or preserving them', async () => {
+  const root = await fixture();
+  const legacy = {
+    tasks: [{
+      id: 'dt_legacy_safe', userId: 'alice', platform: 'taobao', accountId: 'default',
+      phase: 'completed', progress: 100, assets: { total: 2, current: 2 },
+      createdAt: 10, updatedAt: 10,
+      url: 'https://detail.tmall.com/item.htm?id=123&session=secret',
+      productId: 'token=secret',
+      productUrl: 'https://item.taobao.com/item.htm?id=123&access_token=secret',
+      resultMime: 'image/png; Cookie=secret',
+      resultPath: 'results/authorization-secret.png',
+      resultBytes: 99,
+      assets: { total: 2, current: 2, candidates: ['session=secret'] },
+      error: { details: { Cookie: 'secret' }, candidates: [{ Authorization: 'Bearer secret' }] },
+      safeLabel: '保留字段'
+    }]
+  };
+  await fsp.writeFile(path.join(root, 'tasks.json'), JSON.stringify(legacy));
+  const tasks = new DetailTaskStore(root);
+  await tasks.load();
+
+  const loaded = tasks.getAuthorized('dt_legacy_safe', { id: 'alice', admin: false });
+  assert.equal(loaded.phase, 'failed');
+  assert.deepEqual(loaded.error, { code: 'legacy_sensitive_data', message: '任务数据已清理' });
+  assert.equal(loaded.url, '');
+  assert.equal(loaded.productId, '');
+  assert.equal(loaded.resultPath, null);
+  assert.equal(loaded.resultBytes, 0);
+  assert.equal(loaded.resultMime, '');
+  assert.deepEqual(loaded.progress, 0);
+  assert.deepEqual(loaded.assets, { total: 0, current: 0 });
+  assert.equal(JSON.stringify(loaded).includes('secret'), false);
+  assert.equal(JSON.stringify(loaded).includes('access_token'), false);
+
+  const persisted = await fsp.readFile(path.join(root, 'tasks.json'), 'utf8');
+  assert.equal(persisted.includes('secret'), false);
+  assert.equal(persisted.includes('access_token'), false);
+  assert.equal(persisted.includes('Cookie'), false);
+  assert.equal(persisted.includes('保留字段'), false);
+});

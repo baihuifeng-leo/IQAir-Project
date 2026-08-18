@@ -149,6 +149,8 @@ const App = (() => {
       Preview3D.refresh();
     });
 
+    es.addEventListener('detail-job', (e) => DetailLongImage.onEvent(JSON.parse(e.data)));
+
     es.onerror = () => flag('error', '连接断开');
     es.onopen = () => { if (!anyDirty()) flag('idle', '已同步'); };
   }
@@ -378,6 +380,10 @@ const App = (() => {
   function refreshModuleVisibility() {
     const hidden = new Set(me?.hiddenModules || []);
     $$('.tab').forEach((t) => { t.hidden = hidden.has(t.dataset.view); });
+    // “素材中心”下拉里的“详情长图”跟着 materialcheck 这一个偏好开关走，
+    // 不单独出一个偏好项——藏起来就是整组一起藏，露出来也是一起露出来。
+    const mcGroup = $('#mc-group');
+    if (mcGroup) mcGroup.hidden = hidden.has('materialcheck');
     moveInk();
     if (hidden.has(view)) {
       const next = MODULES.find((k) => !hidden.has(k));
@@ -441,6 +447,8 @@ const App = (() => {
     document.documentElement.setAttribute('data-theme', inP3D ? 'dark' : (me?.theme || 'dark'));
     if (next === 'preview3d') Preview3D.onShow();
     if (next === 'reports') Report.onShow();
+    if (next === 'platform-accounts') PlatformAccounts.onShow();
+    if (next === 'detail-long-image') DetailLongImage.onShow();
   }
 
   function bindTitles() {
@@ -600,6 +608,8 @@ const App = (() => {
     Preview3D.init(api);
     Report.init(api);
     MaterialCheck.init(api);
+    PlatformAccounts.init(api);
+    DetailLongImage.init(api);
     Users.init(api);
     Admin.init(api);
     Settings.init(api);
@@ -614,7 +624,7 @@ const App = (() => {
     refreshModuleVisibility();
     const hash = location.hash.slice(1);
     const hiddenSet = new Set(me.hiddenModules || []);
-    let target = ['compare', 'reviews', 'preview3d', 'reports', 'materialcheck'].includes(hash) ? hash : 'matrix';
+    let target = ['compare', 'reviews', 'preview3d', 'reports', 'materialcheck', 'detail-long-image', 'platform-accounts'].includes(hash) ? hash : 'matrix';
     if (hiddenSet.has(target)) target = MODULES.find((k) => !hiddenSet.has(k)) || 'matrix';
     go(target);
     window.addEventListener('resize', moveInk);

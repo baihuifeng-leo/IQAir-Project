@@ -33,7 +33,15 @@
     <button class="tab tab-rv" role="tab" data-view="reviews">评论风向标</button>
     <button class="tab" role="tab" data-view="preview3d">竞品3D预览</button>
     <button class="tab" role="tab" data-view="reports">报告管理</button>
-    <button class="tab" role="tab" data-view="materialcheck">素材质检</button>
+    <div class="tab-group" id="mc-group">
+      <button class="tab tab-group-trigger" type="button" role="tab" data-view="materialcheck" id="mc-trigger"
+        aria-haspopup="true" aria-expanded="false" aria-controls="mc-submenu">素材中心</button>
+      <div class="tab-submenu" id="mc-submenu" role="menu" aria-label="素材中心" hidden>
+        <button class="tab tab-submenu-item" role="tab" data-view="materialcheck">素材质检</button>
+        <button class="tab tab-submenu-item" role="tab" data-view="detail-long-image">详情长图</button>
+      </div>
+    </div>
+    <button class="tab" role="tab" data-view="platform-accounts">平台账号</button>
     <i class="tab-ink" aria-hidden="true"></i>
   </nav>
 
@@ -386,6 +394,30 @@
     </div>
   </section>
 
+  <section class="view" id="view-detail-long-image" data-view="detail-long-image" data-theme-ready="true" hidden>
+    <div class="canvas rv-canvas">
+      <div class="rv-head rpt-head">
+        <div>
+          <h1>详情长图</h1>
+          <p>Detail Long Image · 商品详情页满宽拼接</p>
+        </div>
+      </div>
+      <div class="rv-scroll" id="dli-scroll"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-platform-accounts" data-view="platform-accounts" data-theme-ready="true" hidden>
+    <div class="canvas rv-canvas">
+      <div class="rv-head rpt-head">
+        <div>
+          <h1>平台账号</h1>
+          <p>Platform Accounts · 淘宝/天猫登录会话</p>
+        </div>
+      </div>
+      <div class="rv-scroll" id="pa-scroll"></div>
+    </div>
+  </section>
+
 </main>
 
 <div class="marquee" id="marquee" hidden></div>
@@ -494,6 +526,8 @@
 <script src="/report-slides.js"></script>
 <script src="/report.js"></script>
 <script src="/materialcheck.js"></script>
+<script src="/platform-accounts.js"></script>
+<script src="/detail-long-image.js"></script>
 <script>App.boot();</script>
 </body>
 </html>

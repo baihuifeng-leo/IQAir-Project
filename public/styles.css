@@ -213,6 +213,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: left var(--slow), width var(--slow);
 }
 
+.tab-group { position: relative; display: flex; }
+.tab-group-trigger::after { content: "▾"; margin-left: 6px; font-size: 9px; opacity: 0.7; }
+.tab-submenu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 148px;
+  display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--line-soft); border-radius: 10px;
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.45);
+}
+.tab-submenu[hidden] { display: none; }
+.tab-submenu-item { text-align: left; border-radius: 6px; padding: 8px 12px; }
+.tab-submenu-item.is-active { background: var(--overlay-weak); }
+
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
 .saveflag {
@@ -2163,6 +2175,14 @@ body.rpt-presenting .rpt-wm-note { grid-area: note; font-size: clamp(13px, 0.9vw
 .mc-row-warn .mc-row-status { color: var(--warn-text); }
 .mc-row-error { border-color: var(--warn); }
 .mc-row-pick { border-color: var(--blue); }
+
+.dli-form { display: flex; gap: 10px; margin-bottom: 10px; }
+.dli-form input { flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); }
+.dli-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; width: 100%; }
+
+.pa-acts { display: flex; gap: 8px; margin-left: auto; }
+.pa-qr-box { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 18px; border-radius: 10px; border: 1px solid var(--line-soft); background: var(--surface); max-width: 260px; }
+.pa-qr-img { width: 200px; height: 200px; border-radius: 8px; background: #fff; padding: 8px; }
 
 .mc-platform-switch { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); background: var(--field-bg); color: var(--text); font-size: 12.5px; margin-right: 10px; }
 .mc-library-switch { min-width: 140px; }

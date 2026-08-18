@@ -18,6 +18,9 @@ Environment=DATA_DIR=/var/lib/workbench
 # 因此显式复用可写、持久化的数据目录。
 Environment=HOME=/var/lib/workbench
 Environment=TZ=Asia/Shanghai
+# 详情长图：跟 install.sh 装 Chromium 时用的路径必须一致，否则 Playwright
+# 会在服务启动时又去下一次浏览器（服务用户没有出网权限来源/权限也不该有）。
+Environment=PLAYWRIGHT_BROWSERS_PATH=/var/lib/workbench/browser-cache
 # 只在第一次启动、还没有 users.json 时用来创建管理员
 Environment=ADMIN_USER=admin
 Environment=ADMIN_PIN=123456
