@@ -30,6 +30,8 @@ class FakePage {
     lazyHtml = null,
     revealAfterScroll = Infinity,
     alwaysMutate = false,
+    deferredRootHtml = null,
+    revealRootAfterCalls = null,
   }) {
     this.currentUrl = url;
     this.rootSelector = rootSelector;
@@ -47,6 +49,9 @@ class FakePage {
     this.lazyHtml = lazyHtml;
     this.revealAfterScroll = revealAfterScroll;
     this.alwaysMutate = alwaysMutate;
+    this.deferredRootHtml = deferredRootHtml;
+    this.revealRootAfterCalls = revealRootAfterCalls;
+    this._rootLocatorCallCount = 0;
     this.controlledScrollY = 0;
     this.rootScrollTop = 0;
     this.scrollCalls = 0;
@@ -119,6 +124,14 @@ class FakePage {
 
   locator(selector) {
     this.locatorSelectors.push(selector);
+    if (this.revealRootAfterCalls != null && !this.root) {
+      this._rootLocatorCallCount += 1;
+      if (this._rootLocatorCallCount >= this.revealRootAfterCalls) {
+        this.document.body.insertAdjacentHTML('beforeend', this.deferredRootHtml);
+        this.root = this.document.querySelector(this.rootSelector);
+        this.installGeometry();
+      }
+    }
     return new FakeLocator(this, selector);
   }
 
@@ -345,6 +358,26 @@ test('rejects missing and ambiguous site-specific detail roots', async () => {
     extractDetail(ambiguous, { timeoutMs: 100, emit: () => {} }),
     (error) => error.code === 'DETAIL_ROOT_AMBIGUOUS',
   );
+});
+
+test('waits within the timeout budget for a detail root that renders in asynchronously, instead of failing on the first empty probe', async () => {
+  // 实测天猫详情页：domcontentloaded 触发时 #description 常常还没被异步 JS 渲染出来，
+  // 真人在浏览器里等一两秒就能看到内容；这里模拟同样的时序，根节点要过几次轮询才出现。
+  const page = new FakePage({
+    url: 'https://detail.tmall.com/item.htm?id=6',
+    rootSelector: '#description',
+    html: fixture('异步渲染详情', '<main>加载中…</main>'),
+    deferredRootHtml: '<main id="description"><img src="https://img.alicdn.com/detail/only.jpg"></main>',
+    revealRootAfterCalls: 3,
+  });
+
+  const detail = await extractDetail(page, { timeoutMs: 1000, emit: () => {} });
+
+  assert.deepEqual(detail.blocks, [{
+    kind: 'image',
+    candidates: ['https://img.alicdn.com/detail/only.jpg'],
+    domIndex: 0,
+  }]);
 });
 
 test('requires three consecutive stable observations after a real DOM mutation', async () => {
