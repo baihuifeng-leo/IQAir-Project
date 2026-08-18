@@ -41,6 +41,31 @@ async function run() {
     assert.strictEqual(image.preview, true);
     assert.strictEqual(image.previewTitle, '旧版详情页 · 原图');
   });
+  await t('slidesSave 保留形状元素的样式并校验非法值', async () => {
+    const s = await freshStore();
+    await s.slidesSave('u1', [{ id: 'pg_1', elements: [
+      { id: 'sh_1', type: 'shape', shapeType: 'ellipse', x: 1, y: 2, w: 100, h: 60, z: 1, fill: '#4ee0c1', stroke: '#1f9e85', strokeWidth: 3 },
+      { id: 'sh_2', type: 'shape', shapeType: 'not-a-real-type', x: 1, y: 2, w: 100, h: 20, z: 2, fill: 'javascript:alert(1)', stroke: '#zzz', strokeWidth: 999 }
+    ] }]);
+    const [ellipse, fallback] = (await s.summary('u1')).slides[0].elements;
+    assert.strictEqual(ellipse.shapeType, 'ellipse');
+    assert.strictEqual(ellipse.fill, '#4ee0c1');
+    assert.strictEqual(ellipse.stroke, '#1f9e85');
+    assert.strictEqual(ellipse.strokeWidth, 3);
+    assert.strictEqual(fallback.shapeType, 'rect', '非法 shapeType 应回退成矩形');
+    assert.strictEqual(fallback.fill, null, '非法/非十六进制颜色值应被丢弃');
+    assert.strictEqual(fallback.stroke, null);
+    assert.strictEqual(fallback.strokeWidth, 40, '边框粗细应夹到上限');
+  });
+  await t('slidesSave 直线形状不保留填充色', async () => {
+    const s = await freshStore();
+    await s.slidesSave('u1', [{ id: 'pg_1', elements: [
+      { id: 'sh_1', type: 'shape', shapeType: 'line', x: 1, y: 2, w: 200, h: 20, z: 1, fill: '#4ee0c1', stroke: '#1f9e85', strokeWidth: 4 }
+    ] }]);
+    const line = (await s.summary('u1')).slides[0].elements[0];
+    assert.strictEqual(line.fill, null, '直线形状不应该有填充色');
+    assert.strictEqual(line.stroke, '#1f9e85');
+  });
   await t('slidesSave 是整份覆盖', async () => {
     const s = await freshStore(); await s.slidesSave('u1', [{ id: 'a', elements: [] }, { id: 'b', elements: [] }]);
     await s.slidesSave('u1', [{ id: 'a', elements: [] }]);

@@ -87,7 +87,9 @@ function recordsFrom(buf, requiredCols) {
   return [];
 }
 
-const SLIDE_ELEMENT_TYPES = new Set(['text', 'image']);
+const SLIDE_ELEMENT_TYPES = new Set(['text', 'image', 'shape']);
+const SHAPE_TYPES = new Set(['rect', 'ellipse', 'line']);
+const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
 const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
 const MAX_SLIDE_TEXT_LEN = 4000;
 const MAX_PAGE_ORDER = 100;
@@ -118,6 +120,16 @@ function sanitizeElement(el) {
     bold: !!el.bold, italic: !!el.italic,
     align: TEXT_ALIGNS.has(el.align) ? el.align : 'left'
   };
+  if (el.type === 'shape') {
+    const shapeType = SHAPE_TYPES.has(el.shapeType) ? el.shapeType : 'rect';
+    const color = (value) => HEX_COLOR.test(String(value || '').trim()) ? String(value).trim() : null;
+    return {
+      ...base, shapeType,
+      fill: shapeType === 'line' ? null : color(el.fill),
+      stroke: color(el.stroke),
+      strokeWidth: Math.max(0, Math.min(40, num(el.strokeWidth) || 0))
+    };
+  }
   const url = String(el.url || '');
   if (!url.startsWith('/uploads/')) return null;
   return {

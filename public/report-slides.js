@@ -5,8 +5,11 @@ const ReportSlides = (() => {
   const MASTER_LEFT_IMAGE = '/uploads/56a87e70285cdea7e6.png';
   const MASTER_RIGHT_IMAGE = '/uploads/6f73ccc2f49d28a04c.png';
   const LEGACY_MASTER_IMAGE_URLS = new Set([MASTER_LEFT_IMAGE, MASTER_RIGHT_IMAGE, '/uploads/7c38a67eae0f6f377d.png']);
+  const SHAPE_TYPES = [['rect', '矩形'], ['ellipse', '椭圆'], ['line', '直线']];
+  const SYMBOLS = ['★', '☆', '●', '○', '■', '□', '▲', '▼', '◆', '◇', '✓', '✗', '→', '←', '↑', '↓', '⇒', '➤', '①', '②', '③', '❗', '⚠', '§'];
+  const DEFAULT_SHAPE_FILL = '#4ee0c1', DEFAULT_SHAPE_STROKE = '#1f9e85';
   let A, pages = [], pageId = null, host, presenting = false, readOnly = false, selectedId = null, editingId = null, masterVersion = 1;
-  let saveTimer = null, saving = false, queued = false, pendingPageOrder = null, saveHandler = null, pageActions = {};
+  let saveTimer = null, saving = false, queued = false, pendingPageOrder = null, saveHandler = null, pageActions = {}, resizeObserver = null;
 
   const currentPage = () => pages.find((p) => p.id === pageId) || null;
   const uid = (prefix) => A.uid(prefix);
@@ -49,6 +52,13 @@ const ReportSlides = (() => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost rs-toolbar-btn';
     b.textContent = label; if (title) b.title = title; b.onclick = fn; return b;
   }
+  function mkSelect(placeholder, options, onPick) {
+    const sel = document.createElement('select'); sel.className = 'rs-toolbar-select'; sel.setAttribute('aria-label', placeholder.replace(/…$/, ''));
+    const ph = document.createElement('option'); ph.value = ''; ph.textContent = placeholder; ph.disabled = true; ph.selected = true; sel.appendChild(ph);
+    options.forEach(([value, label]) => { const opt = document.createElement('option'); opt.value = value; opt.textContent = label; sel.appendChild(opt); });
+    sel.onchange = () => { if (sel.value) onPick(sel.value); sel.value = ''; };
+    return sel;
+  }
   function mountPage(id) { pageId = id; selectedId = null; editingId = null; render(); }
   function unmountPage() { pageId = null; selectedId = null; editingId = null; if (host) host.replaceChildren(); }
   function setPages(nextPages) {
@@ -83,8 +93,12 @@ const ReportSlides = (() => {
   function renderToolbar(page) {
     const bar = document.createElement('div'); bar.className = 'rs-toolbar'; const el = page.elements.find((x) => x.id === selectedId);
     const fullscreen = document.fullscreenElement || document.webkitFullscreenElement;
-    bar.append(mkBtn(fullscreen ? '退出全屏编辑' : '全屏编辑', toggleEditFullscreen, fullscreen ? '退出全屏编辑' : '放大当前画布进行编辑'), mkBtn('新建文字', addTextElement), mkBtn('插入图片', insertImage, '也可直接按 Ctrl+V 粘贴图片'));
-    [['置顶', bringToFront], ['置底', sendToBack], ['删除', deleteSelected]].forEach(([l, fn]) => { const b = mkBtn(l, fn); b.disabled = !el; bar.appendChild(b); });
+    bar.append(
+      mkBtn(fullscreen ? '退出全屏编辑' : '全屏编辑', toggleEditFullscreen, fullscreen ? '退出全屏编辑' : '放大当前画布进行编辑'),
+      mkBtn('新建文字', addTextElement), mkBtn('插入图片', insertImage, '也可直接按 Ctrl+V 粘贴图片'),
+      mkSelect('插入形状…', SHAPE_TYPES, addShapeElement), mkSelect('插入符号…', SYMBOLS.map((s) => [s, s]), addSymbolElement)
+    );
+    [['复制', duplicateSelected, 'Ctrl/Cmd+D 复制选中元素'], ['水平居中', centerHorizontal], ['垂直居中', centerVertical], ['置顶', bringToFront], ['置底', sendToBack], ['删除', deleteSelected, 'Delete 删除选中元素']].forEach(([l, fn, title]) => { const b = mkBtn(l, fn, title); b.disabled = !el; bar.appendChild(b); });
     if (el?.type === 'text') {
       const edit = mkBtn('编辑文字', () => enterTextEdit(el)); edit.disabled = editingId === el.id; bar.appendChild(edit);
       const size = document.createElement('input'); size.type = 'number'; size.min = '10'; size.max = '160'; size.className = 'rs-toolbar-size'; size.value = el.fontSize || DEFAULT_FONT_SIZE;
@@ -93,6 +107,19 @@ const ReportSlides = (() => {
       color.oninput = () => { el.color = color.value; scheduleSave(); const box = host.querySelector('.rs-text'); if (box) box.style.color = el.color; }; bar.appendChild(color);
       [['B', 'bold'], ['I', 'italic']].forEach(([label, key]) => { const b = mkBtn(label, () => { el[key] = !el[key]; scheduleSave(); render(); }); b.classList.toggle('on', !!el[key]); bar.appendChild(b); });
       [['left', '左'], ['center', '中'], ['right', '右']].forEach(([align, label]) => { const b = mkBtn(label, () => { el.align = align; scheduleSave(); render(); }); b.classList.toggle('on', (el.align || 'left') === align); bar.appendChild(b); });
+    } else if (el?.type === 'shape') {
+      if (el.shapeType !== 'line') {
+        const fill = document.createElement('input'); fill.type = 'color'; fill.className = 'rs-toolbar-color'; fill.title = '填充色'; fill.value = /^#/.test(el.fill || '') ? el.fill : DEFAULT_SHAPE_FILL;
+        fill.oninput = () => { el.fill = fill.value; scheduleSave(); const shape = host.querySelector(`.rs-el[data-id="${el.id}"] .rs-shape`); if (shape) shape.style.background = el.fill; }; bar.appendChild(fill);
+      }
+      const stroke = document.createElement('input'); stroke.type = 'color'; stroke.className = 'rs-toolbar-color'; stroke.title = el.shapeType === 'line' ? '线条颜色' : '边框颜色'; stroke.value = /^#/.test(el.stroke || '') ? el.stroke : DEFAULT_SHAPE_STROKE;
+      stroke.oninput = () => {
+        el.stroke = stroke.value; scheduleSave();
+        const shape = host.querySelector(`.rs-el[data-id="${el.id}"] .rs-shape`); if (!shape) return;
+        if (el.shapeType === 'line') shape.style.background = el.stroke; else shape.style.borderColor = el.stroke;
+      }; bar.appendChild(stroke);
+      const width = document.createElement('input'); width.type = 'number'; width.min = '0'; width.max = '40'; width.className = 'rs-toolbar-size'; width.title = el.shapeType === 'line' ? '线条粗细' : '边框粗细'; width.value = el.strokeWidth || 0;
+      width.onchange = () => { el.strokeWidth = Math.max(0, Math.min(40, Number(width.value) || 0)); scheduleSave(); render(); }; bar.appendChild(width);
     }
     const actions = document.createElement('div'); actions.className = 'rs-toolbar-page-actions';
     const rename = mkBtn('重命名', () => pageActions.rename?.(page.id)); rename.classList.add('rs-toolbar-page-rename'); actions.appendChild(rename);
@@ -121,6 +148,12 @@ const ReportSlides = (() => {
     }
     master.append(left, title, right, line); return master;
   }
+  function buildShapeNode(el) {
+    const shape = document.createElement('div'); shape.className = 'rs-shape rs-shape-' + el.shapeType;
+    if (el.shapeType === 'line') Object.assign(shape.style, { background: el.stroke || DEFAULT_SHAPE_STROKE, height: (el.strokeWidth || 4) + 'px' });
+    else Object.assign(shape.style, { background: el.fill && el.fill !== 'none' ? el.fill : 'transparent', borderColor: el.stroke || 'transparent', borderWidth: (el.strokeWidth || 0) + 'px' });
+    return shape;
+  }
   function buildElementNode(el) {
     const node = document.createElement('div'); node.className = 'rs-el' + (el.id === selectedId ? ' sel' : ''); node.dataset.id = el.id;
     Object.assign(node.style, { left: el.x + 'px', top: el.y + 'px', width: el.w + 'px', height: el.h + 'px', zIndex: el.z });
@@ -141,6 +174,8 @@ const ReportSlides = (() => {
         }
       }
       node.appendChild(box);
+    } else if (el.type === 'shape') {
+      node.appendChild(buildShapeNode(el));
     } else {
       const img = document.createElement('img'); img.className = 'rs-image'; img.src = el.url; img.draggable = false;
       img.classList.toggle('contain', el.fit === 'contain'); node.appendChild(img);
@@ -164,7 +199,8 @@ const ReportSlides = (() => {
         const box = document.createElement('div'); box.className = 'rs-text'; box.textContent = el.text;
         Object.assign(box.style, { fontSize: (el.fontSize || DEFAULT_FONT_SIZE) + 'px', color: el.color || 'var(--text)', fontWeight: el.bold ? '700' : '400', fontStyle: el.italic ? 'italic' : 'normal', textAlign: el.align || 'left' });
         node.appendChild(box);
-      } else { const img = document.createElement('img'); img.className = 'rs-image'; img.src = el.url; img.alt = ''; img.classList.toggle('contain', el.fit === 'contain'); node.appendChild(img); }
+      } else if (el.type === 'shape') { node.appendChild(buildShapeNode(el)); }
+      else { const img = document.createElement('img'); img.className = 'rs-image'; img.src = el.url; img.alt = ''; img.classList.toggle('contain', el.fit === 'contain'); node.appendChild(img); }
       canvas.appendChild(node);
     });
     section.appendChild(canvas); return section;
@@ -181,8 +217,18 @@ const ReportSlides = (() => {
     document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
   }
   function attachHandles(node, el) {
-    const handles = el.type === 'text' ? ['l', 'r'] : ['nw', 'ne', 'sw', 'se'];
-    handles.forEach((side) => { const h = document.createElement('div'); h.className = 'rs-handle rs-handle-' + side; h.addEventListener('pointerdown', (e) => el.type === 'text' ? startTextResize(e, el, side) : startImageResize(e, el, side)); node.appendChild(h); });
+    const isLine = el.type === 'shape' && el.shapeType === 'line';
+    const handles = el.type === 'text' || isLine ? ['l', 'r'] : ['nw', 'ne', 'sw', 'se'];
+    handles.forEach((side) => {
+      const h = document.createElement('div'); h.className = 'rs-handle rs-handle-' + side;
+      h.addEventListener('pointerdown', (e) => {
+        if (el.type === 'text') startTextResize(e, el, side);
+        else if (isLine) startLineResize(e, el, side);
+        else if (el.type === 'shape') startShapeResize(e, el, side);
+        else startImageResize(e, el, side);
+      });
+      node.appendChild(h);
+    });
   }
   function startTextResize(e, el, side) {
     e.stopPropagation(); const sx = e.clientX, ox = el.x, ow = el.w, k = canvasScale(); const node = host.querySelector(`.rs-el[data-id="${el.id}"]`);
@@ -194,6 +240,23 @@ const ReportSlides = (() => {
     const move = (m) => { const dx = ((m.clientX - sx) / k) * (corner.includes('w') ? -1 : 1); const width = Math.max(24, ow + dx), height = width / ratio; el.w = width; el.h = height; if (corner.includes('w')) el.x = ox + ow - width; if (corner.includes('n')) el.y = oy + oh - height; if (node) Object.assign(node.style, { left: el.x + 'px', top: el.y + 'px', width: width + 'px', height: height + 'px' }); };
     const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); scheduleSave(); }; document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
   }
+  function startLineResize(e, el, side) {
+    e.stopPropagation(); const sx = e.clientX, ox = el.x, ow = el.w, k = canvasScale(); const node = host.querySelector(`.rs-el[data-id="${el.id}"]`);
+    const move = (m) => { const dx = (m.clientX - sx) / k; const width = Math.max(20, side === 'r' ? ow + dx : ow - dx); el.w = width; if (side === 'l') el.x = ox + ow - width; if (node) { node.style.left = el.x + 'px'; node.style.width = width + 'px'; } };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); scheduleSave(); }; document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+  }
+  function startShapeResize(e, el, corner) {
+    e.stopPropagation(); const sx = e.clientX, sy = e.clientY, ox = el.x, oy = el.y, ow = el.w, oh = el.h, k = canvasScale(); const node = host.querySelector(`.rs-el[data-id="${el.id}"]`);
+    const move = (m) => {
+      const dx = (m.clientX - sx) / k, dy = (m.clientY - sy) / k;
+      let width = ow, height = oh, x = ox, y = oy;
+      if (corner.includes('e')) width = Math.max(20, ow + dx); else if (corner.includes('w')) { width = Math.max(20, ow - dx); x = ox + ow - width; }
+      if (corner.includes('s')) height = Math.max(20, oh + dy); else if (corner.includes('n')) { height = Math.max(20, oh - dy); y = oy + oh - height; }
+      el.x = x; el.y = y; el.w = width; el.h = height;
+      if (node) Object.assign(node.style, { left: x + 'px', top: y + 'px', width: width + 'px', height: height + 'px' });
+    };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); scheduleSave(); }; document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+  }
   function autoGrowHeight(box, el) { if (!box) return; box.style.height = 'auto'; el.h = Math.max(34, box.scrollHeight); const node = box.closest('.rs-el'); if (node) node.style.height = el.h + 'px'; }
   function enterTextEdit(el) {
     if (presenting || readOnly) return;
@@ -203,6 +266,43 @@ const ReportSlides = (() => {
   }
   function commitTextEdit(el) { if (editingId === el.id) editingId = null; scheduleSave(); render(); }
   function addTextElement() { const page = currentPage(); if (!page || presenting || readOnly) return; const el = { id: uid('el_'), type: 'text', x: 160, y: BODY_TOP, w: 420, h: 42, z: nextZ(page), text: '双击编辑文字', fontSize: DEFAULT_FONT_SIZE, color: null, bold: false, italic: false, align: 'left' }; page.elements.push(el); selectedId = el.id; scheduleSave(); render(); enterTextEdit(el); }
+  function addShapeElement(shapeType) {
+    const page = currentPage(); if (!page || presenting || readOnly) return;
+    const isLine = shapeType === 'line';
+    const w = isLine ? 300 : 240, h = isLine ? 20 : 160;
+    const el = {
+      id: uid('el_'), type: 'shape', shapeType, x: Math.round((W - w) / 2), y: Math.round((H - h) / 2), w, h, z: nextZ(page),
+      fill: isLine ? null : DEFAULT_SHAPE_FILL, stroke: DEFAULT_SHAPE_STROKE, strokeWidth: isLine ? 4 : 2
+    };
+    page.elements.push(el); selectedId = el.id; scheduleSave(); render();
+  }
+  function addSymbolElement(symbol) {
+    const page = currentPage(); if (!page || presenting || readOnly || !symbol) return;
+    const el = { id: uid('el_'), type: 'text', x: Math.round((W - 80) / 2), y: Math.round((H - 80) / 2), w: 80, h: 80, z: nextZ(page), text: symbol, fontSize: 56, color: null, bold: false, italic: false, align: 'center' };
+    page.elements.push(el); selectedId = el.id; scheduleSave(); render();
+  }
+  function duplicateSelected() {
+    const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId);
+    if (!page || !el || presenting || readOnly) return;
+    const copy = { ...el, id: uid('el_'), x: el.x + 24, y: el.y + 24, z: nextZ(page) };
+    page.elements.push(copy); selectedId = copy.id; scheduleSave(); render();
+  }
+  function centerHorizontal() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el || readOnly) return; el.x = Math.round((W - el.w) / 2); scheduleSave(); render(); }
+  function centerVertical() { const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el || readOnly) return; el.y = Math.round((H - el.h) / 2); scheduleSave(); render(); }
+  function onKeydown(e) {
+    if (!pageId || presenting || readOnly || editingId) return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selectedId) { e.preventDefault(); duplicateSelected(); return; }
+    if (!selectedId) return;
+    const page = currentPage(), el = page?.elements.find((x) => x.id === selectedId); if (!el) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); return; }
+    const step = e.shiftKey ? 10 : 1;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); el.x -= step; scheduleSave(); render(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); el.x += step; scheduleSave(); render(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); el.y -= step; scheduleSave(); render(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); el.y += step; scheduleSave(); render(); }
+  }
   async function insertImage() {
     let url; try { url = await A.uploadImage(); } catch (e) { A.toast('图片上传失败：' + e.message, 'bad'); return; } if (!url) return;
     await addImageFromUrl(url);
@@ -249,7 +349,17 @@ const ReportSlides = (() => {
   function setMasterVersion(value) { masterVersion = Number(value) === 1 ? 1 : 0; if (pageId) render(); }
   function setEditable(value) { readOnly = !value; if (pageId) render(); }
   function setPageActions(actions) { pageActions = actions && typeof actions === 'object' ? actions : {}; }
-  function init(api) { A = api; host = document.querySelector('#rpt-page-custom'); window.addEventListener('resize', scaleCanvas); document.addEventListener('paste', pasteImage); document.addEventListener('fullscreenchange', onFullscreenChange); document.addEventListener('webkitfullscreenchange', onFullscreenChange); }
+  function init(api) {
+    A = api; host = document.querySelector('#rpt-page-custom');
+    // 用 ResizeObserver 而不是只听 window resize：Ctrl+滚轮页面缩放、DevTools 开合等
+    // 触发的布局变化不总会派发 window 的 resize 事件，ResizeObserver 直接盯着容器盒子本身。
+    if (host && window.ResizeObserver) { resizeObserver = new ResizeObserver(scaleCanvas); resizeObserver.observe(host); }
+    else window.addEventListener('resize', scaleCanvas);
+    document.addEventListener('paste', pasteImage);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    document.addEventListener('keydown', onKeydown);
+  }
   function setSaveHandler(handler) { saveHandler = typeof handler === 'function' ? handler : null; }
   return { init, setPages, getPages, addPage, deletePage, renamePage, mountPage, unmountPage, setPresenting, setMasterVersion, setEditable, setPageActions, savePageOrder, flushSave, setSaveHandler, buildPrintPage, pageCount: () => pages.length };
 })();
