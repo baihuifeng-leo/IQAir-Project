@@ -233,4 +233,40 @@
 | 我做了什么？ | 见上方"修复"小节；只改了生产 `/var/lib/workbench/reports/u_fb623958.json` 一个文件（改前已备份），没有改任何仓库里的代码 |
 
 ---
+
+## 会话：2026-08-18（续）：clearLiveNews 误删本周新闻的真 bug + reports/report-news 每日备份 + 生产部署踩坑
+
+### 状态：complete
+
+### 背景
+上一节记录的 Q3W07 数据恢复完成后，用户反馈恢复的内容不对——应该是"微软退出中国"和"DeepSeek涨价"这两条。重新核对 `audit.log` 逐条时间戳后发现：那两条其实是用户当天（2026-08-18）早上为**本周**（`weekStart=2026-08-17`）生成的新闻，系统按"今天所在的周"正确打了标；Q3W07（`2026-08-10`）里我恢复的内容（DeepSeek 入股宇树、苹果测试长鑫存储）时间戳对得上、确实是那一周的原始内容，没恢复错。真正的问题是**归档动作的副作用**：`server.js` 归档成功后调用的 `reportNews.clearLiveNews(me.id)` 没有按周清空，而是把 `data.weeks`/`data.drafts` **整个清空**——用户当天先生成了本周新闻，几小时后才补归档上一周，归档这个动作把刚生成、还没归档的本周新闻一起误删了。
+
+### 修复
+1. **`report-news-store.js`**：`clearLiveNews(userId, weekStartInput)` 改成只删 `data.weeks[weekStart]`/`data.drafts[weekStart]` 这一个 key，不再整表清空；`server.js` 归档路由改成传入 `archive.weekStart`。
+2. **顺带修的相邻 bug**：`report-news-store.js` 自己的 `mondayOf()` 对字符串输入用 `new Date(str)` 解析（UTC 语义），服务器时区在 UTC 之前时会把周一算错一周——跟 `report-store.js` 的 `mondayOf()` 之前踩过、已经修过的坑是同一类问题，这次顺手用同样的办法（拼 `T00:00:00` 强制按本地日期解析）修掉。生产时区是 `Asia/Shanghai`（UTC+8）所以这个 bug 从没在生产触发过，但正是 `report-news-store.test.js` 里那个跨会话反复出现、之前一直被记录为"已确认无关、暂不处理"的失败用例的真正根因——这次意外顺带修好了，全部测试现在真正 0 failure（之前每次都是"158/159，1 个跟改动无关的旧失败"）。
+3. 补充/改写了 `report-news-store.test.js` 里 `clearLiveNews` 的测试用例，把断言从"归档后应该整表清空"改成"只清空归档的那一周，其它未归档周必须保留"。
+4. **恢复本周（2026-08-17）新闻**：`clearLiveNews` 的旧 bug 已经把用户当天生成的两条新闻从 `weeks`/`drafts` 里删了，但源文章还留在 `candidates['2026-08-17']` 里（这个字段没被误删的逻辑碰到）。部署完修复后，直接在生产上用 `ReportNewsStore`/`ReportNewsAi`（跟 `server.js` 用的是同一套代码）对同样的两个候选 id 重新跑了一次 `.generate()`，等效于用户自己重新点一次"生成"——文字不是逐字恢复（重新调了一次 AI），但信息源和内容方向一致。
+
+### 意外发现并顺手修的部署脚本 bug
+准备用 `deploy-to-prod.sh` 部署上面的修复时，dry-run 输出里出现了 `.worktrees/material-center-detail-long-image/`（60M 的历史遗留 worktree 垃圾）——`.gitignore` 里有 `.worktrees/`，但 `deploy-to-prod.sh` 的 rsync `--exclude` 列表里从来没排除过这个目录，等于每次部署都可能把这坨垃圾同步进 `/opt/workbench`。同时发现 `node_modules`（本次 patchright 试验留下的）也没被排除。两个都加进了 `deploy-to-prod.sh` 的 exclude 列表（这次这台机器上的 codex-lxc 主 checkout 刚好没有 node_modules，没有真的中招，但下次不一定这么走运）。
+
+另外确认：`/opt/workbench` 在这次之前已经有一阵子没重新部署过了（`.gitignore`、`materialcheck.test.js`、`progress.md` 都落后于 `main` 好几个提交），这次部署顺带把这些也同步了上去——都是纯文档/测试文件，不影响运行时行为，无需额外关注。
+
+### 顺手做的：reports/report-news 每日自动备份（用户主动要求）
+这次数据丢失能救回来，全靠上一次误伤操作自己留的"操作前备份"，纯属侥幸——`reports/`、`report-news/` 这两个目录之前完全不在每日自动备份范围内（只有 `db.json` 有）。用户明确要求补上：
+- `server.js` 新增 `rotateReportsBackup(tag)`：整目录复制 `reports/` + `report-news/` 到 `backups/reports-snapshots/<时间戳>[-manual]/` 下，滚动保留策略跟 `db.json` 备份一致（`MAX_BACKUPS=30`）。
+- 接入 `scheduleNightly()`（每天 00:00 自动）和 `/api/snapshot`（管理员手动"立即备份"），两处都会顺带备份。
+- 没有做的：没有给这两个目录接restore UI/API——`reports`/`report-news` 是按用户拆文件的目录结构，语义上不能直接套用现有那个面向单个 `db.json`（矩阵/对位两个协作文档）的一键恢复流程，混在一起容易出误操作风险。如果以后要做，需要单独设计。
+- 验证方式：本地起了个 scratch 测试环境（假管理员账号，非生产数据），手动调用 `/api/snapshot`，确认快照目录内容跟源目录逐文件一致、且 `/api/backups` 列表接口不会被这个新增子目录干扰。没有跑满 30 次验证滚动删除的边界，逻辑跟已经在用的 `rotateBackup()` 完全同构，判断为低风险直接采用。
+
+### 五问重启检查
+| 问题 | 答案 |
+|------|------|
+| 我在哪里？ | 三处代码修复（clearLiveNews 按周清空、report-news-store 的 mondayOf 时区坑、deploy-to-prod.sh 排除列表）+ 新功能（reports/report-news 每日备份）已提交 `main` 并部署到生产、生产服务已重启；本周（08-17）AI 新闻已用原候选重新生成；9090 测试环境也已同步到相同 commit 并重启 |
+| 我要去哪里？ | 等用户在生产前端确认本周新闻和 Q3W07 归档都显示正常；`.worktrees/` 本身的历史遗留垃圾还没清理（只是部署时不会再泄漏进去了），要不要删掉它本身还是等用户决定 |
+| 目标是什么？ | 从"数据被误删"的表面症状一路查到"归档动作有个清空范围过大的真 bug"，修掉根因而不是每次靠人工翻备份文件抢救 |
+| 我学到了什么？ | 遇到"数据对不上"类反馈，不要只满足于第一个能自洽解释的时间线——这次第一版恢复的数据其实是对的，是我把"我恢复的内容"和"用户记忆中最近处理过的内容"错误地当成了同一件事；后来才发现是两个独立的操作（归档上周 + 生成本周）在同一个上午撞在一起、被一个过度清空的副作用连累了。另外：本地开发沙盒的时区如果跟生产不一样（这次是 America/New_York vs 生产的 Asia/Shanghai），会让只在特定时区下才触发的 bug 在本地稳定复现——这次因此顺手挖出并修了一个生产从未触发过的潜伏 bug。部署前一定要看 dry-run 的完整输出，不要因为"应该只有几个文件变了"的预期就跳过检查，这次两个部署脚本本身的排除列表 bug 都是靠认真看 dry-run 输出发现的 |
+| 我做了什么？ | 见上方各小节；改了 `report-news-store.js`、`report-news-store.test.js`、`server.js`、`deploy-to-prod.sh` 四个仓库文件（均已 commit + push + 部署上生产）；生产数据层面额外用一次性脚本调用 `ReportNewsStore.generate()` 重新生成了本周新闻（不是恢复脚本，走的是和正常业务一致的生成路径） |
+
+---
 *每个阶段完成后或遇到错误时更新此文件*
