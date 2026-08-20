@@ -400,3 +400,19 @@
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*
+
+---
+
+## 协作约定补记：2026-08-20
+
+用户明确：EC 电商工作台的常规新功能默认在现有主 checkout 中新开 `feature/*` 分支开发、测试，通过后合并回 `main`；不为每个功能默认创建 git worktree。worktree 只在并行改动或需要隔离运行实例时使用。
+
+---
+
+## 生产迁移：2026-08-20（192.168.2.7 → 192.168.2.8）
+
+已完成生产切换。将 .7 的 `/opt/workbench`、`/var/lib/workbench`（包含业务数据、上传文件、PaddleOCR/PaddleX 模型缓存及 session secret）、systemd 单元和受控 AI 环境文件同步到 .8；.8 创建了同 UID/GID 的 `workbench` 用户。目标缺少 PaddlePaddle 所需的系统库 `libgomp1`，已安装。
+
+验证：.8 Node 20 跑 `node --test *.test.js` 为 17/17 通过；真实素材图片 OCR 成功且确认使用本地缓存模型；systemd 服务、8090 本机页面、常驻 OCR worker、外部入口 `iqair.leobai.com:44432` 均正常。反向代理已由用户改指 .8；.7 的 `workbench.service` 已停止，.8 已启用开机自启。
+
+**不要删除 .7 容器**：先观察 .8 运行并由用户确认稳定，再在独立于两台 LXC 的位置完成最终备份；删除需用户再次明确授权。若需紧急回滚：反向代理改回 `.7:8090`，再启动 .7 的 `workbench.service`。
